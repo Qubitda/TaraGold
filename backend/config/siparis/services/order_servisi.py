@@ -376,6 +376,77 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
 
                 iade_order_line(actor=actor, order_line=line)
 
+            from siparis.models import HazirlamaEmri
+
+            prior_durum = locked.durum
+            for emir in HazirlamaEmri.objects.select_for_update().filter(order=locked):
+                if emir.durum != HazirlamaEmri.Durum.IPTAL:
+                    emir.durum = HazirlamaEmri.Durum.IPTAL
+                    emir._allow_status_transition = True
+                    try:
+                        emir.save(update_fields=["durum", "guncelleme_tarihi"])
+                    finally:
+                        emir._allow_status_transition = False
+
+            # K-normatif: onaylanmış siparişte yazılmış SATIS cari borcunu CONTRA ile tersle
+            from finans.models import LedgerEntry
+            from finans.services import cari_servisi
+            from finans.services.finans_audit import record_finans_audit
+
+            satis_entries = list(
+                LedgerEntry.objects.filter(
+                    firma_id=locked.alici_firma_id,
+                    referans_tip="Order",
+                    referans_id=str(locked.pk),
+                    hareket_tipi=LedgerEntry.HareketTipi.SATIS,
+                )
+            )
+            contra_ids: list[int] = []
+            for le in satis_entries:
+                if LedgerEntry.objects.filter(contra_of=le).exists():
+                    continue
+                contra_key = f"order-{locked.pk}-cancel-contra-{le.pk}"
+                existing_c = LedgerEntry.objects.filter(
+                    firma_id=le.firma_id, idempotency_key=contra_key
+                ).first()
+                if existing_c is not None:
+                    contra_ids.append(existing_c.pk)
+                    continue
+                opposite = (
+                    LedgerEntry.Yon.ALACAK
+                    if le.yon == LedgerEntry.Yon.BORC
+                    else LedgerEntry.Yon.BORC
+                )
+                contra = LedgerEntry(
+                    firma_id=le.firma_id,
+                    karsi_firma=le.karsi_firma,
+                    tutar=le.tutar,
+                    para_birimi=le.para_birimi,
+                    yon=opposite,
+                    hareket_tipi=LedgerEntry.HareketTipi.CONTRA,
+                    referans_tip="Order",
+                    referans_id=str(locked.pk),
+                    contra_of=le,
+                    idempotency_key=contra_key,
+                    aciklama=f"Sipariş #{locked.pk} iptal ters kayıt",
+                    olusturan=actor if getattr(actor, "pk", None) else None,
+                )
+                contra.save()
+                if contra.karsi_firma_id is not None:
+                    cari_servisi.uygula_ledger_entry(contra)
+                record_finans_audit(
+                    actor=actor,
+                    action="finans.ledger.order_cancel_contra",
+                    amount=contra.tutar,
+                    currency=contra.para_birimi,
+                    order_ref=str(locked.pk),
+                    entity_type="LedgerEntry",
+                    entity_id=str(contra.pk),
+                    success=True,
+                    extra={"contra_of_id": le.pk, "order_id": locked.pk},
+                )
+                contra_ids.append(contra.pk)
+
             locked.durum = Order.Durum.IPTAL
             locked._allow_status_transition = True
             try:
@@ -390,9 +461,10 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
                 entity_id=str(locked.pk),
                 success=True,
                 detail={
-                    "from": Order.Durum.OLUSTURULDU,
+                    "from": prior_durum,
                     "to": Order.Durum.IPTAL,
                     "iade_movement_ids": iade_ids,
+                    "contra_ledger_ids": contra_ids,
                     "now": now.isoformat(),
                 },
             )

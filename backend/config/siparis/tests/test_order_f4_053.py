@@ -96,11 +96,14 @@ class OrderCancelTests(CheckoutFixtureMixin, TestCase):
         with self.assertRaises(PermissionDenied):
             order_servisi.iptal_siparis(actor=self.ted_user, order=order)
         order.refresh_from_db()
-        self.assertEqual(order.durum, Order.Durum.OLUSTURULDU)
+        # ADR-0034/0036: yeni sipariş ONAY_BEKLIYOR durumundadır
+        self.assertEqual(order.durum, Order.Durum.ONAY_BEKLIYOR)
 
     def test_cancel_blocked_after_active_shipment(self):
         """K1: aktif sevkiyat varken iptal → ValidationError; ekstra IADE yok."""
         order = self._order(key="cancel-ship", miktar=Decimal("1"))
+        Order.objects.filter(pk=order.pk).update(durum=Order.Durum.ONAYLANDI)
+        order.refresh_from_db()
         insp = inspection_servisi.olustur(actor=self.qc, order=order)
         insp = inspection_servisi.olcume_al(actor=self.qc, inspection=insp)
         line = order.lines.get()
@@ -117,7 +120,7 @@ class OrderCancelTests(CheckoutFixtureMixin, TestCase):
         with self.assertRaises(ValidationError):
             order_servisi.iptal_siparis(actor=self.buyer, order=order)
         order.refresh_from_db()
-        self.assertEqual(order.durum, Order.Durum.OLUSTURULDU)
+        self.assertEqual(order.durum, Order.Durum.ONAYLANDI)
         self.assertEqual(
             StockMovement.objects.filter(tip=StockMovement.Tip.IADE).count(),
             before,

@@ -107,8 +107,16 @@ export function OpsFirmalarView() {
     firma_kodu: "",
     alici_mi: true,
     tedarikci_mi: false,
+    api_musterisi_mi: false,
     email: "",
     rol: "firma_admin",
+  });
+
+  // Alıcı / API Kanal Erişimi draft
+  const [erisimDraft, setErisimDraft] = useState({
+    firma_id: "",
+    satis_kanali_id: "",
+    fiyat_grubu_id: "",
   });
 
   const listQ = useQuery({
@@ -158,6 +166,21 @@ export function OpsFirmalarView() {
       opsFirmalarService.listKanalIzinleri(kanalDurum || undefined),
   });
 
+  const aliciKanalErisimQ = useQuery({
+    queryKey: ["ops-alici-kanal-erisimleri"],
+    queryFn: () => opsFirmalarService.listAliciKanalErisimleri(),
+  });
+
+  const fiyatGruplariQ = useQuery({
+    queryKey: ["ops-fiyat-gruplari"],
+    queryFn: () => opsFirmalarService.listFiyatGruplari(),
+  });
+
+  const salesChannelsQ = useQuery({
+    queryKey: ["sales-channels"],
+    queryFn: () => opsFirmalarService.listSalesChannels(),
+  });
+
   useEffect(() => {
     if (!detailQ.data) return;
     const f = detailQ.data;
@@ -186,6 +209,7 @@ export function OpsFirmalarView() {
         tipler: [
           ...(draft.alici_mi ? ["ALICI_KUYUMCU"] : []),
           ...(draft.tedarikci_mi ? ["TEDARIKCI"] : []),
+          ...(draft.api_musterisi_mi ? ["API_MUSTERISI"] : []),
         ],
       });
       if (draft.email) {
@@ -364,7 +388,34 @@ export function OpsFirmalarView() {
     onError: (e: Error) => toast.error("Reddetme başarısız", e.message),
   });
 
-  const runFeedTest = async (mode: "urunler" | "urun_detail" | "stok_fiyat") => {
+  const createAliciKanalM = useMutation({
+    mutationFn: () =>
+      opsFirmalarService.createAliciKanalErisimi({
+        firma_id: Number(erisimDraft.firma_id),
+        satis_kanali_id: Number(erisimDraft.satis_kanali_id),
+        fiyat_grubu_id: Number(erisimDraft.fiyat_grubu_id),
+        aktif: true,
+      }),
+    onSuccess: () => {
+      toast.success("Alıcı/API kanal erişimi tanımlandı");
+      setErisimDraft({ firma_id: "", satis_kanali_id: "", fiyat_grubu_id: "" });
+      qc.invalidateQueries({ queryKey: ["ops-alici-kanal-erisimleri"] });
+    },
+    onError: (e: Error) => toast.error("Erişim tanımlanamadı", e.message),
+  });
+
+  const toggleAliciKanalM = useMutation({
+    mutationFn: (id: number) => opsFirmalarService.toggleAliciKanalErisimi(id),
+    onSuccess: () => {
+      toast.success("Kanal erişim durumu güncellendi");
+      qc.invalidateQueries({ queryKey: ["ops-alici-kanal-erisimleri"] });
+    },
+    onError: (e: Error) => toast.error("Durum güncellenemedi", e.message),
+  });
+
+  const runFeedTest = async (
+    mode: "urunler" | "urun_detail" | "stok_fiyat" | "schema_xsd"
+  ) => {
     setFeedError(null);
     setFeedResult(null);
     if (!feedApiKey.trim()) {
@@ -382,7 +433,9 @@ export function OpsFirmalarView() {
           ? await feedService.getUrunler(feedApiKey, feedFormat)
           : mode === "urun_detail"
             ? await feedService.getUrunDetail(feedApiKey, feedUrunId.trim(), feedFormat)
-            : await feedService.getStokFiyat(feedApiKey, feedFormat);
+            : mode === "schema_xsd"
+              ? await feedService.getSchemaXsd(feedApiKey)
+              : await feedService.getStokFiyat(feedApiKey, feedFormat);
       setFeedResult(res);
     } catch (err) {
       setFeedError(err instanceof Error ? err.message : "Feed isteği başarısız.");
@@ -394,6 +447,11 @@ export function OpsFirmalarView() {
   const rows: OpsFirma[] = listQ.data?.results ?? [];
   const keys: OpsApiAnahtar[] = keysQ.data ?? [];
   const kanalIzinleri: OpsKanalIzni[] = kanalIzinleriQ.data?.results ?? [];
+  const aliciKanalErisimleri = aliciKanalErisimQ.data?.results ?? [];
+  const fiyatGruplari = fiyatGruplariQ.data?.results ?? [];
+  const salesChannels = Array.isArray(salesChannelsQ.data)
+    ? salesChannelsQ.data
+    : salesChannelsQ.data?.results ?? [];
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   return (
@@ -412,7 +470,7 @@ export function OpsFirmalarView() {
         <div className="space-y-4 border-t pt-4">
           <p className="text-sm text-muted-foreground">Adım {step}/4</p>
           {step === 1 && (
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -421,7 +479,7 @@ export function OpsFirmalarView() {
                     setDraft((d) => ({ ...d, alici_mi: e.target.checked }))
                   }
                 />
-                Alıcı
+                Alıcı (Kuyumcu)
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -432,6 +490,19 @@ export function OpsFirmalarView() {
                   }
                 />
                 Tedarikçi
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={draft.api_musterisi_mi}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      api_musterisi_mi: e.target.checked,
+                    }))
+                  }
+                />
+                API Müşterisi
               </label>
             </div>
           )}
@@ -741,6 +812,15 @@ export function OpsFirmalarView() {
               >
                 Stok & Fiyat Feed’i
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={feedLoading}
+                onClick={() => void runFeedTest("schema_xsd")}
+              >
+                XSD Şema Getir
+              </Button>
             </div>
 
             {feedError ? (
@@ -854,6 +934,130 @@ export function OpsFirmalarView() {
               <TableRow>
                 <TableCell colSpan={5} className="text-xs text-muted-foreground">
                   Kanal izin talebi yok.
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Alıcı / API Kanal Erişimleri Bölümü */}
+      <div className="space-y-3 border-t pt-6">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">
+            Alıcı / API Kanal Erişimleri &amp; Fiyat Grupları
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Firmaların satış kanalı (<code className="font-mono">KUYUMCU_PORTAL / B2B_API / B2C</code>) ve fiyat grubu yetkileri (<code className="font-mono">/ops/alici-kanal-erisimleri/</code>).
+          </p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createAliciKanalM.mutate();
+          }}
+          className="grid grid-cols-1 sm:grid-cols-4 gap-2 rounded-[8px] border border-border bg-card p-3"
+        >
+          <select
+            required
+            value={erisimDraft.firma_id}
+            onChange={(e) =>
+              setErisimDraft((d) => ({ ...d, firma_id: e.target.value }))
+            }
+            className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
+          >
+            <option value="">Alıcı / API Firma seçin…</option>
+            {rows.map((f) => (
+              <option key={f.id} value={f.id}>
+                #{f.id} · {f.ad}
+              </option>
+            ))}
+          </select>
+          <select
+            required
+            value={erisimDraft.satis_kanali_id}
+            onChange={(e) =>
+              setErisimDraft((d) => ({ ...d, satis_kanali_id: e.target.value }))
+            }
+            className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
+          >
+            <option value="">Satış Kanalı seçin…</option>
+            {salesChannels.map((ch) => (
+              <option key={ch.id} value={ch.id}>
+                {ch.kod} — {ch.ad}
+              </option>
+            ))}
+          </select>
+          <select
+            required
+            value={erisimDraft.fiyat_grubu_id}
+            onChange={(e) =>
+              setErisimDraft((d) => ({ ...d, fiyat_grubu_id: e.target.value }))
+            }
+            className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
+          >
+            <option value="">Fiyat Grubu seçin…</option>
+            {fiyatGruplari.map((fg) => (
+              <option key={fg.id} value={fg.id}>
+                {fg.kod} — {fg.ad}
+              </option>
+            ))}
+          </select>
+          <Button type="submit" size="sm" disabled={createAliciKanalM.isPending}>
+            {createAliciKanalM.isPending ? "Kaydediliyor…" : "Kanal Erişimi Tanımla"}
+          </Button>
+        </form>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Firma</TableHead>
+              <TableHead>Satış Kanalı</TableHead>
+              <TableHead>Fiyat Grubu</TableHead>
+              <TableHead>Durum</TableHead>
+              <TableHead className="text-right">İşlem</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {aliciKanalErisimleri.map((er) => (
+              <TableRow key={er.id}>
+                <TableCell className="font-mono text-xs">#{er.id}</TableCell>
+                <TableCell className="text-xs font-medium">
+                  {er.firma_ad || `Firma #${er.firma_id}`}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {er.satis_kanali_kod}
+                  {er.satis_kanali_ad ? ` (${er.satis_kanali_ad})` : ""}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {er.fiyat_grubu_ad || er.fiyat_grubu_kod || `#${er.fiyat_grubu_id}`}
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={er.aktif ? "success" : "secondary"}
+                    className="font-mono text-[10px]"
+                  >
+                    {er.aktif ? "AKTIF" : "PASIF"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={toggleAliciKanalM.isPending}
+                    onClick={() => toggleAliciKanalM.mutate(er.id)}
+                  >
+                    {er.aktif ? "Pasife Al" : "Aktif Et"}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!aliciKanalErisimleri.length && !aliciKanalErisimQ.isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-xs text-muted-foreground">
+                  Tanımlı alıcı/API kanal erişimi yok.
                 </TableCell>
               </TableRow>
             ) : null}

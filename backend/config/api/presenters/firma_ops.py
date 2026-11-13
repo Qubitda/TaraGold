@@ -86,9 +86,13 @@ def present_uyelik(u) -> dict:
     return {
         "id": u.pk,
         "kullanici_id": u.kullanici_id,
+        "firma_id": u.firma_id,
+        "firma_ad": getattr(getattr(u, "firma", None), "ad", ""),
+        "firma_kodu": getattr(getattr(u, "firma", None), "firma_kodu", ""),
         "username": getattr(u.kullanici, "username", ""),
         "rol": u.rol,
         "aktif": u.aktif,
+        "birincil": getattr(u, "birincil", False),
     }
 
 
@@ -96,10 +100,26 @@ def present_kanal_izni(i) -> dict:
     return {
         "id": i.pk,
         "tedarikci_firma_id": i.tedarikci_firma_id,
+        "tedarikci_ad": getattr(getattr(i, "tedarikci_firma", None), "ad", ""),
         "satis_kanali_id": i.satis_kanali_id,
+        "satis_kanali_kod": getattr(getattr(i, "satis_kanali", None), "kod", ""),
         "durum": i.durum,
         "talep_tarihi": i.talep_tarihi.isoformat() if i.talep_tarihi else None,
         "karar_tarihi": i.karar_tarihi.isoformat() if i.karar_tarihi else None,
+    }
+
+
+def present_alici_kanal_erisimi(e) -> dict:
+    return {
+        "id": e.pk,
+        "firma_id": e.firma_id,
+        "firma_ad": getattr(getattr(e, "firma", None), "ad", ""),
+        "satis_kanali_id": e.satis_kanali_id,
+        "satis_kanali_kod": getattr(getattr(e, "satis_kanali", None), "kod", ""),
+        "satis_kanali_ad": getattr(getattr(e, "satis_kanali", None), "ad", ""),
+        "fiyat_grubu_id": e.fiyat_grubu_id,
+        "fiyat_grubu_ad": getattr(getattr(e, "fiyat_grubu", None), "ad", ""),
+        "aktif": e.aktif,
     }
 
 

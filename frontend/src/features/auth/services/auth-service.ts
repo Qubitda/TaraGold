@@ -15,6 +15,18 @@ import type {
   ReadyResponse,
 } from "@/lib/api/types";
 
+export interface FirmaUyelikItem {
+  id: number;
+  kullanici_id: number;
+  firma_id: number;
+  firma_ad: string;
+  firma_kodu?: string;
+  username?: string;
+  rol: string;
+  aktif: boolean;
+  birincil?: boolean;
+}
+
 export const authService = {
   async ensureCsrf(): Promise<string> {
     return ensureCsrfToken();
@@ -34,6 +46,19 @@ export const authService = {
   },
   getMe(): Promise<MeResponse> {
     return apiFetchMe();
+  },
+  getUyelikler(): Promise<{ results: FirmaUyelikItem[] }> {
+    return apiFetch<{ results: FirmaUyelikItem[] }>("/me/uyelikler/");
+  },
+  switchFirma(firmaId: number): Promise<{ uyelik: FirmaUyelikItem; me: MeResponse }> {
+    return apiFetch<{ uyelik: FirmaUyelikItem; me: MeResponse }>(
+      "/me/switch-firma/",
+      {
+        method: "POST",
+        body: { firma_id: firmaId },
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
   },
   verifyMfa(code: string): Promise<MeResponse> {
     return apiVerifyMfa(code);

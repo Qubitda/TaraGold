@@ -17,6 +17,7 @@ from api.pagination import apply_ordering, paginate_queryset
 from api.permissions import IsAuthenticatedWithFirma
 from api.presenters.firma_ops import (
     present_adres,
+    present_alici_kanal_erisimi,
     present_api_anahtar,
     present_banka,
     present_belge,
@@ -27,11 +28,13 @@ from api.presenters.firma_ops import (
 from api.throttles import OpsRateThrottle
 from api.views.auth import _django_ve_to_drf
 from firmalar.models import (
+    AliciKanalErisimi,
     Firma,
     FirmaAdresi,
     FirmaBankaHesabi,
     FirmaBelge,
     FirmaKontak,
+    FirmaTedarikciAltTip,
     FirmaTipAtama,
     TedarikciKanalIzni,
 )
@@ -45,6 +48,7 @@ from firmalar.services.firma_onay_servisi import onayla_firma
 from firmalar.services.kanal_izin_servisi import onayla as kanal_onayla
 from firmalar.services.kanal_izin_servisi import reddet as kanal_reddet
 from firmalar.services.yetki_servisi import can_view_all_tenants, has_perm
+from tanimlar.models import FiyatGrubu, SatisKanali
 
 
 def _require_ops(user) -> None:
@@ -90,6 +94,18 @@ class OpsFirmaListCreateView(IdempotencyMixin, APIView):
             raise ValidationError({"detail": "ad ve firma_kodu zorunlu."})
         if Firma.objects.filter(firma_kodu=kod).exists():
             raise ValidationError({"firma_kodu": "Kullanımda."})
+        tipler = [
+            str(t).upper()
+            for t in (data.get("tipler") or [])
+            if str(t).upper() in FirmaTipAtama.Tip.values
+        ]
+        alici_mi = bool(data.get("alici_mi")) or any(
+            t in (FirmaTipAtama.Tip.ALICI_KUYUMCU, FirmaTipAtama.Tip.API_MUSTERISI)
+            for t in tipler
+        )
+        tedarikci_mi = bool(data.get("tedarikci_mi")) or (
+            FirmaTipAtama.Tip.TEDARIKCI in tipler
+        )
         f = Firma(
             ad=ad,
             unvan=(data.get("unvan") or "")[:200],
@@ -103,26 +119,19 @@ class OpsFirmaListCreateView(IdempotencyMixin, APIView):
             web_sitesi=(data.get("web_sitesi") or "")[:200],
             telefon=(data.get("telefon") or "")[:20],
             eposta=(data.get("eposta") or "")[:254],
-            alici_mi=bool(data.get("alici_mi")),
-            tedarikci_mi=bool(data.get("tedarikci_mi")),
+            alici_mi=alici_mi,
+            tedarikci_mi=tedarikci_mi,
             vade_gun=int(data.get("vade_gun") or 0),
             onay_durumu="bekliyor",
             aktif=False,
         )
         f.save()
-        for tip in data.get("tipler") or []:
-            tip_u = str(tip).upper()
-            if tip_u in FirmaTipAtama.Tip.values:
-                FirmaTipAtama.objects.get_or_create(firma=f, tip=tip_u)
-                if tip_u == FirmaTipAtama.Tip.TEDARIKCI:
-                    f.tedarikci_mi = True
-                if tip_u in (
-                    FirmaTipAtama.Tip.ALICI_KUYUMCU,
-                    FirmaTipAtama.Tip.API_MUSTERISI,
-                ):
-                    f.alici_mi = True
-        if f.alici_mi or f.tedarikci_mi:
-            f.save(update_fields=["alici_mi", "tedarikci_mi"])
+        for tip_u in tipler:
+            FirmaTipAtama.objects.get_or_create(firma=f, tip=tip_u)
+        for alt in data.get("tedarikci_alt_tipler") or []:
+            alt_u = str(alt).upper()
+            if alt_u in FirmaTedarikciAltTip.AltTip.values:
+                FirmaTedarikciAltTip.objects.get_or_create(firma=f, alt_tip=alt_u)
         return Response(present_firma(f), status=status.HTTP_201_CREATED)
 
 
@@ -155,6 +164,22 @@ class OpsFirmaDetailView(APIView):
                 setattr(f, field, request.data.get(field) or "")
         if "vade_gun" in request.data:
             f.vade_gun = int(request.data.get("vade_gun") or 0)
+        if "tipler" in request.data and isinstance(request.data.get("tipler"), list):
+            for tip in request.data.get("tipler") or []:
+                tip_u = str(tip).upper()
+                if tip_u in FirmaTipAtama.Tip.values:
+                    FirmaTipAtama.objects.get_or_create(firma=f, tip=tip_u)
+                    if tip_u == FirmaTipAtama.Tip.TEDARIKCI:
+                        f.tedarikci_mi = True
+                    if tip_u in (
+                        FirmaTipAtama.Tip.ALICI_KUYUMCU,
+                        FirmaTipAtama.Tip.API_MUSTERISI,
+                    ):
+                        f.alici_mi = True
+        for alt in request.data.get("tedarikci_alt_tipler") or []:
+            alt_u = str(alt).upper()
+            if alt_u in FirmaTedarikciAltTip.AltTip.values:
+                FirmaTedarikciAltTip.objects.get_or_create(firma=f, alt_tip=alt_u)
         f.save()
         return Response(present_firma(f))
 
@@ -429,3 +454,83 @@ class OpsFirmaApiAnahtarIptalView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(str(exc)) from exc
         return Response(present_api_anahtar(row))
+
+
+class OpsAliciKanalErisimiListCreateView(IdempotencyMixin, APIView):
+    """GET/POST /api/v1/ops/alici-kanal-erisimleri/ — alıcı/API kanal + fiyat grubu yetkisi."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def get(self, request):
+        _require_ops(request.user)
+        qs = AliciKanalErisimi.objects.select_related(
+            "firma", "satis_kanali", "fiyat_grubu"
+        )
+        firma_id = request.query_params.get("firma_id")
+        if firma_id:
+            qs = qs.filter(firma_id=int(firma_id))
+        return paginate_queryset(request, qs, present=present_alici_kanal_erisimi)
+
+    def post(self, request):
+        _require_approve(request.user)
+        enforce_csrf(request)
+        try:
+            firma_id = int(request.data.get("firma_id"))
+            kanal_id = int(request.data.get("satis_kanali_id"))
+            grup_id = int(request.data.get("fiyat_grubu_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                {"detail": "firma_id, satis_kanali_id ve fiyat_grubu_id zorunlu."}
+            ) from exc
+        firma = get_object_or_404(Firma, pk=firma_id)
+        kanal = get_object_or_404(SatisKanali, pk=kanal_id)
+        grup = get_object_or_404(FiyatGrubu, pk=grup_id)
+        if not firma.alici_mi and not firma.tip_atamalari.filter(
+            tip__in=[FirmaTipAtama.Tip.ALICI_KUYUMCU, FirmaTipAtama.Tip.API_MUSTERISI]
+        ).exists():
+            raise ValidationError(
+                {"firma_id": "Yalnız alıcı veya API müşterisi firmaya kanal erişimi verilebilir."}
+            )
+        obj, _ = AliciKanalErisimi.objects.update_or_create(
+            firma=firma,
+            satis_kanali=kanal,
+            defaults={
+                "fiyat_grubu": grup,
+                "aktif": bool(request.data.get("aktif", True)),
+            },
+        )
+        return Response(
+            present_alici_kanal_erisimi(obj), status=status.HTTP_201_CREATED
+        )
+
+
+class OpsAliciKanalErisimiToggleView(IdempotencyMixin, APIView):
+    """POST /api/v1/ops/alici-kanal-erisimleri/<pk>/toggle/"""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def post(self, request, pk: int):
+        _require_approve(request.user)
+        enforce_csrf(request)
+        obj = get_object_or_404(AliciKanalErisimi, pk=pk)
+        obj.aktif = not obj.aktif
+        obj.save(update_fields=["aktif"])
+        return Response(present_alici_kanal_erisimi(obj))
+
+
+class OpsFiyatGrubuListView(APIView):
+    """GET /api/v1/ops/fiyat-gruplari/ — FiyatGrubu kataloğu."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def get(self, request):
+        _require_ops(request.user)
+        rows = list(
+            FiyatGrubu.objects.filter(aktif=True)
+            .order_by("pk")
+            .values("id", "kod", "ad")
+        )
+        return Response({"count": len(rows), "results": rows})

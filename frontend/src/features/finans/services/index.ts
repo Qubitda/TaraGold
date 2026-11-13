@@ -4,13 +4,17 @@ import type {
   CariHesap,
   CreditCheckResponse,
   CreditInfo,
+  ElleTahsilatRequest,
+  ElleTahsilatResponse,
+  ElleTedarikciOdemeRequest,
+  ElleTedarikciOdemeResponse,
   FinanceSummary,
   LedgerEntry,
   OpsCariRow,
   OpsFinanceSummary,
+  OpsHakEdisRow,
   OpsLedgerRow,
   OpsPaymentRow,
-  PaymentIntent,
 } from "../types";
 
 export const finansService = {
@@ -57,10 +61,35 @@ export const finansService = {
   getOpsFinancePayments(): Promise<Paginated<OpsPaymentRow>> {
     return apiFetch<Paginated<OpsPaymentRow>>("/ops/finance/payments/");
   },
-  createPaymentIntent(orderId: number): Promise<PaymentIntent> {
-    return apiFetch<PaymentIntent>("/payments/intents/", {
+  getOpsFinanceHakEdis(params?: {
+    durum?: string;
+    tedarikci_firma_id?: number;
+    order_id?: number;
+  }): Promise<Paginated<OpsHakEdisRow>> {
+    const search = new URLSearchParams();
+    if (params?.durum) search.set("durum", params.durum);
+    if (params?.tedarikci_firma_id)
+      search.set("tedarikci_firma_id", String(params.tedarikci_firma_id));
+    if (params?.order_id) search.set("order_id", String(params.order_id));
+    const q = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch<Paginated<OpsHakEdisRow>>(`/ops/finance/hak-edis/${q}`);
+  },
+  recordElleTahsilat(
+    orderId: number,
+    data: ElleTahsilatRequest
+  ): Promise<ElleTahsilatResponse> {
+    return apiFetch<ElleTahsilatResponse>(`/ops/orders/${orderId}/tahsilat/`, {
       method: "POST",
-      body: { order_id: orderId },
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  recordElleTedarikciOdeme(
+    data: ElleTedarikciOdemeRequest
+  ): Promise<ElleTedarikciOdemeResponse> {
+    return apiFetch<ElleTedarikciOdemeResponse>("/ops/finance/tedarikci-odeme/", {
+      method: "POST",
+      body: data,
       idempotencyKey: newIdempotencyKey(),
     });
   },

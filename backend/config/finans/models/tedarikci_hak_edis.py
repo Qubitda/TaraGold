@@ -24,11 +24,12 @@ class TedarikciHakEdisManager(models.Manager.from_queryset(TedarikciHakEdisQuery
 
 
 class TedarikciHakEdis(models.Model):
-    """Oran/üretim tutarı v1'de sabitlenmez (tutar null olabilir)."""
+    """Tedarikçi maliyet hak edişi — QC PASS sonrası üretilir, manuel ödeme ile ODENDI olur."""
 
     class Durum(models.TextChoices):
         BEKLEMEDE = "BEKLEMEDE", "Vadeyi bekliyor"
         HAKEDILDI = "HAKEDILDI", "Hak ediş oluştu"
+        ODENDI = "ODENDI", "Ödendi"
         IPTAL = "IPTAL", "İptal"
 
     order = models.ForeignKey(
@@ -59,11 +60,13 @@ class TedarikciHakEdis(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Oran politikası sonrası; v1 null (F5-022).",
+        help_text="Tedarikçi maliyet tutarı (TedarikciTeklif üzerinden; eksik kurda null).",
     )
     para_birimi = models.CharField(max_length=3, blank=True, default="")
     vade_tarihi = models.DateTimeField()
     hak_edis_tarihi = models.DateTimeField(null=True, blank=True)
+    odeme_tarihi = models.DateTimeField(null=True, blank=True)
+    odeme_ledger_entry_id = models.PositiveBigIntegerField(null=True, blank=True)
     idempotency_key = models.CharField(max_length=64)
     aciklama = models.CharField(max_length=255, blank=True)
     olusturan = models.ForeignKey(
@@ -101,7 +104,9 @@ class TedarikciHakEdis(models.Model):
                 name="tedarikcihakedis_insp_tedarikci_uniq",
             ),
             models.CheckConstraint(
-                condition=models.Q(durum__in=["BEKLEMEDE", "HAKEDILDI", "IPTAL"]),
+                condition=models.Q(
+                    durum__in=["BEKLEMEDE", "HAKEDILDI", "ODENDI", "IPTAL"]
+                ),
                 name="tedarikcihakedis_durum_gecerli",
             ),
             models.CheckConstraint(

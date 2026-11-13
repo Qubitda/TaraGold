@@ -49,12 +49,11 @@ import {
   CheckCircle2,
   MapPin,
   Building,
-  CreditCard,
+  FileText,
   FileSpreadsheet,
   Upload,
 } from "lucide-react";
 import { firmalarService, type FirmaAdresi } from "@/features/firmalar";
-import { finansService } from "@/features/finans";
 import { useActionToast } from "@/hooks/use-action-toast";
 import type { BulkOrderResult } from "../types";
 
@@ -125,7 +124,6 @@ export function OrderWorkflowView() {
   const [selectedOrder, setSelectedOrder] = useState<BuyerOrder | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
-  const [paymentMsg, setPaymentMsg] = useState<string | null>(null);
 
   const routeIdNum =
     routeOrderId && Number.isFinite(Number(routeOrderId))
@@ -213,14 +211,19 @@ export function OrderWorkflowView() {
     }
   };
 
-  const handlePayOrder = async (orderId: number) => {
+  const [downloadingIrsaliyeId, setDownloadingIrsaliyeId] = useState<
+    number | null
+  >(null);
+
+  const handleDownloadSupplierIrsaliye = async (orderId: number) => {
+    setDownloadingIrsaliyeId(orderId);
     try {
-      await finansService.createPaymentIntent(orderId);
-      setPaymentMsg("Ödeme niyeti başarıyla oluşturuldu. Havale / Cari Mahsup kaydı bekleniyor.");
-      actionToast.success("Ödeme niyeti oluşturuldu");
+      await siparisService.downloadSupplierHazirlamaIrsaliye(orderId);
+      actionToast.success("Tedarikçi irsaliyesi indirildi");
     } catch (err) {
-      setError(mapCommerceError(err, "Ödeme işlemi başlatılamadı."));
-      actionToast.error("Ödeme başlatılamadı", err);
+      actionToast.error("Tedarikçi irsaliyesi indirilemedi", err);
+    } finally {
+      setDownloadingIrsaliyeId(null);
     }
   };
 
@@ -880,20 +883,44 @@ export function OrderWorkflowView() {
                         </ul>
                       </TableCell>
                       <TableCell className="text-right">
-                        {emri.durum !== "HAZIR" && emri.durum !== "TAMAMLANDI" ? (
+                        <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
                           <Button
                             size="sm"
-                            disabled={markHazirMutation.isPending}
-                            onClick={() => void handleMarkHazir(emri.order_id)}
-                            className="h-8 text-xs"
+                            variant="outline"
+                            disabled={downloadingIrsaliyeId === emri.order_id}
+                            onClick={() =>
+                              void handleDownloadSupplierIrsaliye(emri.order_id)
+                            }
+                            className="h-8 text-xs gap-1"
                           >
-                            {markHazirMutation.isPending ? "İşleniyor…" : "Hazır İşaretle"}
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>
+                              {downloadingIrsaliyeId === emri.order_id
+                                ? "İndiriliyor…"
+                                : "Tedarikçi İrsaliye PDF"}
+                            </span>
                           </Button>
-                        ) : (
-                          <Badge variant="success" className="font-mono text-[10px]">
-                            HAZIR
-                          </Badge>
-                        )}
+                          {(emri.hazirlama_durumu ?? emri.durum) !== "HAZIR" &&
+                          emri.durum !== "TAMAMLANDI" ? (
+                            <Button
+                              size="sm"
+                              disabled={markHazirMutation.isPending}
+                              onClick={() => void handleMarkHazir(emri.order_id)}
+                              className="h-8 text-xs"
+                            >
+                              {markHazirMutation.isPending
+                                ? "İşleniyor…"
+                                : "Hazır İşaretle"}
+                            </Button>
+                          ) : (
+                            <Badge
+                              variant="success"
+                              className="font-mono text-[10px]"
+                            >
+                              HAZIR
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -978,20 +1005,13 @@ export function OrderWorkflowView() {
               )}
 
               <div className="border-t border-border pt-4 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  {paymentMsg ? (
-                    <span className="text-xs text-primary font-medium">{paymentMsg}</span>
-                  ) : (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handlePayOrder(selectedOrder.id)}
-                      className="gap-1.5 text-xs"
-                    >
-                      <CreditCard className="h-3.5 w-3.5" />
-                      <span>Ödeme İşlemi Başlat (PaymentIntent)</span>
-                    </Button>
-                  )}
+                <div className="text-xs text-muted-foreground">
+                  Tahsilat &amp; proforma belgeleri platform operasyon ekibi tarafından
+                  yönetilir; onaylı belgelerinizi{" "}
+                  <Link to="/belgeler" className="text-foreground underline">
+                    Belgeler
+                  </Link>{" "}
+                  ekranından indirebilirsiniz.
                 </div>
 
                 {selectedOrder.allowed_actions?.includes("cancel") && (

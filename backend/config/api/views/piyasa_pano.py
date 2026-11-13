@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.masking import assert_masked
 from api.permissions import IsAuthenticatedWithFirma
 from api.throttles import BuyerRateThrottle
 from piyasa.selectors.pano import present_buyer_pano
@@ -24,4 +25,5 @@ class PiyasaPanoView(APIView):
             body = present_buyer_pano(olcek=olcek)
         except DjangoValidationError as exc:
             raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages) from exc
+        assert_masked(body, context="buyer")
         return Response(body)

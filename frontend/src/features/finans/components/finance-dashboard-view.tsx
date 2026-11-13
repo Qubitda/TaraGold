@@ -5,20 +5,22 @@ import {
   useCariDetailQuery,
   useCariListQuery,
   useCheckCreditMutation,
-  useCreatePaymentIntentMutation,
   useCreditQuery,
+  useElleTahsilatMutation,
+  useElleTedarikciOdemeMutation,
   useFinanceMeQuery,
   useLedgerQuery,
   useOpsFinanceCariQuery,
+  useOpsFinanceHakEdisQuery,
   useOpsFinanceLedgerQuery,
   useOpsFinancePaymentsQuery,
   useOpsFinanceQuery,
 } from "../hooks";
-import type { CreditCheckResponse, PaymentIntent } from "../types";
+import type { CreditCheckResponse, OpsHakEdisRow } from "../types";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
-import { formatMoney, formatDateTime } from "@/lib/format";
+import { formatGram, formatMoney, formatDateTime } from "@/lib/format";
 import {
   Table,
   TableHeader,
@@ -62,13 +64,28 @@ export function FinanceDashboardView() {
   );
   const [checkError, setCheckError] = useState<string | null>(null);
 
-  const [paymentOrderId, setPaymentOrderId] = useState("");
-  const [createdIntent, setCreatedIntent] = useState<PaymentIntent | null>(
-    null
-  );
+  // Ops Manuel Tahsilat form state
+  const [tahsilatOrderId, setTahsilatOrderId] = useState("");
+  const [tahsilatTutar, setTahsilatTutar] = useState("");
+  const [tahsilatYontem, setTahsilatYontem] = useState("HAVALE");
+  const [tahsilatParaBirimi, setTahsilatParaBirimi] = useState("TRY");
+  const [tahsilatDekont, setTahsilatDekont] = useState("");
+  const [tahsilatAciklama, setTahsilatAciklama] = useState("");
+
+  // Ops Manuel Tedarikci Odeme form state
+  const [tedOdemeFirmaId, setTedOdemeFirmaId] = useState("");
+  const [tedOdemeHakEdisId, setTedOdemeHakEdisId] = useState("");
+  const [tedOdemeOrderId, setTedOdemeOrderId] = useState("");
+  const [tedOdemeTutar, setTedOdemeTutar] = useState("");
+  const [tedOdemeYontem, setTedOdemeYontem] = useState("HAVALE");
+  const [tedOdemeParaBirimi, setTedOdemeParaBirimi] = useState("TRY");
+  const [tedOdemeDekont, setTedOdemeDekont] = useState("");
+  const [tedOdemeAciklama, setTedOdemeAciklama] = useState("");
 
   const [detailCariId, setDetailCariId] = useState<number | null>(null);
-  const [opsTab, setOpsTab] = useState<"cari" | "ledger" | "payments">("cari");
+  const [opsTab, setOpsTab] = useState<"cari" | "ledger" | "hak_edis" | "payments">(
+    "cari"
+  );
 
   const meQ = useFinanceMeQuery(paraBirimi);
   const creditQ = useCreditQuery(paraBirimi);
@@ -78,11 +95,13 @@ export function FinanceDashboardView() {
   const opsQ = useOpsFinanceQuery(canOpsFinance);
   const opsCariQ = useOpsFinanceCariQuery(canOpsFinance);
   const opsLedgerQ = useOpsFinanceLedgerQuery(canOpsFinance);
+  const opsHakEdisQ = useOpsFinanceHakEdisQuery(canOpsFinance);
   const opsPaymentsQ = useOpsFinancePaymentsQuery(canOpsFinance);
 
   const cariDetailQ = useCariDetailQuery(detailCariId, detailCariId !== null);
   const checkCreditMut = useCheckCreditMutation();
-  const paymentIntentMut = useCreatePaymentIntentMutation();
+  const tahsilatMut = useElleTahsilatMutation();
+  const tedOdemeMut = useElleTedarikciOdemeMutation();
 
   const loading =
     (meQ.isLoading || creditQ.isLoading || cariQ.isLoading || ledgerQ.isLoading) &&
@@ -92,6 +111,7 @@ export function FinanceDashboardView() {
   const ledger = ledgerQ.data ?? [];
   const opsCariList = opsCariQ.data ?? [];
   const opsLedgerList = opsLedgerQ.data ?? [];
+  const opsHakEdisList = opsHakEdisQ.data ?? [];
   const opsPaymentsList = opsPaymentsQ.data ?? [];
 
   const hasAnyData = Boolean(
@@ -102,6 +122,7 @@ export function FinanceDashboardView() {
       opsQ.data ||
       opsCariList.length ||
       opsLedgerList.length ||
+      opsHakEdisList.length ||
       opsPaymentsList.length
   );
 
@@ -121,6 +142,7 @@ export function FinanceDashboardView() {
       void opsQ.refetch();
       void opsCariQ.refetch();
       void opsLedgerQ.refetch();
+      void opsHakEdisQ.refetch();
       void opsPaymentsQ.refetch();
     }
   };
@@ -147,24 +169,81 @@ export function FinanceDashboardView() {
     }
   };
 
-  const handlePaymentIntent = async (e: React.FormEvent) => {
+  const handleElleTahsilat = async (e: React.FormEvent) => {
     e.preventDefault();
-    const oid = Number(paymentOrderId);
+    const oid = Number(tahsilatOrderId);
     if (!Number.isInteger(oid) || oid <= 0) {
-      actionToast.error(
-        "Geçersiz Sipariş ID",
-        new Error("Pozitif bir sipariş numarası girin.")
-      );
+      actionToast.error("Geçersiz Sipariş ID", new Error("Pozitif bir sipariş numarası girin."));
+      return;
+    }
+    if (!tahsilatTutar.trim()) {
+      actionToast.error("Tutar zorunlu", new Error("Tahsilat tutarı girin."));
       return;
     }
     try {
-      const res = await paymentIntentMut.mutateAsync(oid);
-      setCreatedIntent(res);
-      setPaymentOrderId("");
-      actionToast.success(`Ödeme talebi #${res.id} oluşturuldu`);
+      const res = await tahsilatMut.mutateAsync({
+        orderId: oid,
+        data: {
+          tutar: tahsilatTutar.trim(),
+          yontem: tahsilatYontem.trim() || "HAVALE",
+          para_birimi: tahsilatParaBirimi,
+          dekont_ref: tahsilatDekont.trim(),
+          aciklama: tahsilatAciklama.trim(),
+        },
+      });
+      actionToast.success(
+        `Elle tahsilat kaydedildi (Ledger #${res.ledger_entry_id})`
+      );
+      setTahsilatTutar("");
+      setTahsilatDekont("");
+      setTahsilatAciklama("");
     } catch (err) {
-      actionToast.error("Ödeme talebi oluşturulamadı", err);
+      actionToast.error("Tahsilat kaydedilemedi", err);
     }
+  };
+
+  const handleElleTedarikciOdeme = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const tedId = Number(tedOdemeFirmaId);
+    if (!Number.isInteger(tedId) || tedId <= 0) {
+      actionToast.error("Geçersiz Tedarikçi ID", new Error("Pozitif tedarikçi firma ID girin."));
+      return;
+    }
+    if (!tedOdemeTutar.trim()) {
+      actionToast.error("Tutar zorunlu", new Error("Ödeme tutarı girin."));
+      return;
+    }
+    try {
+      const res = await tedOdemeMut.mutateAsync({
+        tedarikci_firma_id: tedId,
+        ...(tedOdemeHakEdisId ? { hak_edis_id: Number(tedOdemeHakEdisId) } : {}),
+        ...(tedOdemeOrderId ? { order_id: Number(tedOdemeOrderId) } : {}),
+        tutar: tedOdemeTutar.trim(),
+        yontem: tedOdemeYontem.trim() || "HAVALE",
+        para_birimi: tedOdemeParaBirimi,
+        dekont_ref: tedOdemeDekont.trim(),
+        aciklama: tedOdemeAciklama.trim(),
+      });
+      actionToast.success(
+        `Tedarikçi ödemesi kaydedildi (Ledger #${res.ledger_entry_id})`
+      );
+      setTedOdemeHakEdisId("");
+      setTedOdemeOrderId("");
+      setTedOdemeTutar("");
+      setTedOdemeDekont("");
+      setTedOdemeAciklama("");
+    } catch (err) {
+      actionToast.error("Tedarikçi ödemesi kaydedilemedi", err);
+    }
+  };
+
+  const prefillHakEdisOdeme = (he: OpsHakEdisRow) => {
+    setTedOdemeFirmaId(String(he.tedarikci_firma_id));
+    setTedOdemeHakEdisId(String(he.id));
+    setTedOdemeOrderId(String(he.order_id));
+    setTedOdemeTutar(he.tutar || "");
+    setTedOdemeParaBirimi(he.para_birimi || "TRY");
+    setTedOdemeAciklama(`Hak ediş #${he.id} · Sipariş #${he.order_id}`);
   };
 
   return (
@@ -175,8 +254,8 @@ export function FinanceDashboardView() {
             Finans & Cari Hesaplar
           </h1>
           <p className="text-xs text-muted-foreground">
-            Cari bakiye, kredi limiti kontrolü, ödeme niyeti ve ops finans
-            kayıtları.
+            Cari bakiye, kredi limiti kontrolü, elle tahsilat ve tedarikçi hak
+            ediş yönetimi.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -348,7 +427,7 @@ export function FinanceDashboardView() {
               </form>
             </div>
 
-            {/* Cari Özet + Ödeme Niyeti */}
+            {/* Cari Özet & Manuel Tahsilat Bilgisi */}
             <div className="rounded-[8px] border border-border bg-card p-5 space-y-3">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span className="font-medium">Cari Hesaplar</span>
@@ -360,41 +439,17 @@ export function FinanceDashboardView() {
               <p className="text-[11px] text-muted-foreground">
                 Aktif tenant cari hesap sayısı
               </p>
-
-              <form
-                onSubmit={handlePaymentIntent}
-                className="border-t border-border pt-3 space-y-2"
-              >
-                <Label className="text-[11px] font-medium flex items-center gap-1.5">
+              <div className="border-t border-border pt-3 space-y-1.5 text-[11px] text-muted-foreground">
+                <p className="font-medium text-foreground flex items-center gap-1.5">
                   <Receipt className="h-3.5 w-3.5" />
-                  Ödeme Talebi (Payment Intent)
-                </Label>
-                <div className="flex gap-1.5">
-                  <Input
-                    type="number"
-                    value={paymentOrderId}
-                    onChange={(e) => setPaymentOrderId(e.target.value)}
-                    placeholder="Sipariş ID (Örn: 201)"
-                    className="h-8 text-xs font-mono tabular-nums"
-                    disabled={paymentIntentMut.isPending}
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={paymentIntentMut.isPending}
-                    className="h-8 text-xs shrink-0"
-                  >
-                    {paymentIntentMut.isPending ? "…" : "Başlat"}
-                  </Button>
-                </div>
-                {createdIntent && (
-                  <div className="rounded-[6px] border border-border bg-muted/40 p-2 text-[11px] font-mono">
-                    Intent #{createdIntent.id} · Sipariş #{createdIntent.order_id ?? "—"} ·{" "}
-                    {formatMoney(createdIntent.tutar, createdIntent.para_birimi)}{" "}
-                    ({createdIntent.durum})
-                  </div>
-                )}
-              </form>
+                  Tahsilat İşleyişi (Havale / EFT / Kasa)
+                </p>
+                <p>
+                  Sanal POS devre dışıdır. Sipariş tahsilatları banka veya elden
+                  teslim teyidi sonrası platform operasyon ekibi tarafından
+                  manuel olarak işlenir ve cari hesabınız kapatılır.
+                </p>
+              </div>
             </div>
 
             {/* Ops Finans Özeti */}
@@ -422,16 +477,188 @@ export function FinanceDashboardView() {
                   </div>
                   <div>
                     <span className="text-[11px] text-muted-foreground">
-                      Ödeme
+                      Hak Ediş
                     </span>
                     <p className="text-lg font-semibold font-mono tabular-nums">
-                      {opsQ.data.payment_intent_count}
+                      {opsHakEdisList.length}
                     </p>
                   </div>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Ops Manuel Tahsilat & Tedarikçi Ödemesi Formları */}
+          {canOpsFinance && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <form
+                onSubmit={handleElleTahsilat}
+                className="rounded-[8px] border border-border bg-card p-5 space-y-3"
+              >
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    Elle Alıcı Tahsilatı Kaydet
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    POST /ops/orders/&#123;id&#125;/tahsilat/ — alıcı carisine ALACAK
+                    işler ve audit kaydı üretir.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Sipariş ID *"
+                    value={tahsilatOrderId}
+                    onChange={(e) => setTahsilatOrderId(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                    required
+                  />
+                  <Input
+                    placeholder="Tutar *"
+                    value={tahsilatTutar}
+                    onChange={(e) => setTahsilatTutar(e.target.value)}
+                    className="h-8 text-xs font-mono text-right tabular-nums"
+                    required
+                  />
+                  <select
+                    aria-label="Tahsilat yöntemi"
+                    value={tahsilatYontem}
+                    onChange={(e) => setTahsilatYontem(e.target.value)}
+                    className="h-8 rounded-[6px] border border-border bg-card px-2 text-xs font-mono"
+                  >
+                    <option value="HAVALE">HAVALE</option>
+                    <option value="EFT">EFT</option>
+                    <option value="NAKIT">NAKIT</option>
+                    <option value="CEK">CEK</option>
+                  </select>
+                  <select
+                    aria-label="Tahsilat para birimi"
+                    value={tahsilatParaBirimi}
+                    onChange={(e) => setTahsilatParaBirimi(e.target.value)}
+                    className="h-8 rounded-[6px] border border-border bg-card px-2 text-xs font-mono"
+                  >
+                    <option value="TRY">TRY</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Input
+                    placeholder="Dekont Ref"
+                    value={tahsilatDekont}
+                    onChange={(e) => setTahsilatDekont(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                  <Input
+                    placeholder="Açıklama"
+                    value={tahsilatAciklama}
+                    onChange={(e) => setTahsilatAciklama(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={tahsilatMut.isPending}
+                    className="h-8 text-xs"
+                  >
+                    {tahsilatMut.isPending ? "Kaydediliyor…" : "Tahsilat Kaydet"}
+                  </Button>
+                </div>
+              </form>
+
+              <form
+                onSubmit={handleElleTedarikciOdeme}
+                className="rounded-[8px] border border-border bg-card p-5 space-y-3"
+              >
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    Elle Tedarikçi Ödemesi Kaydet
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    POST /ops/finance/tedarikci-odeme/ — seçili hak edişi ODENDI
+                    yapar ve deftere işler.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Tedarikçi ID *"
+                    value={tedOdemeFirmaId}
+                    onChange={(e) => setTedOdemeFirmaId(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                    required
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Hak Ediş ID"
+                    value={tedOdemeHakEdisId}
+                    onChange={(e) => setTedOdemeHakEdisId(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Sipariş ID"
+                    value={tedOdemeOrderId}
+                    onChange={(e) => setTedOdemeOrderId(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                  <Input
+                    placeholder="Tutar *"
+                    value={tedOdemeTutar}
+                    onChange={(e) => setTedOdemeTutar(e.target.value)}
+                    className="h-8 text-xs font-mono text-right tabular-nums"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <select
+                    aria-label="Ödeme yöntemi"
+                    value={tedOdemeYontem}
+                    onChange={(e) => setTedOdemeYontem(e.target.value)}
+                    className="h-8 rounded-[6px] border border-border bg-card px-2 text-xs font-mono"
+                  >
+                    <option value="HAVALE">HAVALE</option>
+                    <option value="EFT">EFT</option>
+                    <option value="NAKIT">NAKIT</option>
+                  </select>
+                  <select
+                    aria-label="Ödeme para birimi"
+                    value={tedOdemeParaBirimi}
+                    onChange={(e) => setTedOdemeParaBirimi(e.target.value)}
+                    className="h-8 rounded-[6px] border border-border bg-card px-2 text-xs font-mono"
+                  >
+                    <option value="TRY">TRY</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                  <Input
+                    placeholder="Dekont Ref"
+                    value={tedOdemeDekont}
+                    onChange={(e) => setTedOdemeDekont(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={tedOdemeMut.isPending}
+                    className="h-8 text-xs"
+                  >
+                    {tedOdemeMut.isPending ? "Ödeniyor…" : "Ödemeyi Kaydet"}
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Açıklama (opsiyonel)"
+                  value={tedOdemeAciklama}
+                  onChange={(e) => setTedOdemeAciklama(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </form>
+            </div>
+          )}
 
           {/* Alıcı Cari Hesap Dökümü */}
           <div className="rounded-[8px] border border-border bg-card overflow-hidden">
@@ -566,10 +793,10 @@ export function FinanceDashboardView() {
                     Platform Ops Finans Kayıtları
                   </h2>
                   <p className="text-[11px] text-muted-foreground">
-                    Tüm kiracıların cari, ledger ve ödeme niyeti dökümleri.
+                    Tüm kiracıların cari, ledger, tedarikçi hak ediş ve geçmiş ödeme dökümleri.
                   </p>
                 </div>
-                <div className="flex items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1">
+                <div className="flex flex-wrap items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1">
                   <button
                     type="button"
                     onClick={() => setOpsTab("cari")}
@@ -594,6 +821,17 @@ export function FinanceDashboardView() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setOpsTab("hak_edis")}
+                    className={`rounded-[4px] px-2.5 py-1 text-xs font-medium ${
+                      opsTab === "hak_edis"
+                        ? "bg-card text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Hak Edişler ({opsHakEdisList.length})
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setOpsTab("payments")}
                     className={`rounded-[4px] px-2.5 py-1 text-xs font-medium ${
                       opsTab === "payments"
@@ -601,7 +839,7 @@ export function FinanceDashboardView() {
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Ödemeler ({opsPaymentsList.length})
+                    Geçmiş Kayıtlar ({opsPaymentsList.length})
                   </button>
                 </div>
               </div>
@@ -728,9 +966,85 @@ export function FinanceDashboardView() {
                     </TableBody>
                   </Table>
                 )
+              ) : opsTab === "hak_edis" ? (
+                opsHakEdisQ.isLoading ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    Tedarikçi hak edişleri yükleniyor…
+                  </div>
+                ) : opsHakEdisQ.isError ? (
+                  <div className="p-4 text-xs text-destructive">
+                    {mapCommerceError(
+                      opsHakEdisQ.error,
+                      "Hak ediş listesi alınamadı."
+                    )}
+                  </div>
+                ) : opsHakEdisList.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    Kayıtlı tedarikçi hak edişi bulunamadı.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Tedarikçi</TableHead>
+                        <TableHead>Sipariş</TableHead>
+                        <TableHead>Durum</TableHead>
+                        <TableHead className="text-right">Gram</TableHead>
+                        <TableHead className="text-right">Tutar</TableHead>
+                        <TableHead className="text-right">İşlem</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {opsHakEdisList.map((he) => (
+                        <TableRow key={he.id}>
+                          <TableCell className="font-mono text-xs">
+                            #{he.id}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {he.tedarikci_firma_ad || `Firma #${he.tedarikci_firma_id}`}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            #{he.order_id}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {he.durum}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums text-xs">
+                            {formatGram(he.gram)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums font-semibold">
+                            {he.tutar != null
+                              ? formatMoney(he.tutar, he.para_birimi)
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {he.durum !== "ODENDI" && he.durum !== "IPTAL" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => prefillHakEdisOdeme(he)}
+                              >
+                                Ödeme Formuna Aktar
+                              </Button>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground font-mono">
+                                {he.odeme_tarihi ? formatDateTime(he.odeme_tarihi) : "ODENDI"}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )
               ) : opsPaymentsQ.isLoading ? (
                 <div className="p-6 text-center text-xs text-muted-foreground">
-                  Ödeme niyetleri yükleniyor…
+                  Kayıtlar yükleniyor…
                 </div>
               ) : opsPaymentsQ.isError ? (
                 <div className="p-4 text-xs text-destructive">
@@ -741,7 +1055,7 @@ export function FinanceDashboardView() {
                 </div>
               ) : opsPaymentsList.length === 0 ? (
                 <div className="p-6 text-center text-xs text-muted-foreground">
-                  Kayıtlı ödeme niyeti bulunamadı.
+                  Kayıtlı geçmiş ödeme bulunamadı.
                 </div>
               ) : (
                 <Table>

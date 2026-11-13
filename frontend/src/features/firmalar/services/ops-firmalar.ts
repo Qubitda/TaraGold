@@ -161,6 +161,48 @@ export const feedService = {
   getStokFiyat(apiKey: string, format: "json" | "xml" = "json"): Promise<FeedResponse> {
     return fetchFeedEndpoint("/feed/stok-fiyat/", apiKey, format);
   },
+  async getSchemaXsd(apiKey: string): Promise<FeedResponse> {
+    const res = await fetch("/api/v1/feed/schema.xsd", {
+      method: "GET",
+      headers: {
+        "X-Api-Key": apiKey.trim(),
+        Accept: "application/xml",
+      },
+    });
+    const contentType = res.headers.get("content-type") || "application/xml";
+    const raw = await res.text();
+    if (!res.ok) {
+      throw new Error(`XSD Şema hatası (${res.status}): ${raw}`);
+    }
+    return { format: "xml", contentType, raw, data: raw };
+  },
+};
+
+export type OpsAliciKanalErisimi = {
+  id: number;
+  firma_id: number;
+  firma_ad: string;
+  satis_kanali_id: number;
+  satis_kanali_kod: string;
+  satis_kanali_ad?: string;
+  fiyat_grubu_id: number;
+  fiyat_grubu_ad?: string;
+  fiyat_grubu_kod?: string;
+  aktif: boolean;
+};
+
+export type OpsFiyatGrubu = {
+  id: number;
+  kod: string;
+  ad: string;
+};
+
+export type SalesChannelOption = {
+  id: number;
+  kod: string;
+  ad: string;
+  quote_ttl_saniye?: number;
+  aktif: boolean;
 };
 
 export const opsFirmalarService = {
@@ -321,16 +363,87 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  listAliciKanalErisimleri(firmaId?: number): Promise<{
+    count: number;
+    results: OpsAliciKanalErisimi[];
+  }> {
+    const q = firmaId ? `?firma_id=${firmaId}` : "";
+    return apiFetch(`/ops/alici-kanal-erisimleri/${q}`);
+  },
+  createAliciKanalErisimi(data: {
+    firma_id: number;
+    satis_kanali_id: number;
+    fiyat_grubu_id: number;
+    aktif?: boolean;
+  }): Promise<OpsAliciKanalErisimi> {
+    return apiFetch<OpsAliciKanalErisimi>("/ops/alici-kanal-erisimleri/", {
+      method: "POST",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  toggleAliciKanalErisimi(id: number): Promise<OpsAliciKanalErisimi> {
+    return apiFetch<OpsAliciKanalErisimi>(
+      `/ops/alici-kanal-erisimleri/${id}/toggle/`,
+      {
+        method: "POST",
+        body: {},
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
+  },
+  listFiyatGruplari(): Promise<{ count: number; results: OpsFiyatGrubu[] }> {
+    return apiFetch("/ops/fiyat-gruplari/");
+  },
+  listSalesChannels(): Promise<SalesChannelOption[] | { results: SalesChannelOption[] }> {
+    return apiFetch("/sales-channels/");
+  },
+};
+
+export type OpsOrderLineRow = {
+  id: number;
+  varyant_id: number;
+  platform_kodu?: string;
+  miktar: string;
+  birim: string;
+  para_birimi: string;
+  satir_tutari: string;
+  teslim_modeli?: string;
+};
+
+export type OpsHazirlamaEmriRow = {
+  id: number;
+  tedarikci_firma_id: number;
+  tedarikci_ad?: string;
+  durum: string;
+  teslim_modeli?: string;
+  hazir_zamani?: string | null;
 };
 
 export type OpsOrderRow = {
   id: number;
   durum: string;
   alici_firma_id?: number;
+  alici_firma_ad?: string;
   olusturma_tarihi?: string | null;
+  toplamlar?: Record<string, string>;
+  satir_sayisi?: number;
+  satirlar?: OpsOrderLineRow[];
+  hazirlama_emirleri?: OpsHazirlamaEmriRow[];
 };
 
 export const opsOrdersService = {
+  listAll(params?: {
+    durum?: string;
+    alici_firma_id?: number;
+  }): Promise<{ results: OpsOrderRow[]; count?: number }> {
+    const search = new URLSearchParams();
+    if (params?.durum) search.set("durum", params.durum);
+    if (params?.alici_firma_id)
+      search.set("alici_firma_id", String(params.alici_firma_id));
+    const q = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch(`/ops/orders/${q}`);
+  },
   onayHavuzu(): Promise<{ results: OpsOrderRow[]; count?: number }> {
     return apiFetch("/ops/orders/onay-havuzu/");
   },
@@ -350,8 +463,14 @@ export const opsOrdersService = {
   },
   tahsilat(
     id: number,
-    data: { tutar: string; yontem: string; aciklama?: string; dekont_ref?: string }
-  ): Promise<{ ledger_entry_id: number; tutar: string }> {
+    data: {
+      tutar: string;
+      yontem: string;
+      para_birimi?: string;
+      aciklama?: string;
+      dekont_ref?: string;
+    }
+  ): Promise<{ ledger_entry_id: number; tutar: string; para_birimi?: string }> {
     return apiFetch(`/ops/orders/${id}/tahsilat/`, {
       method: "POST",
       body: data,

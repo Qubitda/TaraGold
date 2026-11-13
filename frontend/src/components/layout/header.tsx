@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { User, LogIn, LogOut, ShieldCheck, UserCog, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { User, LogIn, LogOut, ShieldCheck, UserCog, Loader2, Building2, Check } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,35 @@ export function Header({ user, onLogout }: HeaderProps) {
   const [targetUserId, setTargetUserId] = useState("");
   const [actAsLoading, setActAsLoading] = useState(false);
   const [actAsError, setActAsError] = useState<string | null>(null);
+  const [switchingFirmaId, setSwitchingFirmaId] = useState<number | null>(null);
+
+  const uyeliklerQ = useQuery({
+    queryKey: ["me-uyelikler", user?.id],
+    queryFn: () => authService.getUyelikler(),
+    enabled: Boolean(user),
+  });
+  const uyelikler = uyeliklerQ.data?.results ?? [];
+
+  const handleSwitchFirma = async (firmaId: number) => {
+    setSwitchingFirmaId(firmaId);
+    try {
+      const res = await authService.switchFirma(firmaId);
+      await refresh();
+      await queryClient.invalidateQueries();
+      toast.success(
+        "Aktif firma değiştirildi",
+        `${res.uyelik.firma_ad} (${res.uyelik.rol})`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.problem.detail || err.message
+          : "Firma değiştirilemedi.";
+      toast.error("Firma geçiş hatası", msg);
+    } finally {
+      setSwitchingFirmaId(null);
+    }
+  };
 
   const basePath = (() => {
     const seg = pathname.split("/").filter(Boolean)[0];
@@ -173,6 +202,36 @@ export function Header({ user, onLogout }: HeaderProps) {
                     Oturum & Yetkiler
                   </Link>
                 </DropdownMenuItem>
+                {uyelikler.length > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Firma / Rol Değiştir
+                    </DropdownMenuLabel>
+                    {uyelikler.map((u) => {
+                      const isCurrent = user.firma?.id === u.firma_id;
+                      return (
+                        <DropdownMenuItem
+                          key={u.id}
+                          disabled={isCurrent || switchingFirmaId === u.firma_id}
+                          onClick={() => void handleSwitchFirma(u.firma_id)}
+                          className="cursor-pointer text-xs justify-between gap-2"
+                        >
+                          <span className="inline-flex items-center gap-1.5 truncate">
+                            <Building2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{u.firma_ad}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              ({u.rol})
+                            </span>
+                          </span>
+                          {isCurrent ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          ) : null}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
+                )}
                 {canStartActAs && (
                   <DropdownMenuItem
                     onClick={() => {

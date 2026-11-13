@@ -82,21 +82,8 @@ class Command(BaseCommand):
         else:
             warnings.append("MFA_ENFORCE_PLATFORM=False (platform/act-as tek faktör).")
 
-        # Fake providers
-        pay = (getattr(settings, "PAYMENT_PROVIDER", "") or "").lower()
-        car = (getattr(settings, "CARRIER_PROVIDER", "") or "").lower()
-        allow_fake_setting = bool(getattr(settings, "ALLOW_FAKE_PROVIDERS", False))
-        if pay == "fake" or car == "fake":
-            msg = f"PAYMENT_PROVIDER={pay} CARRIER_PROVIDER={car}"
-            if allow_fake or allow_fake_setting:
-                infos.append(f"Sandbox fake providers OK ({msg}).")
-            elif not debug:
-                errors.append(
-                    f"Fake provider prod: {msg}. ALLOW_FAKE_PROVIDERS=1 (yol A) "
-                    "veya gerçek adaptör (yol B)."
-                )
-            else:
-                infos.append(f"DEBUG fake providers ({msg}).")
+        # Elle kargo / elle tahsilat (ADR-0036: sanal pos & kargo entegrasyonu yok)
+        infos.append("Ödeme/kargo: elle tahsilat & elle takip no (entegrasyon yok).")
 
         # SMTP / email
         email_backend = str(getattr(settings, "EMAIL_BACKEND", "") or "")

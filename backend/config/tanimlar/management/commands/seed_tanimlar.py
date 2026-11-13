@@ -31,10 +31,12 @@ AYARLAR = [
 ]
 
 KANALLAR = [
-    # (kod, ad)
+    # (kod, ad) — normatif kanonik kodlar + geriye uyumlu legacy kodlar
+    ("KUYUMCU_PORTAL", "Kuyumcu Portalı"),
+    ("B2B_API", "B2B API"),
+    ("B2C", "B2C Kanalı"),
     ("KUYUMCU_PANEL", "Kuyumcu paneli"),
     ("CANTACI_PANEL", "Çantacı paneli"),
-    ("B2B_API", "B2B API"),
     ("B2C_API", "B2C API"),
 ]
 

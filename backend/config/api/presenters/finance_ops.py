@@ -27,7 +27,7 @@ def BuyerShipmentPresenter(ship: Shipment) -> dict:
 
 def BuyerFinancePresenter(data: dict) -> dict:
     out = dict(data)
-    out["allowed_actions"] = ["view_credit", "create_payment_intent", "view_cari", "view_ledger"]
+    out["allowed_actions"] = ["view_credit", "view_cari", "view_ledger"]
     out["server_now"] = timezone.now().isoformat()
     buyer_finans_servisi.assert_masked(out)
     assert_masked(out)

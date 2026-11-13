@@ -91,7 +91,8 @@ class WebhookSkeletonTests(CheckoutFixtureMixin, TestCase):
         PAYMENT_WEBHOOK_SECRET=_SECRET,
         PAYMENT_WEBHOOK_REQUIRE_HMAC=True,
     )
-    def test_http_webhook_replay(self):
+    def test_http_webhook_disabled_410(self):
+        """ADR-0036: Sanal POS webhook HTTP yüzeyi 410 Gone kapatıldı."""
         pi = self._beklemede_intent("http")
         url = reverse("api-payment-webhook")
         body = {
@@ -102,34 +103,7 @@ class WebhookSkeletonTests(CheckoutFixtureMixin, TestCase):
         }
         headers = _hmac_headers(body)
         r1 = self.api.post(url, data=json.dumps(body), **headers)
-        self.assertEqual(r1.status_code, 200, r1.content)
-        self.assertEqual(r1.json()["sonuc"], "ISLENDI")
-        r2 = self.api.post(url, data=json.dumps(body), **headers)
-        self.assertEqual(r2.status_code, 200)
-        self.assertEqual(r1.json()["id"], r2.json()["id"])
+        self.assertEqual(r1.status_code, 410, r1.content)
+        self.assertEqual(r1.json().get("code"), "virtual_pos_disabled")
         pi.refresh_from_db()
-        self.assertEqual(pi.durum, PaymentIntent.Durum.BASARILI)
-
-    @override_settings(
-        PAYMENT_WEBHOOK_SECRET=_SECRET,
-        PAYMENT_WEBHOOK_REQUIRE_HMAC=True,
-    )
-    def test_http_bad_signature(self):
-        url = reverse("api-payment-webhook")
-        body = {"event_id": "x", "event_type": "payment.succeeded"}
-        headers = _hmac_headers(body, secret="wrong-secret")
-        res = self.api.post(url, data=json.dumps(body), **headers)
-        self.assertEqual(res.status_code, 401)
-
-    @override_settings(
-        PAYMENT_WEBHOOK_SECRET=_SECRET,
-        PAYMENT_WEBHOOK_REQUIRE_HMAC=True,
-        PAYMENT_WEBHOOK_REPLAY_SECONDS=60,
-    )
-    def test_http_replay_window(self):
-        url = reverse("api-payment-webhook")
-        body = {"event_id": "old", "event_type": "payment.succeeded"}
-        old_ts = str(int(time.time()) - 3600)
-        headers = _hmac_headers(body, ts=old_ts)
-        res = self.api.post(url, data=json.dumps(body), **headers)
-        self.assertEqual(res.status_code, 401)
+        self.assertEqual(pi.durum, PaymentIntent.Durum.BEKLEMEDE)

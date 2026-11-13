@@ -446,7 +446,7 @@ class OpenApiSmokeMatrixTests(B5FixtureMixin, B4FixtureMixin, B3FixtureMixin, Te
                         sok = sr.status_code in (400, 401, 403, 429)
                     elif allow and method == "POST" and "webhook" in path:
                         sr = sfn(resolved, data={}, format="json")
-                        sok = sr.status_code in (200, 201, 400, 401, 403)
+                        sok = sr.status_code in (200, 201, 400, 401, 403, 410)
                     elif allow and method == "POST":
                         sr = sfn(resolved, data={}, format="json")
                         sok = sr.status_code in (200, 201, 400, 403)

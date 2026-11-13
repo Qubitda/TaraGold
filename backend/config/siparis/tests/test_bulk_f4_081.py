@@ -77,7 +77,8 @@ class BulkOrderServiceTests(CheckoutFixtureMixin, TestCase):
         )
         self.assertFalse(result.replayed)
         self.assertIsNotNone(result.order)
-        self.assertEqual(result.order.durum, Order.Durum.OLUSTURULDU)
+        # ADR-0034/0036: yeni sipariş ONAY_BEKLIYOR başlar
+        self.assertEqual(result.order.durum, Order.Durum.ONAY_BEKLIYOR)
         self.assertEqual(result.order.lines.count(), 2)
         self.assertEqual(len(result.accepted), 2)
         self.assertEqual(result.errors, [])

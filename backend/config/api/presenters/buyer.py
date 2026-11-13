@@ -70,7 +70,6 @@ def BuyerQuotePresenter(quote: PriceQuote, *, now=None) -> dict:
         "toplam_vergisiz": _dec(net_raw.get("toplam_vergisiz")),
         "gram": _dec(net_raw.get("gram")),
         "gram_basi_vergisiz": _dec(net_raw.get("gram_basi_vergisiz")),
-        "iscilik_vergisiz": _dec(net_raw.get("iscilik_vergisiz")),
         "has_gram": _dec(net_raw.get("has_gram")),
     }
     data = {
@@ -85,7 +84,6 @@ def BuyerQuotePresenter(quote: PriceQuote, *, now=None) -> dict:
         "para_birimi": raw["para_birimi"],
         "gram": _dec(raw["gram"]),
         "gram_basi_vergisiz": _dec(raw["gram_basi_vergisiz"]),
-        "iscilik_vergisiz": _dec(raw.get("iscilik_vergisiz")),
         "has_gram": _dec(raw.get("has_gram")),
         "net_ozet": net_ozet,
         "expires_at": _dt(raw["gecerlilik_sonu"]),
@@ -94,7 +92,7 @@ def BuyerQuotePresenter(quote: PriceQuote, *, now=None) -> dict:
         "allowed_actions": (["lock", "add_to_cart"] if gecerli else []),
         "satirlar": None,
     }
-    assert_masked(data)
+    assert_masked(data, context="buyer")
     return data
 
 
@@ -123,11 +121,16 @@ def BuyerPriceLockPresenter(lock: PriceLock, *, now=None) -> dict:
 def BuyerOrderPresenter(order: Order, *, include_lines: bool = True) -> dict:
     data = _raw_order(order, include_lines=include_lines)
     actions: list[str] = ["reorder"]
-    if order.durum == Order.Durum.OLUSTURULDU:
+    if order.durum in (
+        Order.Durum.OLUSTURULDU,
+        Order.Durum.ONAY_BEKLIYOR,
+        Order.Durum.ONAYLANDI,
+        Order.Durum.REDDEDILDI,
+    ):
         actions.insert(0, "cancel")
     data["allowed_actions"] = actions
     data["server_now"] = timezone.now().isoformat()
-    assert_masked(data)
+    assert_masked(data, context="buyer")
     return data
 
 

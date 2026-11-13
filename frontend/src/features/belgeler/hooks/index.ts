@@ -3,12 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth";
 import { belgelerService } from "../services";
-import type { PodAttachRequest } from "../types";
+import type { BelgeAyarlari, PodAttachRequest } from "../types";
 
 export const belgelerKeys = {
   all: ["belgeler"] as const,
   list: (capKey: string) => [...belgelerKeys.all, "list", capKey] as const,
   opsShipments: () => [...belgelerKeys.all, "ops-shipments"] as const,
+  ayarlar: () => [...belgelerKeys.all, "ayarlar"] as const,
 };
 
 function capKey(caps: Record<string, boolean> | null | undefined): string {
@@ -60,6 +61,25 @@ export function useSubmitPodDocumentMutation() {
     mutationFn: (data: PodAttachRequest) => belgelerService.submitPod(data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: belgelerKeys.all });
+    },
+  });
+}
+
+export function useBelgeAyarlariQuery(enabled = false) {
+  return useQuery({
+    queryKey: belgelerKeys.ayarlar(),
+    queryFn: () => belgelerService.getBelgeAyarlari(),
+    enabled,
+  });
+}
+
+export function useUpdateBelgeAyarlariMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<BelgeAyarlari>) =>
+      belgelerService.updateBelgeAyarlari(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: belgelerKeys.ayarlar() });
     },
   });
 }

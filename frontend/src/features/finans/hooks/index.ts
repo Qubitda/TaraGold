@@ -3,6 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { unwrapResults } from "@/lib/api/client";
 import { finansService } from "../services";
+import type {
+  ElleTahsilatRequest,
+  ElleTedarikciOdemeRequest,
+} from "../types";
 
 export const finansKeys = {
   all: ["finans"] as const,
@@ -16,6 +20,7 @@ export const finansKeys = {
   opsCari: () => [...finansKeys.all, "ops-cari"] as const,
   opsLedger: () => [...finansKeys.all, "ops-ledger"] as const,
   opsPayments: () => [...finansKeys.all, "ops-payments"] as const,
+  opsHakEdis: (durum = "") => [...finansKeys.all, "ops-hak-edis", durum] as const,
 };
 
 export function useFinanceMeQuery(paraBirimi = "TRY", enabled = true) {
@@ -108,10 +113,38 @@ export function useOpsFinancePaymentsQuery(enabled = false) {
   });
 }
 
-export function useCreatePaymentIntentMutation() {
+export function useOpsFinanceHakEdisQuery(enabled = false, durum = "") {
+  return useQuery({
+    queryKey: finansKeys.opsHakEdis(durum),
+    queryFn: async () =>
+      unwrapResults(
+        await finansService.getOpsFinanceHakEdis(durum ? { durum } : undefined)
+      ),
+    enabled,
+  });
+}
+
+export function useElleTahsilatMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (orderId: number) => finansService.createPaymentIntent(orderId),
+    mutationFn: ({
+      orderId,
+      data,
+    }: {
+      orderId: number;
+      data: ElleTahsilatRequest;
+    }) => finansService.recordElleTahsilat(orderId, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: finansKeys.all });
+    },
+  });
+}
+
+export function useElleTedarikciOdemeMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ElleTedarikciOdemeRequest) =>
+      finansService.recordElleTedarikciOdeme(data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: finansKeys.all });
     },

@@ -51,9 +51,14 @@ class B5FixtureMixin(CheckoutFixtureMixin):
     def _order(self, key: str):
         self._quote_and_cart(miktar=Decimal("2.500"))
         co = checkout_servisi.checkout(actor=self.buyer, idempotency_key=key)
-        return order_servisi.olustur_from_checkout(
+        order = order_servisi.olustur_from_checkout(
             actor=self.buyer, checkout_attempt=co.attempt
         )
+        from siparis.models import Order
+
+        Order.objects.filter(pk=order.pk).update(durum=Order.Durum.ONAYLANDI)
+        order.refresh_from_db()
+        return order
 
     def _idem(self, key):
         return {"HTTP_IDEMPOTENCY_KEY": key}
@@ -263,7 +268,7 @@ class ApiB5OpsTests(B5FixtureMixin, APITestCase):
 
         disp = self.api.post(
             reverse("api-ops-shipment-dispatch", kwargs={"pk": sid}),
-            {},
+            {"kargo_firma": "Aras", "takip_no": "B5-TRK-1"},
             format="json",
             **self._idem("b5-sh-d"),
         )
@@ -344,9 +349,14 @@ class ApiB5ConcurrencyTests(B5FixtureMixin, TransactionTestCase):
     def _order(self, key: str):
         self._quote_and_cart(miktar=Decimal("1"))
         co = checkout_servisi.checkout(actor=self.buyer, idempotency_key=key)
-        return order_servisi.olustur_from_checkout(
+        order = order_servisi.olustur_from_checkout(
             actor=self.buyer, checkout_attempt=co.attempt
         )
+        from siparis.models import Order
+
+        Order.objects.filter(pk=order.pk).update(durum=Order.Durum.ONAYLANDI)
+        order.refresh_from_db()
+        return order
 
     def _pass_qc_service(self, order):
         from kalite.services import inspection_servisi, olcum_servisi

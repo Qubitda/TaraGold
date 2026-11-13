@@ -137,7 +137,13 @@ export function LogisticsManagementView() {
 
   const createShipForm = useForm<CreateShipmentInput>({
     resolver: zodResolver(createShipmentSchema),
-    defaultValues: { order_id: undefined, takip_no: "", notlar: "" },
+    defaultValues: {
+      order_id: undefined,
+      takip_no: "",
+      notlar: "",
+      teslim_modeli: "PLATFORM_QC",
+      sevk_yonu: "PLATFORM_TO_ALICI",
+    },
   });
 
   const dispatchForm = useForm<ShipmentDispatchInput>({
@@ -223,6 +229,8 @@ export function LogisticsManagementView() {
         order_id: formData.order_id,
         ...(formData.takip_no ? { takip_no: formData.takip_no } : {}),
         ...(formData.notlar ? { notlar: formData.notlar } : {}),
+        ...(formData.teslim_modeli ? { teslim_modeli: formData.teslim_modeli } : {}),
+        ...(formData.sevk_yonu ? { sevk_yonu: formData.sevk_yonu } : {}),
       });
       actionToast.success("Sevkiyat oluşturuldu");
       setCreateShipModalOpen(false);
@@ -449,6 +457,7 @@ export function LogisticsManagementView() {
                 <TableRow>
                   <TableHead className="w-[100px]">Sevkiyat ID</TableHead>
                   <TableHead>Sipariş Ref</TableHead>
+                  <TableHead>Model / Yön</TableHead>
                   <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
@@ -465,6 +474,10 @@ export function LogisticsManagementView() {
                       </TableCell>
                       <TableCell className="font-mono text-xs tabular-nums">
                         {s.order_id != null ? `Sipariş #${s.order_id}` : "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-[11px] text-muted-foreground">
+                        {s.teslim_modeli || "PLATFORM_QC"}
+                        {s.sevk_yonu ? ` · ${s.sevk_yonu}` : ""}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -752,6 +765,34 @@ export function LogisticsManagementView() {
                 </span>
               )}
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="new-shp-model">Teslim Modeli</Label>
+                <select
+                  id="new-shp-model"
+                  className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs font-mono"
+                  disabled={createShipForm.formState.isSubmitting}
+                  {...createShipForm.register("teslim_modeli")}
+                >
+                  <option value="PLATFORM_QC">PLATFORM_QC (QC Zorunlu)</option>
+                  <option value="DOGRUDAN">DOGRUDAN (QC Muaf)</option>
+                  <option value="TEDARIKCI_TO_PLATFORM">TEDARIKCI_TO_PLATFORM</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="new-shp-yon">Sevk Yönü</Label>
+                <select
+                  id="new-shp-yon"
+                  className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs font-mono"
+                  disabled={createShipForm.formState.isSubmitting}
+                  {...createShipForm.register("sevk_yonu")}
+                >
+                  <option value="PLATFORM_TO_ALICI">PLATFORM_TO_ALICI</option>
+                  <option value="TEDARIKCI_TO_ALICI">TEDARIKCI_TO_ALICI</option>
+                  <option value="TEDARIKCI_TO_PLATFORM">TEDARIKCI_TO_PLATFORM</option>
+                </select>
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="new-shp-takip">Takip No (opsiyonel)</Label>
               <Input
@@ -834,6 +875,14 @@ export function LogisticsManagementView() {
                 <div>
                   <span className="text-muted-foreground">Taşıyıcı Firma</span>
                   <p>{shipDetailData.kargo_firma || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Teslim Modeli</span>
+                  <p className="font-mono">{shipDetailData.teslim_modeli || "PLATFORM_QC"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Sevk Yönü</span>
+                  <p className="font-mono">{shipDetailData.sevk_yonu || "—"}</p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Takip No</span>

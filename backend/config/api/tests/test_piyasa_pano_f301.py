@@ -132,6 +132,19 @@ class PiyasaPanoApiTests(TestCase):
         codes = {s["kod"] for s in res.data["satirlar"]}
         self.assertIn("has_f301", codes)
         row = next(s for s in res.data["satirlar"] if s["kod"] == "has_f301")
+        self.assertEqual(
+            set(row.keys()),
+            {
+                "kod",
+                "ad",
+                "fiyat",
+                "para_birimi",
+                "olcek",
+                "kaynak",
+                "guncelleme",
+                "banner",
+            },
+        )
         self.assertIn("fiyat", row)
         self.assertEqual(row["para_birimi"], "TRY")
         self.assertIn(row["kaynak"], {"CANLI", "LKG", "MANUEL", "FAIL"})
@@ -160,3 +173,21 @@ class PiyasaPanoApiTests(TestCase):
         self.api.force_authenticate(user=self.buyer)
         res = self.api.get(reverse("api-piyasa-pano"), {"olcek": "TON"})
         self.assertEqual(res.status_code, 400)
+
+    def test_stale_feed_returns_lkg_and_banner_still_masked(self):
+        from datetime import timedelta
+
+        eski = timezone.now() - timedelta(hours=2)
+        MetalKuru.objects.filter(metal=self.metal).update(
+            zaman=eski,
+            alinma_zamani=eski,
+        )
+        self.api.force_authenticate(user=self.buyer)
+        res = self.api.get(reverse("api-piyasa-pano"))
+        self.assertEqual(res.status_code, 200, res.data)
+        row = next(s for s in res.data["satirlar"] if s["kod"] == "has_f301")
+        self.assertEqual(row["kaynak"], "LKG")
+        self.assertTrue(row["banner"])
+        blob = str(res.data).lower()
+        for yasak in ("alis_marj", "satis_marj", "marj_modu", "saf_birim", "maliyet"):
+            self.assertNotIn(yasak, blob)

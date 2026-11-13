@@ -77,12 +77,17 @@ class Kullanici(AbstractUser):
         elif self.rol not in roles.ALL_ROLES:
             errors["rol"] = "Geçersiz kullanıcı rolü."
         elif self.firma_id:
+            has_tip = bool(
+                getattr(self.firma, "alici_mi", False)
+                or getattr(self.firma, "tedarikci_mi", False)
+                or self.firma.tip_atamalari.exists()
+            )
             if self.rol == roles.FIRMA_ADMIN:
                 if self.firma.platform_mu:
                     errors["rol"] = "firma_admin platform firmasına atanamaz."
-                elif not (self.firma.alici_mi or self.firma.tedarikci_mi):
+                elif not has_tip:
                     errors["rol"] = (
-                        "firma_admin yalnız alıcı veya tedarikçi firmaya atanabilir."
+                        "firma_admin yalnız alıcı, tedarikçi veya API müşterisi firmaya atanabilir."
                     )
             elif self.rol in roles.PLATFORM_ROLLERI and not self.firma.platform_mu:
                 errors["rol"] = "Platform rolleri yalnızca platform firmasına atanabilir."

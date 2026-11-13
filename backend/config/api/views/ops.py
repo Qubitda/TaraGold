@@ -22,8 +22,8 @@ class OpsOrderSummaryView(APIView):
             raise PermissionDenied(detail="Ops API için view_all_tenants gerekir.")
         total = Order.objects.count()
         by_durum = {
-            "OLUSTURULDU": Order.objects.filter(durum="OLUSTURULDU").count(),
-            "IPTAL": Order.objects.filter(durum="IPTAL").count(),
+            d: Order.objects.filter(durum=d).count()
+            for d in Order.Durum.values
         }
         return Response(
             {

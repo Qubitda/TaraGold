@@ -55,7 +55,8 @@ class Adr0033UyelikTests(TestCase):
         cls.user.set_password("x")
         cls.user.save()
 
-    def test_upsert_uyelik_denormalize_and_k3(self):
+    def test_upsert_uyelik_denormalize_and_birincil(self):
+        """Gerekçe (ADR-0035): Kullanıcı birden fazla aktif üyeliğe sahip olabilir; birincil tekil."""
         other = Firma.objects.create(
             ad="U2",
             firma_kodu="U2",
@@ -73,6 +74,7 @@ class Adr0033UyelikTests(TestCase):
         self.assertEqual(self.user.rol, roles.FIRMA_ADMIN)
         self.assertEqual(self.user.firma_id, self.firma.pk)
         self.assertTrue(u1.aktif)
+        self.assertTrue(u1.birincil)
 
         u2 = upsert_uyelik(
             kullanici=self.user,
@@ -84,9 +86,14 @@ class Adr0033UyelikTests(TestCase):
         u1.refresh_from_db()
         self.assertEqual(self.user.firma_id, other.pk)
         self.assertTrue(u2.aktif)
-        self.assertFalse(u1.aktif)
+        self.assertTrue(u2.birincil)
+        self.assertTrue(u1.aktif)
+        self.assertFalse(u1.birincil)
         self.assertEqual(
-            FirmaUyelik.objects.filter(kullanici=self.user, aktif=True).count(), 1
+            FirmaUyelik.objects.filter(kullanici=self.user, birincil=True).count(), 1
+        )
+        self.assertEqual(
+            FirmaUyelik.objects.filter(kullanici=self.user, aktif=True).count(), 2
         )
 
     def test_assign_user_role_writes_uyelik(self):
@@ -215,10 +222,12 @@ class Adr0033KanalIzinTests(TestCase):
         self.assertEqual(ok.durum, TedarikciKanalIzni.Durum.ONAYLI)
 
 
-class Adr0033K3ConstraintTests(TransactionTestCase):
-    def test_partial_unique_tek_aktif(self):
+class Adr0035CokluUyelikConstraintTests(TransactionTestCase):
+    """Gerekçe (ADR-0035): Çoklu aktif FirmaUyelik serbest; yalnız tek birincil oturum zorunlu."""
+
+    def test_partial_unique_tek_birincil_coklu_aktif(self):
         seed_role_permissions()
-        platform = ensure_platform_firma()
+        ensure_platform_firma()
         a = Firma.objects.create(
             ad="C1", firma_kodu="C1", alici_mi=True, onay_durumu="onayli", aktif=True
         )
@@ -229,7 +238,7 @@ class Adr0033K3ConstraintTests(TransactionTestCase):
         user.set_password("x")
         user.save()
         FirmaUyelik.objects.create(
-            kullanici=user, firma=a, rol=roles.ALICI_DENETCI, aktif=True
+            kullanici=user, firma=a, rol=roles.ALICI_DENETCI, aktif=True, birincil=True
         )
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
@@ -238,12 +247,13 @@ class Adr0033K3ConstraintTests(TransactionTestCase):
                     firma=b,
                     rol=roles.ALICI_DENETCI,
                     aktif=True,
+                    birincil=True,
                 )
-        # pasif ikinci üyelik OK
+        # ikinci aktif (birincil=False) OK
         FirmaUyelik.objects.create(
-            kullanici=user, firma=b, rol=roles.ALICI_DENETCI, aktif=False
+            kullanici=user, firma=b, rol=roles.ALICI_DENETCI, aktif=True, birincil=False
         )
-        self.assertEqual(FirmaUyelik.objects.filter(kullanici=user).count(), 2)
+        self.assertEqual(FirmaUyelik.objects.filter(kullanici=user, aktif=True).count(), 2)
 
 
 class Adr0033TipBackfillShapeTests(TestCase):

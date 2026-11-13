@@ -46,3 +46,54 @@ export type OpsPaymentRow = {
   para_birimi: string;
   olusturma_tarihi?: string | null;
 };
+
+export type OpsHakEdisRow = {
+  id: number;
+  order_id: number;
+  quality_inspection_id?: number | null;
+  tedarikci_firma_id: number;
+  tedarikci_firma_ad?: string;
+  durum: string;
+  gram: string;
+  tutar: string | null;
+  para_birimi: string;
+  vade_tarihi?: string | null;
+  hak_edis_tarihi?: string | null;
+  odeme_tarihi?: string | null;
+  odeme_ledger_entry_id?: number | null;
+  aciklama?: string;
+  olusturma_tarihi?: string | null;
+};
+
+export type ElleTahsilatRequest = {
+  tutar: string;
+  yontem: string;
+  para_birimi?: string;
+  dekont_ref?: string;
+  aciklama?: string;
+};
+
+export type ElleTahsilatResponse = {
+  ledger_entry_id: number;
+  tutar: string;
+  para_birimi: string;
+};
+
+export type ElleTedarikciOdemeRequest = {
+  tedarikci_firma_id: number;
+  hak_edis_id?: number;
+  order_id?: number;
+  tutar: string;
+  yontem: string;
+  para_birimi?: string;
+  dekont_ref?: string;
+  aciklama?: string;
+};
+
+export type ElleTedarikciOdemeResponse = {
+  ledger_entry_id: number;
+  tutar: string;
+  para_birimi: string;
+  tedarikci_firma_id: number;
+  hak_edis: OpsHakEdisRow | null;
+};

@@ -31,14 +31,12 @@ function mapQuote(q: BuyerQuote): PriceQuote {
     gram: q.gram,
     gram_basi_vergisiz: q.gram_basi_vergisiz,
     toplam_vergisiz: q.toplam_vergisiz,
-    iscilik_vergisiz: q.iscilik_vergisiz ?? net?.iscilik_vergisiz ?? null,
     has_gram: q.has_gram ?? net?.has_gram ?? null,
     net_ozet: net
       ? {
           toplam_vergisiz: net.toplam_vergisiz,
           gram: net.gram,
           gram_basi_vergisiz: net.gram_basi_vergisiz,
-          iscilik_vergisiz: net.iscilik_vergisiz,
           has_gram: net.has_gram,
         }
       : undefined,

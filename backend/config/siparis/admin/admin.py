@@ -116,6 +116,26 @@ class OrderLineInline(admin.TabularInline):
     )
     readonly_fields = fields
 
+    def get_fields(self, request, obj=None):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        if not can_view_all_tenants(request.user) and getattr(
+            getattr(request.user, "firma", None), "tedarikci_mi", False
+        ):
+            return ("varyant", "miktar", "birim", "teslim_modeli")
+        return super().get_fields(request, obj)
+
+    def get_queryset(self, request):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        qs = super().get_queryset(request)
+        if can_view_all_tenants(request.user):
+            return qs
+        firma = getattr(request.user, "firma", None)
+        if firma is not None and getattr(firma, "tedarikci_mi", False):
+            return qs.filter(stock_reservation__teklif__tedarikci_id=firma.pk)
+        return qs
+
     def has_add_permission(self, request, obj=None):
         return False
 
@@ -140,6 +160,24 @@ class OrderAdmin(_SiparisReadOnlyAdmin):
     readonly_fields = [f.name for f in Order._meta.fields]
     inlines = [OrderLineInline]
 
+    def get_list_display(self, request):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        if not can_view_all_tenants(request.user) and getattr(
+            getattr(request.user, "firma", None), "tedarikci_mi", False
+        ):
+            return ("id", "durum", "olusturma_tarihi")
+        return super().get_list_display(request)
+
+    def get_fields(self, request, obj=None):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        if not can_view_all_tenants(request.user) and getattr(
+            getattr(request.user, "firma", None), "tedarikci_mi", False
+        ):
+            return ("id", "durum", "olusturma_tarihi", "guncelleme_tarihi")
+        return super().get_fields(request, obj)
+
     def get_queryset(self, request):
         from siparis.selectors.tenant import scope_order_queryset
 
@@ -160,15 +198,38 @@ class OrderLineAdmin(_SiparisReadOnlyAdmin):
     list_select_related = ("order", "varyant", "price_lock")
     readonly_fields = [f.name for f in OrderLine._meta.fields]
 
+    def get_list_display(self, request):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        if not can_view_all_tenants(request.user) and getattr(
+            getattr(request.user, "firma", None), "tedarikci_mi", False
+        ):
+            return ("id", "order", "varyant", "miktar", "birim")
+        return super().get_list_display(request)
+
+    def get_fields(self, request, obj=None):
+        from firmalar.services.yetki_servisi import can_view_all_tenants
+
+        if not can_view_all_tenants(request.user) and getattr(
+            getattr(request.user, "firma", None), "tedarikci_mi", False
+        ):
+            return ("id", "order", "varyant", "miktar", "birim", "teslim_modeli")
+        return super().get_fields(request, obj)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         from firmalar.services.yetki_servisi import can_view_all_tenants
 
         if can_view_all_tenants(request.user):
             return qs
+        firma = getattr(request.user, "firma", None)
         firma_id = getattr(request.user, "firma_id", None)
-        if not firma_id:
+        if not firma_id or firma is None:
             return qs.none()
+        if getattr(firma, "tedarikci_mi", False) and not getattr(
+            firma, "alici_mi", False
+        ):
+            return qs.filter(stock_reservation__teklif__tedarikci_id=firma_id)
         return qs.filter(order__alici_firma_id=firma_id)
 
 

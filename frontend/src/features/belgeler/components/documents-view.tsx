@@ -5,10 +5,15 @@ import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/features/auth";
-import { useDocuments, useSubmitPodDocumentMutation } from "../hooks";
+import {
+  useDocuments,
+  useSubmitPodDocumentMutation,
+  useBelgeAyarlariQuery,
+  useUpdateBelgeAyarlariMutation,
+} from "../hooks";
 import { belgelerService } from "../services";
 import { podAttachSchema, type PodAttachInput } from "../schemas";
-import type { DocumentItem } from "../types";
+import type { BelgeAyarlari, DocumentItem } from "../types";
 import { formatDateTime } from "@/lib/format";
 import { unwrapResults } from "@/lib/api/client";
 import { useActionToast } from "@/hooks/use-action-toast";
@@ -44,12 +49,17 @@ import {
   FileImage,
   ExternalLink,
   ArrowRight,
+  Settings2,
 } from "lucide-react";
 
 const PAGE_SIZE = 15;
 
 const CATEGORIES = [
   { id: "all", label: "Tümü" },
+  { id: "PROFORMA", label: "Proforma" },
+  { id: "IRSALIYE", label: "İrsaliye" },
+  { id: "TEDARIKCI_IRSALIYE", label: "Tedarikçi İrsaliyesi" },
+  { id: "TAS_SERTIFIKA", label: "Taş Sertifika" },
   { id: "SEVKIYAT", label: "Sevkiyat" },
   { id: "POD", label: "POD" },
   { id: "SIPARIS", label: "Sipariş" },
@@ -87,6 +97,7 @@ function statusVariant(
 
 export function DocumentsView() {
   const { user } = useAuth();
+  const isOps = Boolean(user?.capabilities?.can_view_ops);
   const canPod = Boolean(
     user?.capabilities?.can_manage_shipment || user?.capabilities?.can_view_ops
   );
@@ -94,6 +105,8 @@ export function DocumentsView() {
   const actionToast = useActionToast();
   const { documents, errors, loading, error, refresh } = useDocuments();
   const podMut = useSubmitPodDocumentMutation();
+  const belgeAyarlariQ = useBelgeAyarlariQuery(isOps);
+  const updateAyarlarMut = useUpdateBelgeAyarlariMutation();
 
   const [q, setQ] = useState("");
   const [tip, setTip] = useState("all");
@@ -103,6 +116,12 @@ export function DocumentsView() {
   const [detail, setDetail] = useState<DocumentItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [podOpen, setPodOpen] = useState(false);
+  const [ayarOpen, setAyarOpen] = useState(false);
+  const [ayarDraft, setAyarDraft] = useState<BelgeAyarlari>({
+    proforma_disclaimer: "",
+    irsaliye_baslik: "",
+    irsaliye_alt_metin: "",
+  });
   const [shipOptions, setShipOptions] = useState<
     Array<{ id: number; durum: string; label: string }>
   >([]);
@@ -259,9 +278,9 @@ export function DocumentsView() {
             Belgeler
           </h1>
           <p className="text-xs text-muted-foreground max-w-[62ch] leading-relaxed">
-            Ayrı `/belgeler/` endpoint’i yok. Liste sevkiyat/POD, sipariş, ledger,
-            iade ve QC kayıtlarından yetkinize göre derlenir. Binary dosya
-            yükleme API’si yoktur; POD için `belgeler_ref` (URL/anahtar) kullanılır.
+            Normatif proforma fatura ve irsaliye PDF belgeleri (<code className="font-mono">/belgeler/</code>)
+            ile sevkiyat/POD, sipariş, ledger, iade ve kalite kayıtları kör havuz
+            kurallarına göre listelenir.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -275,6 +294,26 @@ export function DocumentsView() {
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Yenile
           </Button>
+          {isOps ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                if (belgeAyarlariQ.data) {
+                  setAyarDraft({
+                    proforma_disclaimer: belgeAyarlariQ.data.proforma_disclaimer,
+                    irsaliye_baslik: belgeAyarlariQ.data.irsaliye_baslik,
+                    irsaliye_alt_metin: belgeAyarlariQ.data.irsaliye_alt_metin,
+                  });
+                }
+                setAyarOpen(true);
+              }}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Belge Ayarları
+            </Button>
+          ) : null}
           {canPod ? (
             <Button size="sm" className="gap-1.5" onClick={() => void openPodModal()}>
               <Plus className="h-3.5 w-3.5" />
@@ -352,6 +391,7 @@ export function DocumentsView() {
           className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
         >
           <option value="all">Tüm kaynaklar</option>
+          <option value="belge">Belgeler (PDF)</option>
           <option value="shipment">Alıcı sevkiyat</option>
           <option value="ops_shipment">Ops sevkiyat</option>
           <option value="order">Sipariş</option>
@@ -751,6 +791,79 @@ export function DocumentsView() {
               </Button>
               <Button type="submit" size="sm" disabled={isPodSubmitting}>
                 {isPodSubmitting ? "Kaydediliyor…" : "POD kaydet"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ops Belge Ayarları Dialog (/ops/belge-ayarlari/) */}
+      <Dialog open={ayarOpen} onOpenChange={setAyarOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Belge Ayarları (Proforma &amp; İrsaliye)</DialogTitle>
+            <DialogDescription>
+              Proforma fatura uyarı notu ve irsaliye başlık/alt metin şablonlarını güncelleyin.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await updateAyarlarMut.mutateAsync(ayarDraft);
+                setAyarOpen(false);
+                setSuccessMsg("Belge ayarları güncellendi.");
+                actionToast.success("Belge ayarları kaydedildi");
+              } catch (err) {
+                actionToast.error("Belge ayarları kaydedilemedi", err);
+              }
+            }}
+            className="flex flex-col gap-3 pt-1"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label>Proforma Uyarı Metni</Label>
+              <Input
+                required
+                value={ayarDraft.proforma_disclaimer}
+                onChange={(e) =>
+                  setAyarDraft((d) => ({ ...d, proforma_disclaimer: e.target.value }))
+                }
+                disabled={updateAyarlarMut.isPending}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>İrsaliye Başlığı</Label>
+              <Input
+                required
+                value={ayarDraft.irsaliye_baslik}
+                onChange={(e) =>
+                  setAyarDraft((d) => ({ ...d, irsaliye_baslik: e.target.value }))
+                }
+                disabled={updateAyarlarMut.isPending}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>İrsaliye Alt Metni</Label>
+              <Input
+                required
+                value={ayarDraft.irsaliye_alt_metin}
+                onChange={(e) =>
+                  setAyarDraft((d) => ({ ...d, irsaliye_alt_metin: e.target.value }))
+                }
+                disabled={updateAyarlarMut.isPending}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAyarOpen(false)}
+              >
+                İptal
+              </Button>
+              <Button type="submit" size="sm" disabled={updateAyarlarMut.isPending}>
+                {updateAyarlarMut.isPending ? "Kaydediliyor…" : "Ayarları Kaydet"}
               </Button>
             </div>
           </form>

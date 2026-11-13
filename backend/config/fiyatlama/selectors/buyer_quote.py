@@ -60,20 +60,10 @@ def get_quote_for_actor(user, quote_id: int) -> PriceQuote:
 
 def _buyer_net_ozet(quote: PriceQuote, *, gram, gram_basi) -> dict:
     """
-    GAP-F3-03 — alıcı net özet.
+    Normatif (ADR-0036) — alıcı yalnız net fiyat ve katalog has ağırlığı görür.
 
-    İşçilik: yalnız ISCILIK satır tutarı (iç kırılım / override kaynağı yok).
-    Has: gram × katalog milyem (ürün ayarı; tedarikçi maliyeti değil).
-    Yasak: kanal_marj, maliyet, tedarikçi, metal kur gözlemi.
+    İşçilik, kanal marjı, maliyet, tedarikçi ve metal kur gözlemi kesinlikle gizlidir.
     """
-    from fiyatlama.models import PriceQuoteLine
-
-    iscilik_vergisiz = None
-    for line in quote.satirlar.all():
-        if line.kalem_tipi == PriceQuoteLine.KalemTipi.ISCILIK:
-            iscilik_vergisiz = line.tutar
-            break
-
     has_gram = None
     milyem = getattr(getattr(quote.varyant.urun, "ayar", None), "milyem", None)
     if gram is not None and milyem is not None:
@@ -85,16 +75,14 @@ def _buyer_net_ozet(quote: PriceQuote, *, gram, gram_basi) -> dict:
         "toplam_vergisiz": quote.toplam_vergisiz,
         "gram": gram,
         "gram_basi_vergisiz": gram_basi,
-        "iscilik_vergisiz": iscilik_vergisiz,
         "has_gram": has_gram,
     }
 
 
 def present_buyer_quote(quote: PriceQuote, *, now=None) -> dict:
     """
-    B-02 A: alıcı yüzeyi DTO. Satır listesi yok.
-    Tedarikçi / teklif / maliyet / kur gözlem / hesap_girdisi yok.
-    GAP-F3-03: net_ozet (işçilik + has) — marj/maliyet sızdırılmaz.
+    B-02 A / ADR-0036: alıcı yüzeyi DTO. Satır listesi yok.
+    Tedarikçi / teklif / maliyet / iç işçilik / kur gözlem / hesap_girdisi yok.
     """
     now = now or timezone.now()
     gecerli = quote.gecerlilik_sonu >= now
@@ -121,12 +109,11 @@ def present_buyer_quote(quote: PriceQuote, *, now=None) -> dict:
         "para_birimi": quote.para_birimi,
         "gram": gram,
         "gram_basi_vergisiz": gram_basi,
-        "iscilik_vergisiz": net_ozet["iscilik_vergisiz"],
         "has_gram": net_ozet["has_gram"],
         "net_ozet": net_ozet,
         "gecerlilik_sonu": quote.gecerlilik_sonu,
         "hesap_zamani": quote.hesap_zamani,
-        # Bilinçli yok: teklif, tedarikçi, satır listesi, maliyet, kur, hesap_girdisi
+        # Bilinçli yok: teklif, tedarikçi, satır listesi, maliyet, işçilik, kur, hesap_girdisi
         "satirlar": None,
     }
 
@@ -150,14 +137,16 @@ def get_buyer_quote_view(user, quote_id: int, *, now=None) -> dict:
 
 
 def assert_buyer_cannot_see_internal(payload: dict) -> None:
-    """Test yardımcısı — yasaklı anahtarlar (üst seviye)."""
+    """Test yardımcısı — yasaklı anahtarlar (üst seviye ve net_ozet)."""
     yasak = {
         "teklif",
         "teklif_id",
         "tedarikci",
         "tedarikci_id",
         "birim_fiyat",
-        "iscilik",  # ham iç alan; alıcı yüzeyi iscilik_vergisiz kullanır
+        "iscilik",
+        "iscilik_vergisiz",
+        "iscilik_override",
         "kanal_marj",
         "hesap_girdisi",
         "metal_kuru",
@@ -169,6 +158,8 @@ def assert_buyer_cannot_see_internal(payload: dict) -> None:
         "marj",
     }
     flat = set(payload.keys())
+    if isinstance(payload.get("net_ozet"), dict):
+        flat |= set(payload["net_ozet"].keys())
     leak = flat & yasak
     if leak:
         raise AssertionError(f"Alıcı payload sızıntı: {leak}")

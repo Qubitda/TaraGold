@@ -1,4 +1,4 @@
-import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
+import { apiDownloadPost, apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type { Paginated } from "@/lib/api/types";
 import type {
   BuyerCart,
@@ -104,6 +104,15 @@ export const siparisService = {
         body: {},
         idempotencyKey: newIdempotencyKey(),
       }
+    );
+  },
+  async downloadSupplierHazirlamaIrsaliye(
+    orderId: number | string
+  ): Promise<void> {
+    await apiDownloadPost(
+      `/supplier/hazirlama/${orderId}/irsaliye/`,
+      {},
+      `tedarikci-irsaliye-${orderId}.pdf`
     );
   },
 };

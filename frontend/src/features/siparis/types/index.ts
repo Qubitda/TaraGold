@@ -100,6 +100,7 @@ export interface SupplierHazirlamaSatir {
 export interface SupplierHazirlamaEmri {
   order_id: number;
   durum: string;
+  hazirlama_durumu?: string;
   satirlar: SupplierHazirlamaSatir[];
   alici: null | Record<string, unknown>;
 }

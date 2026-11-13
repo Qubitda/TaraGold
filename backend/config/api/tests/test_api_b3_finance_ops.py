@@ -57,6 +57,10 @@ class B3FixtureMixin(CheckoutFixtureMixin):
         order = order_servisi.olustur_from_checkout(
             actor=self.buyer, checkout_attempt=co.attempt
         )
+        from siparis.models import Order
+
+        Order.objects.filter(pk=order.pk).update(durum=Order.Durum.ONAYLANDI)
+        order.refresh_from_db()
         insp = inspection_servisi.olustur(actor=self.qc, order=order)
         insp = inspection_servisi.olcume_al(actor=self.qc, inspection=insp)
         line = order.lines.get()
@@ -70,7 +74,10 @@ class B3FixtureMixin(CheckoutFixtureMixin):
         ship = shipment_servisi.olustur(actor=self.log, order=order)
         ship = shipment_servisi.hazirla(actor=self.log, shipment=ship)
         ship = shipment_servisi.sevk_et(
-            actor=self.log, shipment=ship, takip_no="B3-TRK"
+            actor=self.log,
+            shipment=ship,
+            kargo_firma="Aras",
+            takip_no="B3-TRK",
         )
         ship = shipment_servisi.teslim_et(actor=self.log, shipment=ship)
         return order, ship
@@ -93,7 +100,8 @@ class ApiB3FinanceOpsTests(B3FixtureMixin, APITestCase):
         self.assertEqual(res.status_code, 200)
         body = res.json()
         self.assertIn("allowed_actions", body)
-        self.assertIn("create_payment_intent", body["allowed_actions"])
+        # ADR-0036: sanal POS yok; create_payment_intent alıcı aksiyonlarından kaldırıldı
+        self.assertNotIn("create_payment_intent", body["allowed_actions"])
         self.assertNotIn("karsi_firma", body)
         self.assertNotIn("tedarikci", str(body).lower())
 
@@ -146,7 +154,8 @@ class ApiB3FinanceOpsTests(B3FixtureMixin, APITestCase):
         deny = self.api.get(reverse("api-ops-finance-payments"))
         self.assertEqual(deny.status_code, 403)
 
-    def test_payment_intent_create(self):
+    def test_payment_intent_disabled_410(self):
+        """ADR-0036: Sanal POS kapalı; POST /payments/intents/ → 410 Gone."""
         self._quote_and_cart(miktar=Decimal("1"))
         co = checkout_servisi.checkout(
             actor=self.buyer, idempotency_key="b3-co-pi"
@@ -161,19 +170,8 @@ class ApiB3FinanceOpsTests(B3FixtureMixin, APITestCase):
             format="json",
             **self._idem("b3-pi-create"),
         )
-        self.assertEqual(res.status_code, 201, res.content)
-        body = res.json()
-        self.assertEqual(body["order_id"], order.pk)
-        self.assertEqual(body["durum"], PaymentIntent.Durum.BEKLEMEDE)
-        self.assertIsInstance(body["tutar"], str)
-        again = self.api.post(
-            reverse("api-payment-intent-create"),
-            {"order_id": order.pk},
-            format="json",
-            **self._idem("b3-pi-create"),
-        )
-        self.assertEqual(again.status_code, 201)
-        self.assertEqual(again.json()["id"], body["id"])
+        self.assertEqual(res.status_code, 410, res.content)
+        self.assertEqual(res.json().get("code"), "virtual_pos_disabled")
 
     def test_shipment_allowed_actions(self):
         order, ship = self._delivered("b3-ship-aa")
@@ -377,7 +375,8 @@ class ApiB3ConcurrencyTests(B3FixtureMixin, TransactionTestCase):
                 results.append(f.result())
         return results
 
-    def test_concurrent_payment_intent_one(self):
+    def test_concurrent_payment_intent_disabled_410(self):
+        """ADR-0036: Sanal POS kapalı; eşzamanlı intent istekleri 410 döner."""
         self._quote_and_cart(miktar=Decimal("1"))
         co = checkout_servisi.checkout(
             actor=self.buyer, idempotency_key="b3c-co-pi"
@@ -389,11 +388,9 @@ class ApiB3ConcurrencyTests(B3FixtureMixin, TransactionTestCase):
         results = self._parallel_post(
             self.buyer.pk, url, {"order_id": order.pk}, "b3c-pi-1", n=4
         )
-        self.assertTrue(all(r.status_code == 201 for r in results), [r.status_code for r in results])
-        ids = {r.json()["id"] for r in results}
-        self.assertEqual(len(ids), 1)
+        self.assertTrue(all(r.status_code == 410 for r in results), [r.status_code for r in results])
         self.assertEqual(
-            PaymentIntent.objects.filter(order=order).count(), 1
+            PaymentIntent.objects.filter(order=order).count(), 0
         )
 
     def test_concurrent_return_create_one(self):

@@ -240,10 +240,13 @@ function createMockState() {
   const orders: any[] = [
     {
       id: 201,
-      alici_firma_id: 1,
-      durum: "ONAYLANDI",
+      alici_firma_id: 2,
+      alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
+      durum: "HAZIRLANIYOR",
       idempotency_key: "seed-order-201",
       line_count: 1,
+      satir_sayisi: 1,
+      toplamlar: { TRY: "196900.00" },
       olusturma_tarihi: new Date(Date.now() - 86_400_000).toISOString(),
       allowed_actions: ["reorder"],
       lines: [
@@ -257,13 +260,38 @@ function createMockState() {
           para_birimi: "TRY",
         },
       ],
+      satirlar: [
+        {
+          id: 1,
+          varyant_id: 1001,
+          platform_kodu: "TG-BLZ-22-001-62",
+          miktar: "2.000",
+          birim: "ADET",
+          para_birimi: "TRY",
+          satir_tutari: "196900.00",
+          teslim_modeli: "PLATFORM_QC",
+        },
+      ],
+      hazirlama_emirleri: [
+        {
+          id: 1,
+          tedarikci_firma_id: 2,
+          tedarikci_ad: "Anadolu Kuyumculuk Ltd.",
+          durum: "HAZIRLANIYOR",
+          teslim_modeli: "PLATFORM_QC",
+          hazir_zamani: null,
+        },
+      ],
     },
     {
       id: 202,
-      alici_firma_id: 1,
-      durum: "BEKLEMEDE",
+      alici_firma_id: 2,
+      alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
+      durum: "ONAY_BEKLIYOR",
       idempotency_key: "seed-order-202",
       line_count: 1,
+      satir_sayisi: 1,
+      toplamlar: { TRY: "49250.00" },
       olusturma_tarihi: new Date(Date.now() - 3_600_000).toISOString(),
       allowed_actions: ["cancel", "reorder"],
       lines: [
@@ -277,6 +305,19 @@ function createMockState() {
           para_birimi: "TRY",
         },
       ],
+      satirlar: [
+        {
+          id: 2,
+          varyant_id: 1003,
+          platform_kodu: "TG-YZK-14-014-14",
+          miktar: "5.000",
+          birim: "ADET",
+          para_birimi: "TRY",
+          satir_tutari: "49250.00",
+          teslim_modeli: "PLATFORM_QC",
+        },
+      ],
+      hazirlama_emirleri: [],
     },
   ];
 
@@ -334,6 +375,7 @@ function createMockState() {
     {
       order_id: 201,
       durum: "HAZIRLANIYOR",
+      hazirlama_durumu: "HAZIRLANIYOR",
       alici: null,
       satirlar: [
         {
@@ -342,7 +384,7 @@ function createMockState() {
           platform_kodu: "TG-BLZ-22-001-62",
           miktar: "2.000",
           birim: "ADET",
-          teslim_modeli: "T2T",
+          teslim_modeli: "PLATFORM_QC",
         },
       ],
     },
@@ -403,6 +445,8 @@ function createMockState() {
       id: 601,
       order_id: 201,
       durum: "YOLDA",
+      teslim_modeli: "PLATFORM_QC",
+      sevk_yonu: "PLATFORM_TO_ALICI",
       kargo_firma: "Loomis",
       takip_no: "LOOMIS-TR-99812",
       notlar: "Zırhlı araç teslimatı",
@@ -643,8 +687,109 @@ function createMockState() {
   ];
 
   const salesChannels = [
-    { id: 1, kod: "B2B_PORTAL", ad: "B2B Ana Portal", quote_ttl_saniye: 180, aktif: true },
-    { id: 2, kod: "API_FEED", ad: "Kurumsal API Kanalı", quote_ttl_saniye: 60, aktif: true },
+    { id: 1, kod: "KUYUMCU_PORTAL", ad: "Kuyumcu Portal", quote_ttl_saniye: 180, aktif: true },
+    { id: 2, kod: "B2B_API", ad: "B2B Kurumsal API Kanalı", quote_ttl_saniye: 60, aktif: true },
+    { id: 3, kod: "B2C", ad: "B2C Dağıtım Kanalı", quote_ttl_saniye: 90, aktif: true },
+  ];
+
+  const fiyatGruplari = [
+    { id: 1, kod: "VIP_KUYUMCU", ad: "VIP Kuyumcu" },
+    { id: 2, kod: "B2B_API_STD", ad: "B2B API Standart" },
+  ];
+
+  const aliciKanalErisimleri: any[] = [
+    {
+      id: 1,
+      firma_id: 2,
+      firma_ad: "Anadolu Kuyumculuk Ltd.",
+      satis_kanali_id: 1,
+      satis_kanali_kod: "KUYUMCU_PORTAL",
+      satis_kanali_ad: "Kuyumcu Portal",
+      fiyat_grubu_id: 1,
+      fiyat_grubu_ad: "VIP Kuyumcu",
+      fiyat_grubu_kod: "VIP_KUYUMCU",
+      aktif: true,
+    },
+  ];
+
+  const hakEdisler: any[] = [
+    {
+      id: 901,
+      order_id: 201,
+      quality_inspection_id: 701,
+      tedarikci_firma_id: 2,
+      tedarikci_firma_ad: "Anadolu Kuyumculuk Ltd.",
+      durum: "ODENEBILIR",
+      gram: "60.000",
+      tutar: "182000.00",
+      para_birimi: "TRY",
+      vade_tarihi: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      hak_edis_tarihi: nowIso(),
+      odeme_tarihi: null,
+      odeme_ledger_entry_id: null,
+      aciklama: "Sipariş #201 hazırlık hak edişi",
+      olusturma_tarihi: new Date(Date.now() - 36_000_000).toISOString(),
+    },
+  ];
+
+  const belgeAyarlari = {
+    proforma_disclaimer: "Resmi fatura yerine geçmez.",
+    irsaliye_baslik: "İrsaliye",
+    irsaliye_alt_metin: "Sevk irsaliyesidir; resmi fatura sistem dışında düzenlenir.",
+    guncelleme_tarihi: nowIso(),
+  };
+
+  const belgeler: any[] = [
+    {
+      id: 1,
+      firma_id: 2,
+      tip: "PROFORMA",
+      baslik: "Proforma #201 Rev.1",
+      content_type: "application/pdf",
+      byte_size: 4096,
+      order_id: 201,
+      revizyon: 1,
+      belge_turu: "PROFORMA",
+      olusturma_tarihi: new Date(Date.now() - 40_000_000).toISOString(),
+    },
+    {
+      id: 2,
+      firma_id: 2,
+      tip: "IRSALIYE",
+      baslik: "İrsaliye #201 Rev.1",
+      content_type: "application/pdf",
+      byte_size: 3840,
+      order_id: 201,
+      revizyon: 1,
+      belge_turu: "IRSALIYE",
+      olusturma_tarihi: new Date(Date.now() - 20_000_000).toISOString(),
+    },
+  ];
+
+  let activeUyelikFirmaId = 1;
+  const userUyelikler = [
+    {
+      id: 1,
+      kullanici_id: 1,
+      firma_id: 1,
+      firma_ad: "TaraGold Platform A.Ş.",
+      firma_kodu: "TG-PLAT",
+      username: "demo",
+      rol: "PLATFORM_YONETICI",
+      aktif: true,
+      birincil: true,
+    },
+    {
+      id: 2,
+      kullanici_id: 1,
+      firma_id: 2,
+      firma_ad: "Anadolu Kuyumculuk Ltd.",
+      firma_kodu: "ANADOLU-01",
+      username: "demo",
+      rol: "ALICI_YETKILI",
+      aktif: true,
+      birincil: false,
+    },
   ];
 
   const apiKeys = new Map<number, any[]>([
@@ -682,7 +827,6 @@ function createMockState() {
     gram: "30.000",
     gram_basi_vergisiz: "3281.67",
     toplam_vergisiz: "98450.00",
-    iscilik_vergisiz: "3600.00",
     has_gram: "27.480",
     para_birimi: paraBirimi,
     expires_at: new Date(Date.now() + 180_000).toISOString(),
@@ -691,21 +835,42 @@ function createMockState() {
       toplam_vergisiz: "98450.00",
       gram: "30.000",
       gram_basi_vergisiz: "3281.67",
-      iscilik_vergisiz: "3600.00",
       has_gram: "27.480",
     },
   });
   quotes.set(501, defaultQuote(501));
 
   function buildMe(username: string) {
+    const uy =
+      userUyelikler.find((u) => u.firma_id === activeUyelikFirmaId) ||
+      userUyelikler[0];
+    const activeFirma =
+      opsFirmalar.find((f) => f.id === uy.firma_id) || firma;
+    const isPlat = uy.firma_id === 1;
     return {
       id: 1,
       username: actAsState.active && actAsState.target_username ? actAsState.target_username : username,
-      rol: "PLATFORM_YONETICI",
+      rol: uy.rol,
       email_verified: true,
-      firma_id: 1,
-      firma,
-      capabilities,
+      firma_id: activeFirma.id,
+      firma: {
+        id: activeFirma.id,
+        ad: activeFirma.ad,
+        aktif: activeFirma.aktif,
+        alici_mi: activeFirma.alici_mi,
+        platform_mu: isPlat,
+        tedarikci_mi: activeFirma.tedarikci_mi,
+      },
+      capabilities: isPlat
+        ? capabilities
+        : {
+            ...capabilities,
+            can_act_as: false,
+            can_approve: false,
+            can_view_ops: false,
+            can_view_ops_finance: false,
+            can_manage_qc: false,
+          },
       act_as: actAsState.active ? actAsState : { active: false },
     };
   }
@@ -762,6 +927,7 @@ function createMockState() {
       const sid = crypto.randomBytes(16).toString("hex");
       sessions.set(sid, username);
       profile.username = username;
+      activeUyelikFirmaId = 1;
       actAsState = { active: false };
       sendJson(res, 200, buildMe(username), [
         `tg_session=${sid}; Path=/; HttpOnly; SameSite=Lax`,
@@ -897,6 +1063,14 @@ function createMockState() {
         sendJson(res, 200, { count: items.length, results: items });
         return true;
       }
+      if (path === "/feed/schema.xsd") {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/xml; charset=utf-8");
+        res.end(
+          `<?xml version="1.0" encoding="utf-8"?>\n<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">\n  <xs:element name="urunler">\n    <xs:complexType><xs:sequence><xs:element name="urun" maxOccurs="unbounded" /></xs:sequence></xs:complexType>\n  </xs:element>\n</xs:schema>`
+        );
+        return true;
+      }
     }
 
     if (path === "/auth/mfa/verify/" && method === "POST") {
@@ -965,6 +1139,31 @@ function createMockState() {
     // /me & profile
     if (path === "/me/" && method === "GET") {
       sendJson(res, 200, buildMe(username));
+      return true;
+    }
+    if (path === "/me/uyelikler/" && method === "GET") {
+      sendJson(res, 200, {
+        results: userUyelikler.map((u) => ({ ...u, username })),
+      });
+      return true;
+    }
+    if (path === "/me/switch-firma/" && method === "POST") {
+      const body = await readJsonBody(req);
+      const fid = Number(body.firma_id);
+      const target = userUyelikler.find((u) => u.firma_id === fid && u.aktif);
+      if (!target) {
+        sendJson(res, 400, {
+          status: 400,
+          title: "Üyelik bulunamadı",
+          detail: "Bu firmada aktif üyeliğiniz bulunmamaktadır.",
+        });
+        return true;
+      }
+      activeUyelikFirmaId = fid;
+      sendJson(res, 200, {
+        uyelik: { ...target, username },
+        me: buildMe(username),
+      });
       return true;
     }
     if (path === "/me/dashboard/" && method === "GET") {
@@ -1037,29 +1236,93 @@ function createMockState() {
       return true;
     }
 
-    // Piyasa Pano
+    // Piyasa Pano (GAP-F3-01)
     if (path === "/piyasa/pano/" && method === "GET") {
-      const olcek = (url.searchParams.get("olcek") || "GRAM").toUpperCase();
-      const factor = olcek === "KG" ? 1000 : olcek === "ONS" ? 31.1035 : 1;
-      const rows = [
-        { kod: "HAS_TRY", ad: "Has Altın (TRY)", base: 3185.4, para_birimi: "TRY", kaynak: "TARAGOLD_PANO" },
-        { kod: "HAS_USD", ad: "Has Altın (USD)", base: 89.2, para_birimi: "USD", kaynak: "TARAGOLD_PANO" },
-        { kod: "USD_TRY", ad: "Dolar / TL", base: 35.71, para_birimi: "TRY", kaynak: "TCMB", noScale: true },
-        { kod: "EUR_TRY", ad: "Euro / TL", base: 38.45, para_birimi: "TRY", kaynak: "TCMB", noScale: true },
-      ];
-      sendJson(res, 200, {
-        server_now: nowIso(),
-        olcek,
-        satirlar: rows.map((r) => ({
-          kod: r.kod,
-          ad: r.ad,
-          fiyat: (r.noScale ? r.base : r.base * factor).toFixed(2),
-          para_birimi: r.para_birimi,
-          olcek: r.noScale ? "GRAM" : olcek,
-          kaynak: r.kaynak,
-          guncelleme: nowIso(),
+      const rawOlcek = (url.searchParams.get("olcek") || "").trim().toUpperCase();
+      const allowedOlcek = new Set(["ONS", "KG", "GRAM"]);
+      if (rawOlcek && !allowedOlcek.has(rawOlcek)) {
+        sendJson(res, 400, {
+          type: "about:blank",
+          title: "Doğrulama Hatası",
+          status: 400,
+          detail: `Geçersiz olcek: '${rawOlcek}' (ONS|KG|GRAM).`,
+          errors: { olcek: [`Geçersiz olcek: '${rawOlcek}' (ONS|KG|GRAM).`] },
+        });
+        return true;
+      }
+
+      const now = nowIso();
+      const allRows = [
+        {
+          kod: "HAS_TRY",
+          ad: "Has Altın (Gram TRY)",
+          fiyat: "3185.40",
+          para_birimi: "TRY",
+          olcek: "GRAM",
+          kaynak: "CANLI",
+          guncelleme: now,
           banner: null,
-        })),
+        },
+        {
+          kod: "HAS_USD",
+          ad: "Has Altın (Gram USD)",
+          fiyat: "89.20",
+          para_birimi: "USD",
+          olcek: "GRAM",
+          kaynak: "CANLI",
+          guncelleme: now,
+          banner: null,
+        },
+        {
+          kod: "HAS_KG_TRY",
+          ad: "Has Altın (KG TRY)",
+          fiyat: "3185400.00",
+          para_birimi: "TRY",
+          olcek: "KG",
+          kaynak: "CANLI",
+          guncelleme: now,
+          banner: null,
+        },
+        {
+          kod: "HAS_KG_USD",
+          ad: "Has Altın (KG USD)",
+          fiyat: "89200.00",
+          para_birimi: "USD",
+          olcek: "KG",
+          kaynak: "CANLI",
+          guncelleme: now,
+          banner: null,
+        },
+        {
+          kod: "HAS_ONS_USD",
+          ad: "Has Altın (ONS USD)",
+          fiyat: "2774.43",
+          para_birimi: "USD",
+          olcek: "ONS",
+          kaynak: "CANLI",
+          guncelleme: now,
+          banner: null,
+        },
+        {
+          kod: "HAS_ONS_TRY",
+          ad: "Has Altın (ONS TRY)",
+          fiyat: "99077.09",
+          para_birimi: "TRY",
+          olcek: "ONS",
+          kaynak: "LKG",
+          guncelleme: now,
+          banner: "Son bilinen geçerli kur (LKG) aktif.",
+        },
+      ];
+
+      const satirlar = rawOlcek
+        ? allRows.filter((r) => r.olcek === rawOlcek)
+        : allRows;
+
+      sendJson(res, 200, {
+        server_now: now,
+        olcek: rawOlcek || null,
+        satirlar,
       });
       return true;
     }
@@ -1463,12 +1726,25 @@ function createMockState() {
     if (path === "/checkouts/" && method === "POST") {
       const cid = genId();
       const oid = genId();
+      const satirlar = cart.lines.map((l: any, idx: number) => ({
+        id: idx + 1,
+        varyant_id: l.varyant_id,
+        platform_kodu: `TG-VAR-${l.varyant_id}`,
+        miktar: l.miktar,
+        birim: l.birim,
+        para_birimi: l.para_birimi,
+        satir_tutari: l.birim_fiyat_vergisiz,
+        teslim_modeli: "PLATFORM_QC",
+      }));
       const newOrder = {
         id: oid,
-        alici_firma_id: 1,
-        durum: "BEKLEMEDE",
+        alici_firma_id: activeUyelikFirmaId || 2,
+        alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
+        durum: "ONAY_BEKLIYOR",
         idempotency_key: `chk-${cid}`,
         line_count: cart.lines.length,
+        satir_sayisi: cart.lines.length,
+        toplamlar: { TRY: "98450.00" },
         olusturma_tarihi: nowIso(),
         allowed_actions: ["cancel", "reorder"],
         lines: cart.lines.map((l: any, idx: number) => ({
@@ -1480,6 +1756,8 @@ function createMockState() {
           snapshot_satir_tutari_vergisiz: l.birim_fiyat_vergisiz,
           para_birimi: l.para_birimi,
         })),
+        satirlar,
+        hazirlama_emirleri: [],
       };
       orders.unshift(newOrder);
       cart.lines = [];
@@ -1527,11 +1805,20 @@ function createMockState() {
       });
       return true;
     }
+    if (path === "/ops/orders/" && method === "GET") {
+      const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+      const aid = url.searchParams.get("alici_firma_id");
+      let list = orders;
+      if (d) list = list.filter((o) => o.durum === d);
+      if (aid) list = list.filter((o) => String(o.alici_firma_id) === String(aid));
+      sendJson(res, 200, paginate(list, url));
+      return true;
+    }
     if (path === "/ops/orders/summary/" && method === "GET") {
       sendJson(res, 200, {
         counts: {
-          BEKLEMEDE: orders.filter((o) => o.durum === "BEKLEMEDE").length,
-          ONAYLANDI: orders.filter((o) => o.durum === "ONAYLANDI").length,
+          ONAY_BEKLIYOR: orders.filter((o) => o.durum === "ONAY_BEKLIYOR").length,
+          HAZIRLANIYOR: orders.filter((o) => o.durum === "HAZIRLANIYOR").length,
           TOPLAM: orders.length,
         },
         server_now: nowIso(),
@@ -1539,7 +1826,10 @@ function createMockState() {
       return true;
     }
     if (path === "/ops/orders/onay-havuzu/" && method === "GET") {
-      sendJson(res, 200, { count: orders.length, results: orders });
+      const pool = orders.filter(
+        (o) => o.durum === "ONAY_BEKLIYOR" || o.durum === "OLUSTURULDU" || o.durum === "BEKLEMEDE"
+      );
+      sendJson(res, 200, { count: pool.length, results: pool });
       return true;
     }
     const opsOrdMatch = /^\/ops\/orders\/(\d+)\/(onayla|reddet|tahsilat|proforma|irsaliye)\/$/.exec(path);
@@ -1551,7 +1841,33 @@ function createMockState() {
         return true;
       }
       if (act === "onayla") {
-        ord.durum = "ONAYLANDI";
+        ord.durum = "HAZIRLANIYOR";
+        ord.hazirlama_emirleri = [
+          {
+            id: genId(),
+            tedarikci_firma_id: 2,
+            tedarikci_ad: "Anadolu Kuyumculuk Ltd.",
+            durum: "HAZIRLANIYOR",
+            teslim_modeli: "PLATFORM_QC",
+            hazir_zamani: null,
+          },
+        ];
+        if (!hazirlamaOrders.some((h) => h.order_id === ord.id)) {
+          hazirlamaOrders.unshift({
+            order_id: ord.id,
+            durum: "HAZIRLANIYOR",
+            hazirlama_durumu: "HAZIRLANIYOR",
+            alici: null,
+            satirlar: (ord.satirlar || []).map((s: any) => ({
+              order_line_id: s.id,
+              varyant_id: s.varyant_id,
+              platform_kodu: s.platform_kodu || `TG-VAR-${s.varyant_id}`,
+              miktar: s.miktar,
+              birim: s.birim,
+              teslim_modeli: s.teslim_modeli || "PLATFORM_QC",
+            })),
+          });
+        }
         sendJson(res, 200, ord);
         return true;
       }
@@ -1563,25 +1879,46 @@ function createMockState() {
       if (act === "tahsilat") {
         const body = await readJsonBody(req);
         const lid = genId();
+        const pb = String(body.para_birimi || "TRY");
         ledgerEntries.unshift({
           id: lid,
           hareket_tipi: "TAHSILAT",
           yon: "ALACAK",
           tutar: String(body.tutar || "0.00"),
-          para_birimi: "TRY",
+          para_birimi: pb,
           referans_tip: "ORDER",
           referans_id: ord.id,
           olusturma_tarihi: nowIso(),
           allowed_actions: [],
         });
-        sendJson(res, 200, { ledger_entry_id: lid, tutar: String(body.tutar || "0.00") });
+        sendJson(res, 200, {
+          ledger_entry_id: lid,
+          tutar: String(body.tutar || "0.00"),
+          para_birimi: pb,
+        });
         return true;
       }
       if (act === "proforma" || act === "irsaliye") {
+        const tip = act === "proforma" ? "PROFORMA" : "IRSALIYE";
+        const rev = belgeler.filter((b) => b.order_id === ord.id && b.tip === tip).length + 1;
+        const docId = genId();
+        belgeler.unshift({
+          id: docId,
+          firma_id: ord.alici_firma_id || 2,
+          tip,
+          baslik: `${act === "proforma" ? "Proforma" : belgeAyarlari.irsaliye_baslik} #${ord.id} Rev.${rev}`,
+          content_type: "application/pdf",
+          byte_size: 4096,
+          order_id: ord.id,
+          revizyon: rev,
+          belge_turu: tip,
+          olusturma_tarihi: nowIso(),
+        });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${act}-${ord.id}.pdf"`);
-        res.end("%PDF-1.4\n%TaraGold Demo Document\n%%EOF\n");
+        res.setHeader("X-Document-Id", String(docId));
+        res.setHeader("Content-Disposition", `attachment; filename="${act}-${ord.id}-r${rev}.pdf"`);
+        res.end(`%PDF-1.4\n%TaraBank ${tip} Order #${ord.id} Rev.${rev}\n%%EOF\n`);
         return true;
       }
     }
@@ -1590,16 +1927,94 @@ function createMockState() {
       sendJson(res, 200, hazirlamaOrders);
       return true;
     }
-    const hazirMatch = /^\/supplier\/hazirlama\/(\d+)\/hazir\/$/.exec(path);
+    const hazirMatch = /^\/supplier\/hazirlama\/(\d+)\/(hazir|irsaliye)\/$/.exec(path);
     if (hazirMatch && method === "POST") {
-      const target = hazirlamaOrders.find((h) => h.order_id === Number(hazirMatch[1]));
+      const oid = Number(hazirMatch[1]);
+      const target = hazirlamaOrders.find((h) => h.order_id === oid);
       if (!target) {
         sendJson(res, 404, { status: 404, title: "Hazırlama emri bulunamadı" });
         return true;
       }
-      target.durum = "HAZIR";
-      sendJson(res, 200, target);
+      if (hazirMatch[2] === "hazir") {
+        target.durum = "HAZIR";
+        target.hazirlama_durumu = "HAZIR";
+        const ord = orders.find((o) => o.id === oid);
+        if (ord) {
+          ord.durum = "HAZIR";
+          for (const e of ord.hazirlama_emirleri || []) {
+            e.durum = "HAZIR";
+            e.hazir_zamani = nowIso();
+          }
+        }
+        sendJson(res, 200, target);
+        return true;
+      }
+      const docId = genId();
+      const rev = belgeler.filter((b) => b.order_id === oid && b.tip === "TEDARIKCI_IRSALIYE").length + 1;
+      belgeler.unshift({
+        id: docId,
+        firma_id: 2,
+        tip: "TEDARIKCI_IRSALIYE",
+        baslik: `Tedarikçi İrsaliyesi #${oid} Rev.${rev}`,
+        content_type: "application/pdf",
+        byte_size: 3500,
+        order_id: oid,
+        revizyon: rev,
+        belge_turu: "TEDARIKCI_IRSALIYE",
+        olusturma_tarihi: nowIso(),
+      });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("X-Document-Id", String(docId));
+      res.setHeader("Content-Disposition", `attachment; filename="tedarikci-irsaliye-${oid}-r${rev}.pdf"`);
+      res.end(`%PDF-1.4\n%TaraBank Tedarikci Irsaliye Order #${oid}\n%%EOF\n`);
       return true;
+    }
+
+    // Belgeler & BelgeAyarlari
+    if (path === "/belgeler/" && method === "GET") {
+      const tipFilter = (url.searchParams.get("tip") || "").trim().toUpperCase();
+      const orderFilter = url.searchParams.get("order_id");
+      let list = belgeler;
+      if (tipFilter) list = list.filter((b) => b.tip === tipFilter);
+      if (orderFilter) list = list.filter((b) => String(b.order_id) === String(orderFilter));
+      sendJson(res, 200, paginate(list, url));
+      return true;
+    }
+    const belgeDownloadMatch = /^\/belgeler\/(\d+)\/download\/$/.exec(path);
+    if (belgeDownloadMatch && method === "GET") {
+      const doc = belgeler.find((b) => b.id === Number(belgeDownloadMatch[1]));
+      if (!doc) {
+        sendJson(res, 404, { status: 404, title: "Belge bulunamadı" });
+        return true;
+      }
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("X-Document-Id", String(doc.id));
+      res.setHeader("Content-Disposition", `attachment; filename="belge-${doc.id}.pdf"`);
+      res.end(`%PDF-1.4\n%TaraBank ${doc.baslik}\n%%EOF\n`);
+      return true;
+    }
+    if (path === "/ops/belge-ayarlari/") {
+      if (method === "GET") {
+        sendJson(res, 200, belgeAyarlari);
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        if (typeof body.proforma_disclaimer === "string" && body.proforma_disclaimer.trim()) {
+          belgeAyarlari.proforma_disclaimer = body.proforma_disclaimer.trim();
+        }
+        if (typeof body.irsaliye_baslik === "string" && body.irsaliye_baslik.trim()) {
+          belgeAyarlari.irsaliye_baslik = body.irsaliye_baslik.trim();
+        }
+        if (typeof body.irsaliye_alt_metin === "string" && body.irsaliye_alt_metin.trim()) {
+          belgeAyarlari.irsaliye_alt_metin = body.irsaliye_alt_metin.trim();
+        }
+        belgeAyarlari.guncelleme_tarihi = nowIso();
+        sendJson(res, 200, belgeAyarlari);
+        return true;
+      }
     }
 
     // Stock
@@ -1762,19 +2177,57 @@ function createMockState() {
       sendJson(res, 200, paginate(paymentIntents, url));
       return true;
     }
-    if (path === "/payments/intents/" && method === "POST") {
+    if (path === "/ops/finance/hak-edis/" && method === "GET") {
+      const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+      const list = d ? hakEdisler.filter((h) => h.durum === d) : hakEdisler;
+      sendJson(res, 200, { ...paginate(list, url), ops: true });
+      return true;
+    }
+    if (path === "/ops/finance/tedarikci-odeme/" && method === "POST") {
       const body = await readJsonBody(req);
-      const pi = {
-        id: genId(),
-        order_id: Number(body.order_id || 201),
-        alici_firma_id: 1,
-        durum: "BEKLEMEDE",
-        tutar: "49250.00",
-        para_birimi: "TRY",
+      const tedId = Number(body.tedarikci_firma_id);
+      if (!tedId || !body.tutar) {
+        sendJson(res, 400, { status: 400, title: "Doğrulama Hatası", detail: "tedarikci_firma_id ve tutar zorunludur." });
+        return true;
+      }
+      const lid = genId();
+      const pb = String(body.para_birimi || "TRY");
+      ledgerEntries.unshift({
+        id: lid,
+        hareket_tipi: "TEDARIKCI_ODEME",
+        yon: "BORC",
+        tutar: String(body.tutar),
+        para_birimi: pb,
+        referans_tip: body.order_id ? "ORDER" : "TEDARIKCI_ODEME",
+        referans_id: body.order_id ? Number(body.order_id) : lid,
         olusturma_tarihi: nowIso(),
-      };
-      paymentIntents.unshift(pi);
-      sendJson(res, 201, pi);
+        allowed_actions: [],
+      });
+      let updatedHe = null;
+      if (body.hak_edis_id) {
+        const he = hakEdisler.find((h) => h.id === Number(body.hak_edis_id));
+        if (he) {
+          he.durum = "ODENDI";
+          he.odeme_tarihi = nowIso();
+          he.odeme_ledger_entry_id = lid;
+          updatedHe = he;
+        }
+      }
+      sendJson(res, 201, {
+        ledger_entry_id: lid,
+        tutar: String(body.tutar),
+        para_birimi: pb,
+        tedarikci_firma_id: tedId,
+        hak_edis: updatedHe,
+      });
+      return true;
+    }
+    if (path === "/payments/intents/" || path === "/payments/webhook/") {
+      sendJson(res, 410, {
+        status: 410,
+        title: "Sanal POS Devre Dışı",
+        detail: "Sanal POS ve tüketici ödeme akışı normatif iş modeli gereği kapatılmıştır. Tahsilatlar /ops/orders/{id}/tahsilat/ üzerinden elle kaydedilir.",
+      });
       return true;
     }
 
@@ -1789,6 +2242,8 @@ function createMockState() {
         id: genId(),
         order_id: Number(body.order_id || 201),
         durum: "TASLAK",
+        teslim_modeli: String(body.teslim_modeli || "PLATFORM_QC"),
+        sevk_yonu: String(body.sevk_yonu || "PLATFORM_TO_ALICI"),
         kargo_firma: "",
         takip_no: String(body.takip_no || ""),
         notlar: String(body.notlar || ""),
@@ -2234,6 +2689,69 @@ function createMockState() {
       if (typeof body.rol === "string") u.rol = body.rol;
       if (typeof body.aktif === "boolean") u.aktif = body.aktif;
       sendJson(res, 200, u);
+      return true;
+    }
+
+    // Alıcı / API Kanal Erişimleri & Fiyat Grupları
+    if (path === "/ops/alici-kanal-erisimleri/") {
+      if (method === "GET") {
+        const fid = url.searchParams.get("firma_id");
+        const list = fid
+          ? aliciKanalErisimleri.filter((x) => String(x.firma_id) === String(fid))
+          : aliciKanalErisimleri;
+        sendJson(res, 200, paginate(list, url));
+        return true;
+      }
+      if (method === "POST") {
+        const body = await readJsonBody(req);
+        const f = opsFirmalar.find((x) => x.id === Number(body.firma_id));
+        const ch = salesChannels.find((x) => x.id === Number(body.satis_kanali_id));
+        const fg = fiyatGruplari.find((x) => x.id === Number(body.fiyat_grubu_id));
+        if (!f || !ch || !fg) {
+          sendJson(res, 400, { status: 400, title: "Geçersiz seçim" });
+          return true;
+        }
+        const existing = aliciKanalErisimleri.find(
+          (x) => x.firma_id === f.id && x.satis_kanali_id === ch.id
+        );
+        if (existing) {
+          existing.fiyat_grubu_id = fg.id;
+          existing.fiyat_grubu_ad = fg.ad;
+          existing.fiyat_grubu_kod = fg.kod;
+          existing.aktif = body.aktif !== false;
+          sendJson(res, 201, existing);
+          return true;
+        }
+        const item = {
+          id: genId(),
+          firma_id: f.id,
+          firma_ad: f.ad,
+          satis_kanali_id: ch.id,
+          satis_kanali_kod: ch.kod,
+          satis_kanali_ad: ch.ad,
+          fiyat_grubu_id: fg.id,
+          fiyat_grubu_ad: fg.ad,
+          fiyat_grubu_kod: fg.kod,
+          aktif: body.aktif !== false,
+        };
+        aliciKanalErisimleri.unshift(item);
+        sendJson(res, 201, item);
+        return true;
+      }
+    }
+    const aliciToggleMatch = /^\/ops\/alici-kanal-erisimleri\/(\d+)\/toggle\/$/.exec(path);
+    if (aliciToggleMatch && method === "POST") {
+      const target = aliciKanalErisimleri.find((x) => x.id === Number(aliciToggleMatch[1]));
+      if (!target) {
+        sendJson(res, 404, { status: 404, title: "Kanal erişimi bulunamadı" });
+        return true;
+      }
+      target.aktif = !target.aktif;
+      sendJson(res, 200, target);
+      return true;
+    }
+    if (path === "/ops/fiyat-gruplari/" && method === "GET") {
+      sendJson(res, 200, { count: fiyatGruplari.length, results: fiyatGruplari });
       return true;
     }
 

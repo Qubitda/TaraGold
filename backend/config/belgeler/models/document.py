@@ -10,6 +10,9 @@ from django.db import models
 class Document(models.Model):
     class Tip(models.TextChoices):
         TAS_SERTIFIKA = "TAS_SERTIFIKA", "Taş sertifikası"
+        PROFORMA = "PROFORMA", "Proforma fatura"
+        IRSALIYE = "IRSALIYE", "İrsaliye"
+        TEDARIKCI_IRSALIYE = "TEDARIKCI_IRSALIYE", "Tedarikçi irsaliyesi"
         DIGER = "DIGER", "Diğer"
 
     firma = models.ForeignKey(
@@ -49,7 +52,15 @@ class Document(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(tip__in=["TAS_SERTIFIKA", "DIGER"]),
+                condition=models.Q(
+                    tip__in=[
+                        "TAS_SERTIFIKA",
+                        "PROFORMA",
+                        "IRSALIYE",
+                        "TEDARIKCI_IRSALIYE",
+                        "DIGER",
+                    ]
+                ),
                 name="document_tip_gecerli",
             ),
             models.CheckConstraint(

@@ -10,17 +10,26 @@ export type ShipmentPodInfo = {
 export type OpsShipment = components["schemas"]["OpsShipment"] & {
   kargo_firma?: string;
   takip_no?: string;
+  teslim_modeli?: string;
+  sevk_yonu?: string;
   notlar?: string;
   pod?: ShipmentPodInfo | null;
   olusturma_tarihi?: string | null;
   guncelleme_tarihi?: string | null;
 };
-export type OpsShipmentPage = components["schemas"]["OpsShipmentPage"];
+export type OpsShipmentPage = Omit<
+  components["schemas"]["OpsShipmentPage"],
+  "results"
+> & {
+  results: OpsShipment[];
+};
 export type BuyerReturn = components["schemas"]["BuyerReturn"];
 export type BuyerReturnPage = components["schemas"]["BuyerReturnPage"];
 export type BuyerShipment = components["schemas"]["BuyerShipment"] & {
   kargo_firma?: string;
   takip_no?: string;
+  teslim_modeli?: string;
+  sevk_yonu?: string;
   notlar?: string;
   pod?: ShipmentPodInfo | null;
   olusturma_tarihi?: string | null;
@@ -32,7 +41,10 @@ export type DispatchShipmentRequest = {
 };
 export type PodRequest = components["schemas"]["OpsPodRequest"];
 export type ShipmentCreateRequest =
-  components["schemas"]["OpsShipmentCreateRequest"];
+  components["schemas"]["OpsShipmentCreateRequest"] & {
+    teslim_modeli?: string;
+    sevk_yonu?: string;
+  };
 
 export type CreateReturnRequest = {
   order_id: number;

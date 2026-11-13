@@ -62,6 +62,8 @@ def present_shipment(ship: Shipment) -> dict:
         "id": ship.pk,
         "order_id": ship.order_id,
         "durum": ship.durum,
+        "teslim_modeli": getattr(ship, "teslim_modeli", "PLATFORM_QC"),
+        "sevk_yonu": getattr(ship, "sevk_yonu", "PLATFORM_TO_ALICI"),
         "kargo_firma": getattr(ship, "kargo_firma", "") or "",
         "takip_no": ship.takip_no,
         "olusturma_tarihi": ship.olusturma_tarihi.isoformat()

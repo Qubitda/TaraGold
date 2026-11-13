@@ -20,6 +20,8 @@ export const createShipmentSchema = z.object({
   order_id: z.number().int().positive("Geçerli bir Sipariş ID girin."),
   takip_no: z.string().trim().optional(),
   notlar: z.string().trim().optional(),
+  teslim_modeli: z.enum(["PLATFORM_QC", "DOGRUDAN", "TEDARIKCI_TO_PLATFORM"]).optional(),
+  sevk_yonu: z.enum(["PLATFORM_TO_ALICI", "TEDARIKCI_TO_ALICI", "TEDARIKCI_TO_PLATFORM"]).optional(),
 });
 
 export type CreateShipmentInput = z.infer<typeof createShipmentSchema>;

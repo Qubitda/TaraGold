@@ -101,6 +101,8 @@ class OpsShipmentListCreateView(IdempotencyMixin, APIView):
                 order=order,
                 notlar=request.data.get("notlar") or "",
                 takip_no=request.data.get("takip_no") or "",
+                teslim_modeli=request.data.get("teslim_modeli") or Shipment.TeslimModeli.PLATFORM_QC,
+                sevk_yonu=request.data.get("sevk_yonu") or None,
             )
         except (DjangoPermissionDenied, DjangoValidationError) as exc:
             raise_drf(exc)

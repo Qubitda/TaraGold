@@ -93,7 +93,8 @@ class OutboxOrderIntegrationTests(CheckoutFixtureMixin, TestCase):
         order = order_servisi.olustur_from_checkout(
             actor=self.buyer, checkout_attempt=co.attempt
         )
-        self.assertEqual(order.durum, Order.Durum.OLUSTURULDU)
+        # ADR-0034/0036: yeni sipariş ONAY_BEKLIYOR başlar
+        self.assertEqual(order.durum, Order.Durum.ONAY_BEKLIYOR)
         msg = OutboxMessage.objects.get(event_type="order.created")
         self.assertEqual(msg.durum, OutboxMessage.Durum.PENDING)
         self.assertEqual(msg.payload.get("order_id"), order.pk)

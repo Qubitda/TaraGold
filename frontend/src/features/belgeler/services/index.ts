@@ -1,4 +1,5 @@
 import {
+  apiDownload,
   apiFetch,
   newIdempotencyKey,
   unwrapResults,
@@ -6,6 +7,8 @@ import {
 import type { Capabilities, Paginated } from "@/lib/api/types";
 import type { BuyerOrder } from "@/features/siparis/types";
 import type {
+  BackendDocumentRow,
+  BelgeAyarlari,
   DocumentItem,
   DocumentsSnapshot,
   DocumentSource,
@@ -139,7 +142,40 @@ export const belgelerService = {
     const items: DocumentItem[] = [];
     const errors: DocumentsSnapshot["errors"] = {};
 
-    const jobs: Array<Promise<void>> = [];
+    const jobs: Array<Promise<void>> = [
+      (async () => {
+        const r = await Promise.allSettled([
+          apiFetch<Paginated<BackendDocumentRow>>("/belgeler/?page_size=50"),
+        ]);
+        if (r[0].status === "fulfilled") {
+          for (const doc of unwrapResults(r[0].value)) {
+            items.push({
+              id: `belge-${doc.id}`,
+              belge_tipi: doc.tip || "DIGER",
+              ad: doc.baslik || `Belge #${doc.id}`,
+              belge_no: doc.revizyon
+                ? `DOC-${doc.id}-R${doc.revizyon}`
+                : `DOC-${doc.id}`,
+              durum: "HAZIR",
+              dosya_url: `/api/v1/belgeler/${doc.id}/download/`,
+              referans_tipi: "belge",
+              referans_id: doc.id,
+              related_order_id: doc.order_id ?? null,
+              olusturma_tarihi: doc.olusturma_tarihi || undefined,
+              format: "PDF",
+              href: "/siparis",
+              meta: {
+                revizyon: doc.revizyon,
+                byte_size: doc.byte_size,
+                belge_turu: doc.belge_turu,
+              },
+            });
+          }
+        } else {
+          errors.belge = errMsg(r[0].reason);
+        }
+      })(),
+    ];
 
     if (c.can_view_shipments || c.can_manage_shipment) {
       jobs.push(
@@ -336,7 +372,24 @@ export const belgelerService = {
     });
   },
 
+  getBelgeAyarlari(): Promise<BelgeAyarlari> {
+    return apiFetch<BelgeAyarlari>("/ops/belge-ayarlari/");
+  },
+
+  updateBelgeAyarlari(data: Partial<BelgeAyarlari>): Promise<BelgeAyarlari> {
+    return apiFetch<BelgeAyarlari>("/ops/belge-ayarlari/", {
+      method: "PATCH",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+
   async downloadUrl(url: string, filename = "belge"): Promise<void> {
+    if (url.startsWith("/api/v1/")) {
+      const cleanName = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+      await apiDownload(url.replace(/^\/api\/v1/, ""), cleanName);
+      return;
+    }
     const res = await fetch(url, {
       credentials: url.startsWith("/") || url.includes(window.location.host)
         ? "include"

@@ -73,8 +73,10 @@ def olustur(
     order: Order,
     notlar: str = "",
     takip_no: str = "",
+    teslim_modeli: str = Shipment.TeslimModeli.PLATFORM_QC,
+    sevk_yonu: str | None = None,
 ) -> Shipment:
-    """F6-K6: QC PASS yoksa / FAIL / açık QC → ValidationError."""
+    """F6-K6: PLATFORM_QC → ALICI için QC PASS zorunlu; DOGRUDAN / TEDARIKCI_TO_PLATFORM QC gate atlanır."""
     _require_manage(actor, action="lojistik.shipment.create_denied")
     if order.durum not in (
         Order.Durum.OLUSTURULDU,
@@ -85,7 +87,25 @@ def olustur(
         raise ValidationError(
             f"Sevkiyat bu durumda açılamaz: {order.durum} (ADR-0034)."
         )
-    if order_shipment_blocked(order):
+    tm = (teslim_modeli or Shipment.TeslimModeli.PLATFORM_QC).strip()
+    if tm not in Shipment.TeslimModeli.values:
+        raise ValidationError({"teslim_modeli": f"Geçersiz teslim modeli: {tm}"})
+    if sevk_yonu is None:
+        sy = (
+            Shipment.SevkYonu.DOGRUDAN
+            if tm == Shipment.TeslimModeli.DOGRUDAN
+            else Shipment.SevkYonu.PLATFORM_TO_ALICI
+        )
+    else:
+        sy = sevk_yonu.strip()
+    if sy not in Shipment.SevkYonu.values:
+        raise ValidationError({"sevk_yonu": f"Geçersiz sevk yönü: {sy}"})
+
+    qc_required = (
+        tm == Shipment.TeslimModeli.PLATFORM_QC
+        and sy == Shipment.SevkYonu.PLATFORM_TO_ALICI
+    )
+    if qc_required and order_shipment_blocked(order):
         record_audit_durable(
             actor=actor,
             action="lojistik.shipment.create_denied",
@@ -93,7 +113,7 @@ def olustur(
             entity_id="",
             success=False,
             reason="qc_gate",
-            detail={"order_id": order.pk},
+            detail={"order_id": order.pk, "teslim_modeli": tm, "sevk_yonu": sy},
         )
         raise ValidationError(
             "Sevkiyat açılamaz: siparişte QC PASS yok veya shipment_blok "
@@ -101,14 +121,15 @@ def olustur(
         )
 
     with domain_atomic():
-        # Gate yeniden kontrol (yarış)
-        if order_shipment_blocked(order):
+        if qc_required and order_shipment_blocked(order):
             raise ValidationError(
                 "Sevkiyat açılamaz: QC gate (eşzamanlı kontrol)."
             )
         ship = Shipment(
             order=order,
             durum=Shipment.Durum.TASLAK,
+            teslim_modeli=tm,
+            sevk_yonu=sy,
             notlar=notlar or "",
             takip_no=takip_no or "",
             olusturan=actor if getattr(actor, "pk", None) else None,
@@ -120,7 +141,12 @@ def olustur(
             entity_type="Shipment",
             entity_id=str(ship.pk),
             success=True,
-            detail={"order_id": order.pk, "durum": ship.durum},
+            detail={
+                "order_id": order.pk,
+                "durum": ship.durum,
+                "teslim_modeli": ship.teslim_modeli,
+                "sevk_yonu": ship.sevk_yonu,
+            },
         )
         return ship
 
