@@ -25,3 +25,7 @@ _recovery/
 
 # Geçici CAP/örnek veri (üretime gitmez; silinebilir)
 real_data/
+
+# Node modules (kök node_modules yeterli; frontend/node_modules symlink olabilir)
+node_modules/
+frontend/node_modules/
