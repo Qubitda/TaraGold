@@ -161,6 +161,8 @@ def taslak_olustur(
     uretim_suresi_gun: int | None = None,
     iscilik_override=None,
     para_birimi: str = "TRY",
+    rfq=None,
+    rfq_line=None,
 ) -> TedarikciTeklif:
     """Yeni TASLAK teklif. `tedarikci` yalnız actor.firma; client firma_id yok sayılır."""
     action = "teklif.taslak_olustur"
@@ -199,6 +201,17 @@ def taslak_olustur(
             reason="fiyat_modeli",
         )
 
+    if rfq_line is not None and rfq is None:
+        rfq = rfq_line.rfq
+    if rfq_line is not None and rfq is not None and rfq_line.rfq_id != rfq.pk:
+        _deny(
+            kullanici,
+            action=action,
+            teklif=None,
+            exc=ValidationError({"rfq_line_id": "RFQ satırı belirtilen RFQ ile eşleşmiyor."}),
+            reason="rfq_uyumsuz",
+        )
+
     try:
         with domain_atomic():
             teklif = TedarikciTeklif(
@@ -215,6 +228,8 @@ def taslak_olustur(
                 uretim_suresi_gun=uretim_suresi_gun,
                 gecerlilik_baslangic=gecerlilik_baslangic,
                 gecerlilik_bitis=gecerlilik_bitis,
+                rfq=rfq,
+                rfq_line=rfq_line,
                 durum=TedarikciTeklif.Durum.TASLAK,
                 eslestirme_durumu="",
                 eslestirme_guveni="",
@@ -232,6 +247,8 @@ def taslak_olustur(
                 detail={
                     "varyant_id": varyant.pk,
                     "fiyat_modeli": fiyat_modeli,
+                    "rfq_id": rfq.pk if rfq else None,
+                    "rfq_line_id": rfq_line.pk if rfq_line else None,
                 },
             )
             return teklif

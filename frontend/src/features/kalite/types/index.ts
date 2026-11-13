@@ -6,6 +6,8 @@ export type InspectionMeasurementItem = {
   birim?: string;
   beklenen?: string;
   olculen: string;
+  olculen_ayar?: string | null;
+  olculen_gram?: string | null;
   sapma_abs?: string;
   sonuc?: string;
   override_uygulandi?: boolean;
@@ -20,7 +22,14 @@ export type OpsInspection = components["schemas"]["OpsInspection"] & {
   olusturma_tarihi?: string | null;
 };
 export type OpsInspectionPage = components["schemas"]["OpsInspectionPage"];
-export type InspectionMeasurementRequest =
-  components["schemas"]["OpsMeasurementRequest"];
+export type InspectionMeasurementRequest = Omit<
+  components["schemas"]["OpsMeasurementRequest"],
+  "olculen"
+> & {
+  olculen?: string;
+  olculen_ayar?: string;
+  olculen_gram?: string;
+};
 export type InspectionCreateRequest =
   components["schemas"]["OpsInspectionCreateRequest"];
+

@@ -85,3 +85,57 @@ def kaydet_pod(
             detail={"shipment_id": locked.pk, "teslim_alan": pod.teslim_alan},
         )
         return pod
+
+
+def kaydet_pod_alici(
+    *,
+    actor,
+    shipment: Shipment,
+    teslim_alan: str,
+    notlar: str = "",
+    belgeler_ref: str = "",
+) -> ProofOfDelivery:
+    """GAP-F4-05: Alıcı firması kendi sipariş sevkiyatı için teslimat kanıtı girebilir."""
+    from firmalar.services.yetki_servisi import can_view_all_tenants
+
+    if not can_view_all_tenants(actor):
+        firma = getattr(actor, "firma", None)
+        if firma is None or not getattr(firma, "alici_mi", False):
+            raise PermissionDenied("POD yalnız alıcı veya platform ops içindir.")
+        if getattr(shipment.order, "alici_firma_id", None) != firma.pk:
+            raise PermissionDenied("Başka firmanın sevkiyatına POD girilemez.")
+
+    teslim_alan = (teslim_alan or "").strip()
+    if len(teslim_alan) < 2:
+        raise ValidationError({"teslim_alan": "Teslim alan en az 2 karakter."})
+    if shipment.durum not in (
+        Shipment.Durum.YOLDA,
+        Shipment.Durum.TESLIM,
+    ):
+        raise ValidationError(
+            f"POD yalnız YOLDA/TESLIM iken; şu an {shipment.durum}."
+        )
+    if ProofOfDelivery.objects.filter(shipment=shipment).exists():
+        raise ValidationError("Bu sevkiyatta POD zaten var.")
+
+    with domain_atomic():
+        locked = Shipment.objects.select_for_update().get(pk=shipment.pk)
+        if ProofOfDelivery.objects.filter(shipment=locked).exists():
+            raise ValidationError("Bu sevkiyatta POD zaten var.")
+        pod = ProofOfDelivery(
+            shipment=locked,
+            teslim_alan=teslim_alan[:120],
+            notlar=(notlar or "")[:255],
+            belgeler_ref=(belgeler_ref or "")[:255],
+            olusturan=actor if getattr(actor, "pk", None) else None,
+        )
+        pod.save()
+        record_audit(
+            actor=actor,
+            action="lojistik.pod.alici_created",
+            entity_type="ProofOfDelivery",
+            entity_id=str(pod.pk),
+            success=True,
+            detail={"shipment_id": locked.pk, "teslim_alan": pod.teslim_alan},
+        )
+        return pod

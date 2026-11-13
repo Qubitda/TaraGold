@@ -172,7 +172,7 @@ class ReturnListCreateView(IdempotencyMixin, APIView):
             raise ValidationError(
                 detail={"order_id": "order_id ve shipment_id zorunlu."}
             ) from exc
-        sebep = request.data.get("sebep") or ""
+        sebep = request.data.get("iade_sebebi") or request.data.get("sebep") or ""
         notlar = request.data.get("notlar") or ""
         order = _load_order(request.user, order_id)
         ship = _load_shipment(request.user, shipment_id, order)

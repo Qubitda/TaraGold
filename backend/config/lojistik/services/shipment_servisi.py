@@ -73,6 +73,8 @@ def olustur(
     order: Order,
     notlar: str = "",
     takip_no: str = "",
+    tasiyici: str | None = None,
+    kargo_firma: str = "",
     teslim_modeli: str = Shipment.TeslimModeli.PLATFORM_QC,
     sevk_yonu: str | None = None,
 ) -> Shipment:
@@ -125,6 +127,7 @@ def olustur(
             raise ValidationError(
                 "Sevkiyat açılamaz: QC gate (eşzamanlı kontrol)."
             )
+        carrier_val = (tasiyici if tasiyici is not None else kargo_firma) or ""
         ship = Shipment(
             order=order,
             durum=Shipment.Durum.TASLAK,
@@ -132,6 +135,8 @@ def olustur(
             sevk_yonu=sy,
             notlar=notlar or "",
             takip_no=takip_no or "",
+            kargo_firma=carrier_val[:80],
+            tasiyici=tasiyici[:80] if tasiyici else (carrier_val[:80] if carrier_val else None),
             olusturan=actor if getattr(actor, "pk", None) else None,
         )
         ship.save()
@@ -177,6 +182,7 @@ def sevk_et(
     shipment: Shipment,
     takip_no: str = "",
     kargo_firma: str = "",
+    tasiyici: str | None = None,
 ) -> Shipment:
     """HAZIR → YOLDA. ADR-0034: taşıyıcı adı + takip no elle zorunlu; entegrasyon yok."""
     _require_manage(
@@ -185,7 +191,13 @@ def sevk_et(
         entity_id=str(shipment.pk),
     )
     resolved = (takip_no or shipment.takip_no or "").strip()
-    carrier = (kargo_firma or shipment.kargo_firma or "").strip()
+    carrier = (
+        (tasiyici if tasiyici is not None else "")
+        or kargo_firma
+        or shipment.tasiyici
+        or shipment.kargo_firma
+        or ""
+    ).strip()
     if not resolved or not carrier:
         raise ValidationError(
             {
@@ -204,10 +216,11 @@ def sevk_et(
             )
         locked.takip_no = resolved[:64]
         locked.kargo_firma = carrier[:80]
+        locked.tasiyici = carrier[:80]
         locked._allow_status_transition = True
         try:
             locked.save(
-                update_fields=["takip_no", "kargo_firma", "guncelleme_tarihi"]
+                update_fields=["takip_no", "kargo_firma", "tasiyici", "guncelleme_tarihi"]
             )
         finally:
             locked._allow_status_transition = False
@@ -218,7 +231,11 @@ def sevk_et(
             entity_type="Shipment",
             entity_id=str(locked.pk),
             success=True,
-            detail={"durum": locked.durum, "takip_no": locked.takip_no},
+            detail={
+                "durum": locked.durum,
+                "takip_no": locked.takip_no,
+                "tasiyici": locked.tasiyici,
+            },
         )
         return locked
 

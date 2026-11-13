@@ -136,16 +136,42 @@ function shipmentDocs(
   return out;
 }
 
+export interface DocumentsFilter {
+  tip?: string;
+  order_id?: string;
+}
+
+const PDF_DOC_TIPS = new Set([
+  "PROFORMA",
+  "IRSALIYE",
+  "TEDARIKCI_IRSALIYE",
+  "TAS_SERTIFIKA",
+  "DIGER",
+]);
+
 export const belgelerService = {
-  async getDocuments(caps?: Capabilities | null): Promise<DocumentsSnapshot> {
+  async getDocuments(
+    caps?: Capabilities | null,
+    filters?: DocumentsFilter
+  ): Promise<DocumentsSnapshot> {
     const c = caps || ({} as Capabilities);
     const items: DocumentItem[] = [];
     const errors: DocumentsSnapshot["errors"] = {};
 
+    const params = new URLSearchParams({ page_size: "50" });
+    const cleanTip = filters?.tip?.trim().toUpperCase();
+    if (cleanTip && cleanTip !== "ALL" && PDF_DOC_TIPS.has(cleanTip)) {
+      params.set("tip", cleanTip);
+    }
+    const cleanOrderId = filters?.order_id?.trim();
+    if (cleanOrderId && /^\d+$/.test(cleanOrderId)) {
+      params.set("order_id", cleanOrderId);
+    }
+
     const jobs: Array<Promise<void>> = [
       (async () => {
         const r = await Promise.allSettled([
-          apiFetch<Paginated<BackendDocumentRow>>("/belgeler/?page_size=50"),
+          apiFetch<Paginated<BackendDocumentRow>>(`/documents/?${params.toString()}`),
         ]);
         if (r[0].status === "fulfilled") {
           for (const doc of unwrapResults(r[0].value)) {
@@ -157,7 +183,7 @@ export const belgelerService = {
                 ? `DOC-${doc.id}-R${doc.revizyon}`
                 : `DOC-${doc.id}`,
               durum: "HAZIR",
-              dosya_url: `/api/v1/belgeler/${doc.id}/download/`,
+              dosya_url: doc.download_url || `/api/v1/documents/${doc.id}/download/`,
               referans_tipi: "belge",
               referans_id: doc.id,
               related_order_id: doc.order_id ?? null,

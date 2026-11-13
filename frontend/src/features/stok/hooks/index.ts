@@ -7,7 +7,16 @@ import type { StockAdjustmentRequest } from "../types";
 export const stokKeys = {
   all: ["stok"] as const,
   supplier: () => [...stokKeys.all, "supplier"] as const,
+  warehouses: () => [...stokKeys.all, "warehouses"] as const,
 };
+
+export function useSupplierWarehousesQuery(enabled = true) {
+  return useQuery({
+    queryKey: stokKeys.warehouses(),
+    queryFn: () => stokService.listWarehouses(),
+    enabled,
+  });
+}
 
 export function useSupplierStockQuery(enabled = true) {
   return useQuery({
@@ -26,3 +35,4 @@ export function useAdjustStockMutation() {
     },
   });
 }
+

@@ -17,16 +17,16 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 ---
 
-## GAP-F3-02 — Global kâr marjı (admin/ops)
+## GAP-F3-02 — Global kâr marjı (admin/ops) — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Ops/admin için global marj politikası okuma/yazma |
-| **Önerilen endpoint** | `GET/PATCH /api/v1/ops/piyasa/marj-politikasi/` |
+| **Uygulama** | `GET/PATCH /api/v1/ops/piyasa/marj-politikasi/` |
 | **İstek** | `{ "marj_orani": "0.085", "aktif": true }` (string Decimal) |
 | **Yanıt** | Politika DTO + `server_now` |
-| **Ekran** | Ops ayarlar / fiyatlama admin paneli |
-| **Not** | `PiyasaMarjPolitikasi` model var; API yok. Alıcıya **asla** marj kırılımı dönülmemeli |
+| **Ekran** | `OpsMarjPolitikasiCard` (Fiyatlama & Tanımlar ops paneli) |
+| **Not** | Alıcıya **asla** marj kırılımı dönülmez |
 
 ---
 
@@ -57,26 +57,24 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 ---
 
-## GAP-F3-05 — Özel üretim: montür/taş katalog + üretim siparişi SM
+## GAP-F3-05 — Özel üretim: montür/taş katalog + üretim siparişi SM — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
-| **İhtiyaç** | Montür seç → taş seç → üretim siparişi → durum takibi (ayrı state machine) |
-| **Önerilen** | `GET /api/v1/catalog/monturler/`, `GET /api/v1/catalog/taslar/` + RFQ line alanları `montur_varyant_id`, `tas_specs[]` **veya** üretim order tipi |
-| **Mevcut** | `POST /rfqs/` `talep_tipi=OZEL_URETIM`; line: `varyant_id?`, `miktar`, `aciklama`, `birim` |
-| **Ekran** | Teklifler → Özel taleplerim (şu an aciklama’ya kodlanmış metin) |
-| **Not** | `hedef_ayar` / `hedef_gram` OpenAPI create şemasında **yok**; FE bunları `aciklama` içine yazar |
+| **İhtiyaç** | Montür seç → taş seç → özel üretim RFQ akışı |
+| **Uygulama** | `GET /api/v1/catalog/monturler/` ve `GET /api/v1/catalog/taslar/` |
+| **Ekran** | `CatalogView` ("Montürler", "Taşlar" sekmeleri) + `SupplierRfqOffersView` Özel Üretim RFQ formu |
+| **Not** | Montür/taş katalog seçicisi `montur_varyant_id`, `hedef_ayar`, `hedef_gram` ve `tas_ozeti` alanlarını doldurur |
 
 ---
 
-## GAP-F3-06 — RFQ ↔ tedarikçi teklif bağlama
+## GAP-F3-06 — RFQ ↔ tedarikçi teklif bağlama — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Tedarikçi teklifini belirli RFQ satırına bağlama |
-| **Önerilen** | `POST /supplier/offers/` body’ye `rfq_id` / `rfq_line_id` |
-| **Mevcut** | Offer create yalnız `varyant_id` + fiyat alanları; RFQ ayrı kör havuz listesi |
-| **Ekran** | Teklif hazırla modalı |
+| **Uygulama** | `POST /api/v1/supplier/offers/` body ve `SupplierOffer` yanıtında opsiyonel `rfq_id` / `rfq_line_id` |
+| **Ekran** | `SupplierRfqOffersView` ("Teklif hazırla" modalı, tablo ve detay modalı) |
 
 ---
 
@@ -135,23 +133,21 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 # FAZ 5 — Org / Tanımlar / Belgeler / Profil / Dashboard / Raporlar
 
-## GAP-F5-01 — Merkezi belge kasası
+## GAP-F5-01 — Merkezi belge kasası — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
-| **İhtiyaç** | Tek `GET /documents/` (tip, ref, dosya URL, tenant) |
-| **Önerilen** | `GET /api/v1/documents/?tip=&order_id=` |
-| **Mevcut** | FE sevkiyat/sipariş/ledger/iade/QC aggregate (composite) |
-| **Ekran** | Belgeler |
+| **İhtiyaç** | Tek `GET /documents/` (tip, order_id, indirme URL, tenant/kör havuz) |
+| **Uygulama** | `GET /api/v1/documents/?tip=&order_id=` + `GET /api/v1/documents/{id}/download/` |
+| **Ekran** | `DocumentsView` |
 
-## GAP-F5-02 — Tanım CRUD (fiyat grubu / ayar / kur)
+## GAP-F5-02 — Tanım CRUD (fiyat grubu / ayar / kur) — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Ops tanımlar: fiyat grubu, ayar-milyem, metal/döviz kuru okuma-yazma |
-| **Önerilen** | `GET/POST /api/v1/ops/definitions/{kaynak}/` |
-| **Mevcut** | Yalnız `GET /sales-channels/` (read-only) |
-| **Ekran** | Tanımlar |
+| **Uygulama** | `GET/POST /api/v1/ops/definitions/{kaynak}/` + `GET/PATCH/DELETE /api/v1/ops/definitions/{kaynak}/{id}/` |
+| **Ekran** | `DefinitionsView` |
 
 ## GAP-F5-03 — Firma listesi (tenant dışı) — **UYGULANDI** (2026-11-12)
 
@@ -180,4 +176,4 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 ---
 
-*Güncelleme: 2026-11-12 — ADR-0034 FAZ 1–5; GAP-F5-04/05 UYGULANDI*
+*Güncelleme: 2026-11-13 — Tüm FAZ 3–5 GAP’leri (F3-02, F3-05, F3-06, F4-01..05, F5-01, F5-02) backend + frontend olarak UYGULANDI.*

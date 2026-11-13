@@ -17,6 +17,10 @@ from lojistik.services.return_servisi import _TRANSITIONS
 def BuyerShipmentPresenter(ship: Shipment) -> dict:
     data = _raw_ship(ship)
     actions = []
+    if data.get("pod") is not None:
+        actions.append("view_pod")
+    elif ship.durum in (Shipment.Durum.YOLDA, Shipment.Durum.TESLIM):
+        actions.append("confirm_pod")
     if ship.durum == Shipment.Durum.TESLIM:
         actions.append("request_return")
     data["allowed_actions"] = actions
@@ -126,6 +130,11 @@ def present_return(req: ReturnRequest, *, actor=None) -> dict:
         "shipment_id": req.shipment_id,
         "durum": req.durum,
         "sebep": req.sebep,
+        "iade_sebebi": req.sebep,
+        "mahsup_tutari": str(req.mahsup_tutari)
+        if req.mahsup_tutari is not None
+        else None,
+        "notlar": req.notlar or "",
         "lines": lines,
         "allowed_actions": actions,
         "server_now": timezone.now().isoformat(),

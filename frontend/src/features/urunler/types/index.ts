@@ -96,3 +96,56 @@ export interface OpsProductVariantCreateRequest {
   renk_id?: number;
   ek_bedel?: string;
 }
+
+export interface MonturCatalogVariant {
+  id: number;
+  sku: string;
+  gram: string | null;
+  renk: string;
+  beden: string;
+}
+
+export interface MonturCatalogItem extends BuyerCatalogItem {
+  varyantlar: MonturCatalogVariant[];
+}
+
+export interface MonturlerPage {
+  count: number;
+  page?: number;
+  page_size?: number;
+  next?: string | null;
+  previous?: string | null;
+  results: MonturCatalogItem[];
+}
+
+export interface TasCatalogItem {
+  id: number;
+  kod: string;
+  ad: string;
+  degerli: boolean;
+  sira: number;
+}
+
+export interface TasRefItem {
+  id: number;
+  kod: string;
+  ad: string;
+}
+
+export interface TaslarPage {
+  count: number;
+  page?: number;
+  page_size?: number;
+  next?: string | null;
+  previous?: string | null;
+  results: TasCatalogItem[];
+  referanslar?: {
+    kesimler?: TasRefItem[];
+    berrakliklar?: TasRefItem[];
+    renk_dereceleri?: TasRefItem[];
+    kesim_kaliteleri?: TasRefItem[];
+    sertifika_kurumlari?: TasRefItem[];
+    menseiler?: TasRefItem[];
+  };
+}
+

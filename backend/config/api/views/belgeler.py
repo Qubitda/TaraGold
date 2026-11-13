@@ -32,6 +32,7 @@ def _present_document(doc: Document, *, include_meta: bool = False) -> dict:
         "order_id": meta.get("order_id"),
         "revizyon": meta.get("revizyon"),
         "belge_turu": meta.get("belge_turu") or doc.tip,
+        "download_url": f"/api/v1/documents/{doc.pk}/download/",
         "olusturma_tarihi": doc.olusturma_tarihi.isoformat()
         if doc.olusturma_tarihi
         else None,

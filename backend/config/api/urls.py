@@ -35,6 +35,8 @@ from api.views import (
     BuyerCariListView,
     BuyerCatalogDetailView,
     BuyerCatalogListView,
+    BuyerCatalogMonturListView,
+    BuyerCatalogTasListView,
     BuyerFinanceSummaryView,
     BuyerLedgerListView,
     CartDetailView,
@@ -52,6 +54,8 @@ from api.views import (
     OpsAliciKanalErisimiListCreateView,
     OpsAliciKanalErisimiToggleView,
     OpsBelgeAyarlariView,
+    OpsDefinitionsDetailView,
+    OpsDefinitionsListCreateView,
     OpsFinanceCariListView,
     OpsFinanceHakEdisListView,
     OpsFinanceLedgerListView,
@@ -59,6 +63,7 @@ from api.views import (
     OpsFinanceSummaryView,
     OpsFinanceTedarikciOdemeView,
     OpsFiyatGrubuListView,
+    OpsPiyasaMarjPolitikasiView,
     OpsInspectionCancelView,
     OpsInspectionDetailView,
     OpsInspectionFailView,
@@ -147,6 +152,7 @@ from api.views import (
     RfqSendView,
     ShipmentDetailView,
     ShipmentListView,
+    ShipmentPodView,
     SupplierOfferDeactivateView,
     SupplierOfferDetailView,
     SupplierOfferImportCommitView,
@@ -160,6 +166,7 @@ from api.views import (
     SupplierRfqRevisionView,
     SupplierStockAdjustView,
     SupplierStockSummaryView,
+    SupplierWarehouseListView,
 )
 
 # Relative patterns (ROOT mounts under /api/v1/) — TECH-OPENAPI-01 çift önek önleme
@@ -228,6 +235,12 @@ api_urlpatterns = [
         BelgeDownloadView.as_view(),
         name="api-belge-download",
     ),
+    path("documents/", BelgeListView.as_view(), name="api-documents"),
+    path(
+        "documents/<int:pk>/download/",
+        BelgeDownloadView.as_view(),
+        name="api-document-download",
+    ),
     path(
         "ops/belge-ayarlari/",
         OpsBelgeAyarlariView.as_view(),
@@ -236,6 +249,16 @@ api_urlpatterns = [
     path("act-as/start/", ActAsStartView.as_view(), name="api-act-as-start"),
     path("act-as/stop/", ActAsStopView.as_view(), name="api-act-as-stop"),
     path("catalog/", BuyerCatalogListView.as_view(), name="api-buyer-catalog"),
+    path(
+        "catalog/monturler/",
+        BuyerCatalogMonturListView.as_view(),
+        name="api-buyer-catalog-monturler",
+    ),
+    path(
+        "catalog/taslar/",
+        BuyerCatalogTasListView.as_view(),
+        name="api-buyer-catalog-taslar",
+    ),
     path(
         "catalog/<int:pk>/",
         BuyerCatalogDetailView.as_view(),
@@ -247,6 +270,11 @@ api_urlpatterns = [
         name="api-sales-channels",
     ),
     path("piyasa/pano/", PiyasaPanoView.as_view(), name="api-piyasa-pano"),
+    path(
+        "ops/piyasa/marj-politikasi/",
+        OpsPiyasaMarjPolitikasiView.as_view(),
+        name="api-ops-piyasa-marj-politikasi",
+    ),
     path("quotes/", QuoteCreateView.as_view(), name="api-quote-create"),
     path("quotes/<int:pk>/", QuoteDetailView.as_view(), name="api-quote-detail"),
     path("price-locks/", PriceLockCreateView.as_view(), name="api-price-lock-create"),
@@ -291,6 +319,11 @@ api_urlpatterns = [
         "shipments/<int:pk>/",
         ShipmentDetailView.as_view(),
         name="api-shipment-detail",
+    ),
+    path(
+        "shipments/<int:pk>/pod/",
+        ShipmentPodView.as_view(),
+        name="api-shipment-pod",
     ),
     path("returns/", ReturnListCreateView.as_view(), name="api-return-list"),
     path("returns/<int:pk>/", ReturnDetailView.as_view(), name="api-return-detail"),
@@ -353,6 +386,11 @@ api_urlpatterns = [
         "supplier/offers/<int:pk>/versions/",
         SupplierOfferVersionView.as_view(),
         name="api-supplier-offer-versions",
+    ),
+    path(
+        "supplier/warehouses/",
+        SupplierWarehouseListView.as_view(),
+        name="api-supplier-warehouses",
     ),
     path(
         "supplier/stock/",
@@ -686,6 +724,16 @@ api_urlpatterns = [
         "ops/fiyat-gruplari/",
         OpsFiyatGrubuListView.as_view(),
         name="api-ops-fiyat-gruplari",
+    ),
+    path(
+        "ops/definitions/<str:kaynak>/",
+        OpsDefinitionsListCreateView.as_view(),
+        name="api-ops-definitions-list",
+    ),
+    path(
+        "ops/definitions/<str:kaynak>/<int:pk>/",
+        OpsDefinitionsDetailView.as_view(),
+        name="api-ops-definitions-detail",
     ),
     path(
         "firma/kullanicilar/",

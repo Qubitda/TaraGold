@@ -87,6 +87,14 @@ export function useCancelOrderMutation() {
   });
 }
 
+export function useReorderOrderMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number | string) => siparisService.reorder(id),
+    onSuccess: () => invalidateCommerce(qc),
+  });
+}
+
 export function useBulkOrderMutation() {
   const qc = useQueryClient();
   return useMutation({

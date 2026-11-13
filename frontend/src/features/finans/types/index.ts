@@ -1,6 +1,9 @@
 import type { components } from "@/lib/api/schema";
 
-export type FinanceSummary = components["schemas"]["BuyerFinanceSummary"];
+export type FinanceSummary = components["schemas"]["BuyerFinanceSummary"] & {
+  credit?: CreditInfo | null;
+  payment_intents?: PaymentIntent[];
+};
 export type CariHesap = components["schemas"]["BuyerCari"];
 export type LedgerEntry = components["schemas"]["BuyerLedger"];
 export type CreditInfo = components["schemas"]["BuyerCredit"];

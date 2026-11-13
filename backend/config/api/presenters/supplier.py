@@ -7,7 +7,7 @@ from django.utils import timezone
 from api.masking import assert_masked
 from fiyatlama.models import TedarikciTeklif
 from siparis.models import RFQ
-from stok.models import StockBalance, StockMovement
+from stok.models import StockBalance, StockMovement, Warehouse
 
 
 def present_offer(teklif: TedarikciTeklif, *, can_manage: bool = False) -> dict:
@@ -36,11 +36,28 @@ def present_offer(teklif: TedarikciTeklif, *, can_manage: bool = False) -> dict:
         "gecerlilik_bitis": teklif.gecerlilik_bitis.isoformat()
         if teklif.gecerlilik_bitis
         else None,
+        "rfq_id": teklif.rfq_id,
+        "rfq_line_id": teklif.rfq_line_id,
         "allowed_actions": actions,
         "server_now": timezone.now().isoformat(),
     }
     assert_masked(data)
     return data
+
+
+def present_warehouse(wh: Warehouse) -> dict:
+    item = {
+        "id": wh.pk,
+        "kod": wh.kod,
+        "ad": wh.ad,
+        "sahip_tipi": wh.sahip_tipi,
+        "aktif": wh.aktif,
+        "olusturma_tarihi": wh.olusturma_tarihi.isoformat()
+        if wh.olusturma_tarihi
+        else None,
+    }
+    assert_masked(item)
+    return item
 
 
 def present_balance(bal: StockBalance) -> dict:

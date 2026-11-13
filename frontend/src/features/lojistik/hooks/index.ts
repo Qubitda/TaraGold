@@ -14,6 +14,8 @@ export const lojistikKeys = {
   opsShipments: () => [...lojistikKeys.all, "ops-shipments"] as const,
   returns: () => [...lojistikKeys.all, "returns"] as const,
   buyerShipments: () => [...lojistikKeys.all, "buyer-shipments"] as const,
+  buyerShipmentPod: (id: number | string) =>
+    [...lojistikKeys.all, "buyer-pod", String(id)] as const,
 };
 
 function invalidateLojistik(qc: ReturnType<typeof useQueryClient>) {
@@ -39,6 +41,17 @@ export function useBuyerShipmentsQuery(enabled = true) {
       return page.results ?? [];
     },
     enabled,
+  });
+}
+
+export function useBuyerShipmentPodQuery(
+  id: number | null,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: lojistikKeys.buyerShipmentPod(id ?? 0),
+    queryFn: () => lojistikService.getBuyerShipmentPod(id!),
+    enabled: Boolean(id) && enabled,
   });
 }
 
@@ -96,6 +109,15 @@ export function useSubmitPodMutation() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: PodRequest }) =>
       lojistikService.submitPod(id, data),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
+export function useSubmitBuyerPodMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: PodRequest }) =>
+      lojistikService.submitBuyerPod(id, data),
     onSuccess: () => invalidateLojistik(qc),
   });
 }

@@ -121,6 +121,8 @@ export interface SupplierOffer {
   versiyon?: number;
   uretim_suresi_gun?: number | null;
   gecerlilik_bitis?: string | null;
+  rfq_id?: number | null;
+  rfq_line_id?: number | null;
 }
 
 export interface SupplierOfferPage {
@@ -141,6 +143,8 @@ export interface SupplierOfferCreateRequest {
   uretim_suresi_gun?: number;
   gecerlilik_baslangic?: string;
   gecerlilik_bitis?: string;
+  rfq_id?: number;
+  rfq_line_id?: number;
 }
 
 /** GAP-F3-04 — CSV föy satırı */

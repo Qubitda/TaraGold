@@ -507,6 +507,7 @@ export function QualityInspectionsView() {
                         <TableHead>Satır</TableHead>
                         <TableHead>Beklenen</TableHead>
                         <TableHead>Ölçülen</TableHead>
+                        <TableHead>Ayar / Gram</TableHead>
                         <TableHead>Sonuç</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -521,6 +522,11 @@ export function QualityInspectionsView() {
                           </TableCell>
                           <TableCell className="font-mono font-semibold">
                             {m.olculen}
+                          </TableCell>
+                          <TableCell className="font-mono text-[11px] text-muted-foreground">
+                            {m.olculen_ayar || m.olculen_gram
+                              ? `${m.olculen_ayar ?? "—"} ay / ${m.olculen_gram ?? "—"} gr`
+                              : "—"}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="font-mono text-[10px]">

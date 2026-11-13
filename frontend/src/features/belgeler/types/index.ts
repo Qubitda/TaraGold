@@ -54,6 +54,7 @@ export interface BackendDocumentRow {
   order_id?: number | null;
   revizyon?: number | null;
   belge_turu?: string;
+  download_url?: string;
   olusturma_tarihi?: string | null;
 }
 

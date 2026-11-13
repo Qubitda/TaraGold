@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useAdjustStockMutation, useSupplierStockQuery } from "../hooks";
+import {
+  useAdjustStockMutation,
+  useSupplierStockQuery,
+  useSupplierWarehousesQuery,
+} from "../hooks";
 import { stockAdjustmentSchema, type StockAdjustmentInput } from "../schemas";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
@@ -30,8 +34,18 @@ import { Boxes, RefreshCw, AlertCircle, Plus } from "lucide-react";
 export function StockManagementView() {
   const actionToast = useActionToast();
   const stockQ = useSupplierStockQuery();
+  const warehousesQ = useSupplierWarehousesQuery();
   const adjustMut = useAdjustStockMutation();
   const [adjustOpen, setAdjustOpen] = useState(false);
+
+  const warehouses = warehousesQ.data ?? [];
+  const warehouseMap = useMemo(() => {
+    const map = new Map<number, { kod: string; ad: string }>();
+    for (const w of warehouses) {
+      map.set(w.id, { kod: w.kod, ad: w.ad });
+    }
+    return map;
+  }, [warehouses]);
 
   const {
     register,
@@ -78,15 +92,17 @@ export function StockManagementView() {
             Stok & Depo Dengesi
           </h1>
           <p className="text-xs text-muted-foreground">
-            `GET /supplier/stock/` — available / reserved / on_hand. Depo
-            listesi API’de yok (GAP-F4-03).
+            `GET /supplier/stock/` ve `GET /supplier/warehouses/` — available / reserved / on_hand stok bakiyeleri.
           </p>
         </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void stockQ.refetch()}
+            onClick={() => {
+              void stockQ.refetch();
+              void warehousesQ.refetch();
+            }}
             className="gap-1.5"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -157,8 +173,23 @@ export function StockManagementView() {
                 <TableRow
                   key={`${b.warehouse_id ?? "w"}-${b.teklif_id ?? "t"}-${b.varyant_id}`}
                 >
-                  <TableCell className="font-mono text-xs tabular-nums">
-                    {b.warehouse_id != null ? `#${b.warehouse_id}` : "—"}
+                  <TableCell className="text-xs">
+                    {b.warehouse_id != null ? (
+                      warehouseMap.has(b.warehouse_id) ? (
+                        <div>
+                          <span className="font-medium">
+                            {warehouseMap.get(b.warehouse_id)?.ad}
+                          </span>{" "}
+                          <span className="font-mono text-muted-foreground">
+                            ({warehouseMap.get(b.warehouse_id)?.kod} · #{b.warehouse_id})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-mono tabular-nums">#{b.warehouse_id}</span>
+                      )
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="font-mono text-xs tabular-nums">
                     {b.teklif_id != null ? `#${b.teklif_id}` : "—"}
@@ -197,13 +228,36 @@ export function StockManagementView() {
             className="flex flex-col gap-4 pt-2"
           >
             <div className="space-y-1.5">
-              <Label htmlFor="warehouse_id">Warehouse ID</Label>
-              <Input
-                id="warehouse_id"
-                type="number"
-                className="font-mono tabular-nums"
-                {...register("warehouse_id", { valueAsNumber: true })}
-              />
+              <Label htmlFor="warehouse_id">Depo (Warehouse)</Label>
+              {warehouses.length > 0 ? (
+                <select
+                  id="warehouse_id"
+                  className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                  disabled={isSubmitting}
+                  {...register("warehouse_id", { valueAsNumber: true })}
+                >
+                  <option value="">Depo seçin…</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      #{w.id} · {w.kod} — {w.ad}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  id="warehouse_id"
+                  type="number"
+                  placeholder={warehousesQ.isLoading ? "Depolar yükleniyor…" : "Depo ID"}
+                  className="font-mono tabular-nums"
+                  disabled={isSubmitting}
+                  {...register("warehouse_id", { valueAsNumber: true })}
+                />
+              )}
+              {warehousesQ.isError ? (
+                <p className="text-[11px] text-destructive">
+                  Depo listesi alınamadı; depo ID elle girebilirsiniz.
+                </p>
+              ) : null}
               {errors.warehouse_id && (
                 <p className="text-xs text-destructive">
                   {errors.warehouse_id.message}

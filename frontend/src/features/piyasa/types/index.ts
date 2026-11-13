@@ -16,3 +16,20 @@ export interface PiyasaPano {
   olcek?: string | null;
   satirlar: PiyasaPanoSatir[];
 }
+
+export interface OpsMarjPolitikasi {
+  id: number;
+  anahtar: string;
+  marj_modu: "TL" | "YUZDE" | string;
+  marj_orani: string;
+  aktif: boolean;
+  guncelleme?: string | null;
+  server_now: string;
+}
+
+export interface OpsMarjPolitikasiPatchRequest {
+  marj_modu?: "TL" | "YUZDE";
+  marj_orani?: string;
+  aktif?: boolean;
+}
+

@@ -21,6 +21,7 @@ import {
   useFiyatlamaInvalidate,
 } from "../hooks";
 import { useAuth } from "@/features/auth";
+import { useMonturlerQuery, useTaslarQuery } from "@/features/urunler";
 import { ApiError } from "@/lib/api/client";
 import {
   Table,
@@ -70,6 +71,8 @@ const offerSchema = z.object({
   iscilik_override: z.string().trim().optional(),
   para_birimi: z.string(),
   uretim_suresi_gun: z.number().optional(),
+  rfq_id: z.number().int().positive().optional(),
+  rfq_line_id: z.number().int().positive().optional(),
 });
 
 type OfferFormValues = z.infer<typeof offerSchema>;
@@ -119,6 +122,10 @@ export function SupplierRfqOffersView({
   const [selectedRfq, setSelectedRfq] = useState<SupplierRfq | null>(null);
 
   const [buyerRfqModalOpen, setBuyerRfqModalOpen] = useState(false);
+  const monturlerQuery = useMonturlerQuery({ page_size: "50" }, buyerRfqModalOpen);
+  const taslarQuery = useTaslarQuery({ page_size: "50" }, buyerRfqModalOpen);
+  const monturlerList = monturlerQuery.data?.results || [];
+  const taslarList = taslarQuery.data?.results || [];
 
   // Offer detail & versioning
   const [offerDetail, setOfferDetail] = useState<SupplierOffer | null>(null);
@@ -183,6 +190,7 @@ export function SupplierRfqOffersView({
     register: registerBuyerRfq,
     handleSubmit: handleBuyerRfqSubmit,
     reset: resetBuyerRfq,
+    setValue: setBuyerRfqValue,
     formState: { errors: buyerRfqErrors, isSubmitting: isBuyerRfqSubmitting },
   } = useForm<BuyerRfqFormValues>({
     resolver: zodResolver(buyerRfqSchema),
@@ -223,8 +231,11 @@ export function SupplierRfqOffersView({
 
   const handleOpenOfferModal = (rfq: SupplierRfq) => {
     setSelectedRfq(rfq);
-    const firstVariantId = rfq.lines?.[0]?.varyant_id || 1;
+    const firstLine = rfq.lines?.[0];
+    const firstVariantId = firstLine?.varyant_id || 1;
     setOfferValue("varyant_id", firstVariantId);
+    setOfferValue("rfq_id", rfq.id);
+    setOfferValue("rfq_line_id", firstLine?.id);
     setOfferModalOpen(true);
   };
 
@@ -232,7 +243,6 @@ export function SupplierRfqOffersView({
     setError(null);
     setSuccessMsg(null);
     try {
-      // OpenAPI: rfq_id yok (GAP-F3-06). Teklif varyant + fiyat alanları.
       await fiyatlamaService.createSupplierOffer({
         varyant_id: Number(data.varyant_id),
         fiyat_modeli: data.fiyat_modeli,
@@ -243,6 +253,12 @@ export function SupplierRfqOffersView({
         uretim_suresi_gun: data.uretim_suresi_gun
           ? Number(data.uretim_suresi_gun)
           : undefined,
+        ...(data.rfq_id && Number.isFinite(data.rfq_id)
+          ? { rfq_id: Number(data.rfq_id) }
+          : {}),
+        ...(data.rfq_line_id && Number.isFinite(data.rfq_line_id)
+          ? { rfq_line_id: Number(data.rfq_line_id) }
+          : {}),
       });
       setOfferModalOpen(false);
       resetOffer();
@@ -809,7 +825,13 @@ export function SupplierRfqOffersView({
                   return (
                     <TableRow key={offer.id}>
                       <TableCell className="font-mono text-xs font-semibold">
-                        OFFER-#{offer.id}
+                        <div>OFFER-#{offer.id}</div>
+                        {offer.rfq_id ? (
+                          <div className="text-[10px] font-normal text-muted-foreground">
+                            RFQ #{offer.rfq_id}
+                            {offer.rfq_line_id ? ` · Satır #${offer.rfq_line_id}` : ""}
+                          </div>
+                        ) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         Varyant #{offer.varyant_id}
@@ -983,27 +1005,73 @@ export function SupplierRfqOffersView({
           <DialogHeader>
             <DialogTitle>RFQ-#{selectedRfq?.id} için teklif taslağı</DialogTitle>
             <DialogDescription>
-              OpenAPI alanları: fiyat modeli, gram, birim fiyat, işçilik override.
-              RFQ bağlama API&apos;de yok (GAP-F3-06) — teklif varyanta yazılır.
+              Teklif varyanta yazılır ve seçili RFQ / RFQ satırına bağlanabilir.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleOfferSubmit(onOfferSubmit)} className="flex flex-col gap-4 pt-2">
             <BlindPoolCallout role="supplier" />
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="offer-var">Hedef Varyant ID</Label>
-              <Input
-                id="offer-var"
-                type="number"
-                disabled={isOfferSubmitting}
-                {...registerOffer("varyant_id", { valueAsNumber: true })}
-              />
-              {offerErrors.varyant_id && (
-                <span className="text-[11px] text-destructive">
-                  {offerErrors.varyant_id.message}
-                </span>
-              )}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="offer-var">Hedef Varyant ID</Label>
+                <Input
+                  id="offer-var"
+                  type="number"
+                  className="font-mono"
+                  disabled={isOfferSubmitting}
+                  {...registerOffer("varyant_id", { valueAsNumber: true })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="offer-rfq-id">RFQ ID</Label>
+                <Input
+                  id="offer-rfq-id"
+                  type="number"
+                  className="font-mono"
+                  disabled={isOfferSubmitting}
+                  {...registerOffer("rfq_id", {
+                    setValueAs: (v) => (v === "" || Number.isNaN(Number(v)) ? undefined : Number(v)),
+                  })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="offer-rfq-line-id">RFQ Satır ID</Label>
+                {selectedRfq?.lines && selectedRfq.lines.length > 0 ? (
+                  <select
+                    id="offer-rfq-line-id"
+                    className="h-9 w-full rounded-[6px] border border-input bg-background px-2 font-mono text-xs"
+                    disabled={isOfferSubmitting}
+                    {...registerOffer("rfq_line_id", {
+                      setValueAs: (v) => (v === "" || Number.isNaN(Number(v)) ? undefined : Number(v)),
+                    })}
+                  >
+                    <option value="">Bağlama</option>
+                    {selectedRfq.lines.map((ln, i) =>
+                      ln.id ? (
+                        <option key={ln.id} value={ln.id}>
+                          #{ln.id} {ln.varyant_id ? `(Var #${ln.varyant_id})` : `(Kalem ${i + 1})`}
+                        </option>
+                      ) : null
+                    )}
+                  </select>
+                ) : (
+                  <Input
+                    id="offer-rfq-line-id"
+                    type="number"
+                    className="font-mono"
+                    disabled={isOfferSubmitting}
+                    {...registerOffer("rfq_line_id", {
+                      setValueAs: (v) => (v === "" || Number.isNaN(Number(v)) ? undefined : Number(v)),
+                    })}
+                  />
+                )}
+              </div>
             </div>
+            {offerErrors.varyant_id && (
+              <span className="text-[11px] text-destructive">
+                {offerErrors.varyant_id.message}
+              </span>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
@@ -1109,9 +1177,7 @@ export function SupplierRfqOffersView({
           <DialogHeader>
             <DialogTitle>Özel üretim akışı</DialogTitle>
             <DialogDescription>
-              Montür → taş → talep. Ayar/gram first-class API alanı yok;{" "}
-              <code className="font-mono text-[10px]">aciklama</code> içine
-              kodlanır (GAP-F3-05).
+              Montür ve taş kataloglarından seçim yapabilir veya özel ölçü/ayar bilgisi girebilirsiniz.
             </DialogDescription>
           </DialogHeader>
 
@@ -1146,6 +1212,50 @@ export function SupplierRfqOffersView({
               </select>
             </div>
 
+            {monturlerList.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rfq-montur-select">Montür Kataloğundan Seç (opsiyonel)</Label>
+                <select
+                  id="rfq-montur-select"
+                  className="h-9 w-full rounded-[6px] border border-input bg-background px-2 text-xs"
+                  disabled={isBuyerRfqSubmitting}
+                  defaultValue=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    const [prodIdStr, varIdStr] = val.split(":");
+                    const prod = monturlerList.find((m) => String(m.id) === prodIdStr);
+                    if (prod) {
+                      setBuyerRfqValue("montur_ad", `${prod.ad} (${prod.platform_kodu})`);
+                      if (prod.ayar) {
+                        setBuyerRfqValue("hedef_ayar", prod.ayar);
+                      }
+                    }
+                    if (varIdStr) {
+                      setBuyerRfqValue("montur_varyant_id", varIdStr);
+                      const v = prod?.varyantlar.find((x) => String(x.id) === varIdStr);
+                      if (v?.gram) setBuyerRfqValue("hedef_gram", v.gram);
+                    }
+                  }}
+                >
+                  <option value="">Katalog montürü seçin…</option>
+                  {monturlerList.map((m) =>
+                    m.varyantlar.length > 0 ? (
+                      m.varyantlar.map((v) => (
+                        <option key={`${m.id}-${v.id}`} value={`${m.id}:${v.id}`}>
+                          {m.ad} · {v.sku} {v.gram ? `(${v.gram}g)` : ""}
+                        </option>
+                      ))
+                    ) : (
+                      <option key={m.id} value={`${m.id}:`}>
+                        {m.ad} ({m.platform_kodu})
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="rfq-montur">1. Montür (ad)</Label>
@@ -1171,6 +1281,25 @@ export function SupplierRfqOffersView({
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="rfq-tas">2. Taş seçimi</Label>
+              {taslarList.length > 0 ? (
+                <select
+                  aria-label="Taş kataloğundan seç"
+                  className="h-9 w-full rounded-[6px] border border-input bg-background px-2 text-xs mb-1"
+                  disabled={isBuyerRfqSubmitting}
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    setBuyerRfqValue("tas_ozeti", e.target.value);
+                  }}
+                >
+                  <option value="">Taş kataloğundan seç (opsiyonel)…</option>
+                  {taslarList.map((t) => (
+                    <option key={t.id} value={`${t.ad} (${t.kod})`}>
+                      {t.ad} ({t.kod}) {t.degerli ? "· Değerli" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <Input
                 id="rfq-tas"
                 placeholder="Örn: 0.30ct baget, G-VS"
@@ -1283,6 +1412,15 @@ export function SupplierRfqOffersView({
                       : "—"}
                   </div>
                 </div>
+                {offerDetail.rfq_id ? (
+                  <div className="col-span-2 rounded-[6px] border border-border p-2.5">
+                    <div className="text-[10px] text-muted-foreground">Bağlı RFQ</div>
+                    <div className="font-mono font-semibold">
+                      RFQ #{offerDetail.rfq_id}
+                      {offerDetail.rfq_line_id ? ` · Satır #${offerDetail.rfq_line_id}` : ""}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <form onSubmit={handleCreateOfferVersion} className="space-y-3 border-t pt-3">

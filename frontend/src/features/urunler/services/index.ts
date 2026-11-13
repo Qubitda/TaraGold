@@ -2,11 +2,13 @@ import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type {
   BuyerCatalogPage,
   BuyerCatalogDetail,
+  MonturlerPage,
   OpsProduct,
   OpsProductPage,
   OpsProductCreateRequest,
   OpsProductVariant,
   OpsProductVariantCreateRequest,
+  TaslarPage,
 } from "../types";
 
 function qs(params?: Record<string, string | undefined>): string {
@@ -25,6 +27,12 @@ export const urunlerService = {
   },
   getProductDetail(id: number | string): Promise<BuyerCatalogDetail> {
     return apiFetch<BuyerCatalogDetail>(`/catalog/${id}/`);
+  },
+  getMonturler(params?: Record<string, string | undefined>): Promise<MonturlerPage> {
+    return apiFetch<MonturlerPage>(`/catalog/monturler/${qs(params)}`);
+  },
+  getTaslar(params?: Record<string, string | undefined>): Promise<TaslarPage> {
+    return apiFetch<TaslarPage>(`/catalog/taslar/${qs(params)}`);
   },
 
   getOpsProducts(params?: Record<string, string | undefined>): Promise<OpsProductPage> {

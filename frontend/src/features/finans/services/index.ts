@@ -15,6 +15,7 @@ import type {
   OpsHakEdisRow,
   OpsLedgerRow,
   OpsPaymentRow,
+  PaymentIntent,
 } from "../types";
 
 export const finansService = {
@@ -48,6 +49,13 @@ export const finansService = {
   getLedger(params?: Record<string, string>): Promise<Paginated<LedgerEntry>> {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return apiFetch<Paginated<LedgerEntry>>(`/finance/ledger/${query}`);
+  },
+  createPaymentIntent(orderId: number): Promise<PaymentIntent> {
+    return apiFetch<PaymentIntent>("/payments/intents/", {
+      method: "POST",
+      body: { order_id: orderId },
+      idempotencyKey: newIdempotencyKey(),
+    });
   },
   getOpsFinance(): Promise<OpsFinanceSummary> {
     return apiFetch<OpsFinanceSummary>("/ops/finance/");

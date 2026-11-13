@@ -210,7 +210,7 @@ class OpsInspectionCancelView(_OpsInspectionTransitionView):
 
 
 class OpsInspectionMeasurementCreateView(IdempotencyMixin, APIView):
-    """POST /ops/inspections/<pk>/measurements/ — {order_line_id, olculen, override_gerekce?}."""
+    """POST /ops/inspections/<pk>/measurements/ — {order_line_id, olculen?, ayar?, gram?, olculen_ayar?, olculen_gram?, override_gerekce?}."""
 
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [OpsRateThrottle]
@@ -221,24 +221,54 @@ class OpsInspectionMeasurementCreateView(IdempotencyMixin, APIView):
         if cached is not None:
             return cached
         insp = _get_inspection(pk)
+        body = request.data if isinstance(request.data, dict) else {}
         try:
-            lid = int(request.data.get("order_line_id"))
+            lid = int(body.get("order_line_id"))
         except (TypeError, ValueError) as exc:
             raise ValidationError(detail={"order_line_id": "Geçersiz."}) from exc
         line = OrderLine.objects.filter(pk=lid, order_id=insp.order_id).first()
         if line is None:
             raise NotFound(detail="Sipariş satırı bulunamadı.")
-        try:
-            olculen = Decimal(str(request.data.get("olculen")))
-        except (InvalidOperation, TypeError) as exc:
-            raise ValidationError(detail={"olculen": "Geçersiz."}) from exc
+
+        raw_ayar = body.get("olculen_ayar")
+        if raw_ayar in (None, ""):
+            raw_ayar = body.get("ayar")
+        raw_gram = body.get("olculen_gram")
+        if raw_gram in (None, ""):
+            raw_gram = body.get("gram")
+
+        olculen_ayar = None
+        if raw_ayar not in (None, ""):
+            try:
+                olculen_ayar = Decimal(str(raw_ayar))
+            except (InvalidOperation, TypeError, ValueError) as exc:
+                raise ValidationError(detail={"ayar": "Geçersiz."}) from exc
+
+        olculen_gram = None
+        if raw_gram not in (None, ""):
+            try:
+                olculen_gram = Decimal(str(raw_gram))
+            except (InvalidOperation, TypeError, ValueError) as exc:
+                raise ValidationError(detail={"gram": "Geçersiz."}) from exc
+
+        raw_olculen = body.get("olculen")
+        if raw_olculen in (None, "") and olculen_gram is not None:
+            olculen = olculen_gram
+        else:
+            try:
+                olculen = Decimal(str(raw_olculen))
+            except (InvalidOperation, TypeError, ValueError) as exc:
+                raise ValidationError(detail={"olculen": "Geçersiz."}) from exc
+
         try:
             m = olcum_servisi.kaydet_olcum(
                 actor=request.user,
                 inspection=insp,
                 order_line=line,
                 olculen=olculen,
-                override_gerekce=request.data.get("override_gerekce") or "",
+                olculen_ayar=olculen_ayar,
+                olculen_gram=olculen_gram,
+                override_gerekce=body.get("override_gerekce") or "",
             )
         except (DjangoPermissionDenied, DjangoValidationError) as exc:
             raise_drf(exc)

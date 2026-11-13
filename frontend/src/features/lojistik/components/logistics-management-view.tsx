@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import {
   useApproveReturnMutation,
+  useBuyerShipmentPodQuery,
   useBuyerShipmentsQuery,
   useCancelReturnMutation,
   useCancelShipmentMutation,
@@ -18,6 +19,7 @@ import {
   usePrepareShipmentMutation,
   useRejectReturnMutation,
   useReturnsQuery,
+  useSubmitBuyerPodMutation,
   useSubmitPodMutation,
   useSubmitReturnMutation,
 } from "../hooks";
@@ -74,6 +76,8 @@ import {
   Plus,
   Eye,
   XCircle,
+  Download,
+  FileText,
 } from "lucide-react";
 
 export function LogisticsManagementView() {
@@ -100,6 +104,7 @@ export function LogisticsManagementView() {
   const deliverMut = useDeliverShipmentMutation();
   const cancelMut = useCancelShipmentMutation();
   const podMut = useSubmitPodMutation();
+  const submitBuyerPodMut = useSubmitBuyerPodMutation();
 
   const createReturnMut = useCreateReturnMutation();
   const submitReturnMut = useSubmitReturnMutation();
@@ -115,8 +120,18 @@ export function LogisticsManagementView() {
     OpsShipment | BuyerShipment | null
   >(null);
 
+  const [buyerPodShipmentId, setBuyerPodShipmentId] = useState<number | null>(
+    null
+  );
+  const [downloadingPod, setDownloadingPod] = useState(false);
+  const buyerPodQ = useBuyerShipmentPodQuery(
+    buyerPodShipmentId,
+    buyerPodShipmentId !== null
+  );
+
   const [shipDetailOpen, setShipDetailOpen] = useState(false);
   const [shipDetailLoading, setShipDetailLoading] = useState(false);
+  const [shipDetailError, setShipDetailError] = useState<string | null>(null);
   const [shipDetailData, setShipDetailData] = useState<
     OpsShipment | BuyerShipment | null
   >(null);
@@ -129,6 +144,10 @@ export function LogisticsManagementView() {
 
   const [returnDetailOpen, setReturnDetailOpen] = useState(false);
   const [returnDetailLoading, setReturnDetailLoading] = useState(false);
+  const [returnDetailError, setReturnDetailError] = useState<string | null>(null);
+  const [returnDetailTargetId, setReturnDetailTargetId] = useState<number | null>(
+    null
+  );
   const [returnDetailData, setReturnDetailData] =
     useState<BuyerReturnDetail | null>(null);
 
@@ -171,11 +190,14 @@ export function LogisticsManagementView() {
   const activeShipmentsQ = canManageShipment ? opsShipmentsQ : buyerShipmentsQ;
   const shipments = activeShipmentsQ.data ?? [];
   const returns = returnsQ.data ?? [];
-  const loading = activeShipmentsQ.isLoading || returnsQ.isLoading;
+  const loading =
+    activeTab === "shipments" ? activeShipmentsQ.isLoading : returnsQ.isLoading;
   const error =
-    activeShipmentsQ.isError && returnsQ.isError
-      ? mapCommerceError(activeShipmentsQ.error, "Lojistik verileri alınamadı.")
-      : null;
+    activeTab === "shipments" && activeShipmentsQ.isError
+      ? mapCommerceError(activeShipmentsQ.error, "Sevkiyat verileri alınamadı.")
+      : activeTab === "returns" && returnsQ.isError
+        ? mapCommerceError(returnsQ.error, "İade verileri alınamadı.")
+        : null;
 
   const refetchAll = () => {
     void activeShipmentsQ.refetch();
@@ -194,6 +216,7 @@ export function LogisticsManagementView() {
   const openShipmentDetail = async (id: number) => {
     setShipDetailOpen(true);
     setShipDetailLoading(true);
+    setShipDetailError(null);
     setShipDetailData(null);
     try {
       const detail = canManageShipment
@@ -201,8 +224,9 @@ export function LogisticsManagementView() {
         : await lojistikService.getBuyerShipmentDetail(id);
       setShipDetailData(detail);
     } catch (err) {
+      const msg = mapCommerceError(err, "Sevkiyat detayı alınamadı.");
+      setShipDetailError(msg);
       actionToast.error("Sevkiyat detayı alınamadı", err);
-      setShipDetailOpen(false);
     } finally {
       setShipDetailLoading(false);
     }
@@ -211,13 +235,16 @@ export function LogisticsManagementView() {
   const openReturnDetail = async (id: number) => {
     setReturnDetailOpen(true);
     setReturnDetailLoading(true);
+    setReturnDetailError(null);
+    setReturnDetailTargetId(id);
     setReturnDetailData(null);
     try {
       const detail = await lojistikService.getReturnDetail(id);
       setReturnDetailData(detail);
     } catch (err) {
+      const msg = mapCommerceError(err, "İade detayı alınamadı.");
+      setReturnDetailError(msg);
       actionToast.error("İade detayı alınamadı", err);
-      setReturnDetailOpen(false);
     } finally {
       setReturnDetailLoading(false);
     }
@@ -247,6 +274,7 @@ export function LogisticsManagementView() {
         id: selectedShipment.id,
         data: {
           kargo_firma: formData.kargo_firma,
+          tasiyici: formData.kargo_firma,
           takip_no: formData.takip_no,
         },
       });
@@ -276,6 +304,39 @@ export function LogisticsManagementView() {
       podForm.reset();
     } catch (err) {
       actionToast.error("POD kaydedilemedi", err);
+    }
+  };
+
+  const onBuyerPodSubmit = async (formData: ShipmentPodInput) => {
+    if (buyerPodShipmentId == null) return;
+    try {
+      await submitBuyerPodMut.mutateAsync({
+        id: buyerPodShipmentId,
+        data: {
+          teslim_alan: formData.teslim_alan,
+          ...(formData.notlar ? { notlar: formData.notlar } : {}),
+          ...(formData.belgeler_ref
+            ? { belgeler_ref: formData.belgeler_ref }
+            : {}),
+        },
+      });
+      actionToast.success("Teslimat kanıtı (POD) onaylandı");
+      podForm.reset();
+      void buyerPodQ.refetch();
+    } catch (err) {
+      actionToast.error("Teslimat kanıtı kaydedilemedi", err);
+    }
+  };
+
+  const handleDownloadPod = async (shipmentId: number) => {
+    setDownloadingPod(true);
+    try {
+      await lojistikService.downloadBuyerShipmentPod(shipmentId);
+      actionToast.success("POD belgesi indirildi");
+    } catch (err) {
+      actionToast.error("POD belgesi indirilemedi", err);
+    } finally {
+      setDownloadingPod(false);
     }
   };
 
@@ -370,7 +431,7 @@ export function LogisticsManagementView() {
               Yeni Sevkiyat
             </Button>
           )}
-          {activeTab === "returns" && canManageReturn && (
+          {activeTab === "returns" && (canManageReturn || !canManageShipment) && (
             <Button
               size="sm"
               onClick={() => setCreateReturnOpen(true)}
@@ -457,6 +518,7 @@ export function LogisticsManagementView() {
                 <TableRow>
                   <TableHead className="w-[100px]">Sevkiyat ID</TableHead>
                   <TableHead>Sipariş Ref</TableHead>
+                  <TableHead>Taşıyıcı / Takip</TableHead>
                   <TableHead>Model / Yön</TableHead>
                   <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
@@ -467,6 +529,11 @@ export function LogisticsManagementView() {
                   const actions = s.allowed_actions || [];
                   const canPod =
                     actions.includes("pod") || actions.includes("add_pod");
+                  const canBuyerPod =
+                    actions.includes("view_pod") ||
+                    actions.includes("confirm_pod") ||
+                    Boolean(s.pod);
+                  const carrierLabel = s.tasiyici || s.kargo_firma;
                   return (
                     <TableRow key={s.id}>
                       <TableCell className="font-mono text-xs font-semibold tabular-nums">
@@ -474,6 +541,22 @@ export function LogisticsManagementView() {
                       </TableCell>
                       <TableCell className="font-mono text-xs tabular-nums">
                         {s.order_id != null ? `Sipariş #${s.order_id}` : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {carrierLabel || s.takip_no ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {carrierLabel || "—"}
+                            </span>
+                            {s.takip_no && (
+                              <span className="font-mono text-[11px] text-muted-foreground">
+                                {s.takip_no}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-[11px] text-muted-foreground">
                         {s.teslim_modeli || "PLATFORM_QC"}
@@ -504,6 +587,43 @@ export function LogisticsManagementView() {
                             <Eye className="h-3.5 w-3.5" />
                             Detay
                           </Button>
+                          {canBuyerPod && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                podForm.reset();
+                                setBuyerPodShipmentId(s.id);
+                              }}
+                              className="h-8 text-xs gap-1"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              {actions.includes("confirm_pod") && !s.pod
+                                ? "Teslimatı Onayla (POD)"
+                                : "POD"}
+                            </Button>
+                          )}
+                          {!canManageShipment &&
+                            actions.includes("request_return") &&
+                            s.order_id != null && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  createReturnForm.setValue(
+                                    "order_id",
+                                    s.order_id!
+                                  );
+                                  createReturnForm.setValue("shipment_id", s.id);
+                                  setActiveTab("returns");
+                                  setCreateReturnOpen(true);
+                                }}
+                                className="h-8 text-xs gap-1"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                İade Talebi
+                              </Button>
+                            )}
                           {canManageShipment && actions.includes("prepare") && (
                             <Button
                               variant="outline"
@@ -851,6 +971,10 @@ export function LogisticsManagementView() {
               <RefreshCw className="h-4 w-4 animate-spin" />
               <span>Sevkiyat detayı yükleniyor…</span>
             </div>
+          ) : shipDetailError ? (
+            <div className="rounded-[6px] border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              {shipDetailError}
+            </div>
           ) : shipDetailData ? (
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2 rounded-[6px] border border-border p-3">
@@ -874,7 +998,7 @@ export function LogisticsManagementView() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Taşıyıcı Firma</span>
-                  <p>{shipDetailData.kargo_firma || "—"}</p>
+                  <p>{shipDetailData.tasiyici || shipDetailData.kargo_firma || "—"}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Teslim Modeli</span>
@@ -897,7 +1021,20 @@ export function LogisticsManagementView() {
               </div>
               {shipDetailData.pod && (
                 <div className="rounded-[6px] border border-border bg-muted/30 p-3 space-y-1">
-                  <p className="font-semibold">Teslimat Kanıtı (POD)</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">Teslimat Kanıtı (POD)</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadingPod}
+                      onClick={() => void handleDownloadPod(shipDetailData.id)}
+                      className="h-7 text-[11px] gap-1"
+                    >
+                      <Download className="h-3 w-3" />
+                      {downloadingPod ? "İndiriliyor…" : "POD İndir (.txt)"}
+                    </Button>
+                  </div>
                   <p>
                     Teslim Alan:{" "}
                     <span className="font-medium">
@@ -914,7 +1051,19 @@ export function LogisticsManagementView() {
                   )}
                 </div>
               )}
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const sid = shipDetailData.id;
+                    setShipDetailOpen(false);
+                    podForm.reset();
+                    setBuyerPodShipmentId(sid);
+                  }}
+                >
+                  POD Sayfası
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1250,6 +1399,30 @@ export function LogisticsManagementView() {
               <RefreshCw className="h-4 w-4 animate-spin" />
               <span>İade detayı yükleniyor…</span>
             </div>
+          ) : returnDetailError ? (
+            <div className="space-y-3">
+              <div className="rounded-[6px] border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {returnDetailError}
+              </div>
+              <div className="flex justify-end gap-2">
+                {returnDetailTargetId != null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void openReturnDetail(returnDetailTargetId)}
+                  >
+                    Yeniden Dene
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReturnDetailOpen(false)}
+                >
+                  Kapat
+                </Button>
+              </div>
+            </div>
           ) : returnDetailData ? (
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2 rounded-[6px] border border-border p-3">
@@ -1281,9 +1454,15 @@ export function LogisticsManagementView() {
                   </p>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-muted-foreground">Sebep</span>
-                  <p>{returnDetailData.sebep || "—"}</p>
+                  <span className="text-muted-foreground">İade Sebebi</span>
+                  <p>{returnDetailData.iade_sebebi || returnDetailData.sebep || "—"}</p>
                 </div>
+                {returnDetailData.notlar && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Notlar</span>
+                    <p>{returnDetailData.notlar}</p>
+                  </div>
+                )}
                 <div>
                   <span className="text-muted-foreground">Stok İade</span>
                   <p className="font-mono">
@@ -1294,6 +1473,9 @@ export function LogisticsManagementView() {
                   <span className="text-muted-foreground">Finans Mahsup</span>
                   <p className="font-mono">
                     {returnDetailData.finans_mahsup_yapildi ? "EVET" : "HAYIR"}
+                    {returnDetailData.mahsup_tutari
+                      ? ` (${returnDetailData.mahsup_tutari})`
+                      : ""}
                   </p>
                 </div>
               </div>
@@ -1317,7 +1499,7 @@ export function LogisticsManagementView() {
                             #{ln.order_line_id}
                           </TableCell>
                           <TableCell className="text-right font-mono tabular-nums">
-                            {ln.miktar}
+                            {ln.miktar} {ln.birim || ""}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1325,7 +1507,88 @@ export function LogisticsManagementView() {
                   </Table>
                 </div>
               )}
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(returnDetailData.allowed_actions?.includes("submit") ||
+                    returnDetailData.allowed_actions?.includes("submit_review")) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={submitReturnMut.isPending}
+                      onClick={() =>
+                        void runAction("İade incelemeye gönderildi", async () => {
+                          await submitReturnMut.mutateAsync(returnDetailData.id);
+                          await openReturnDetail(returnDetailData.id);
+                        })
+                      }
+                      className="h-8 text-xs"
+                    >
+                      İncelemeye Gönder
+                    </Button>
+                  )}
+                  {returnDetailData.allowed_actions?.includes("approve") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={approveMut.isPending}
+                      onClick={() =>
+                        void runAction("İade onaylandı", async () => {
+                          await approveMut.mutateAsync(returnDetailData.id);
+                          await openReturnDetail(returnDetailData.id);
+                        })
+                      }
+                      className="h-8 text-xs"
+                    >
+                      Onayla
+                    </Button>
+                  )}
+                  {returnDetailData.allowed_actions?.includes("reject") && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={rejectReturnMut.isPending}
+                      onClick={() => {
+                        setRejectTargetId(returnDetailData.id);
+                        setRejectReason("");
+                      }}
+                      className="h-8 text-xs"
+                    >
+                      Reddet
+                    </Button>
+                  )}
+                  {returnDetailData.allowed_actions?.includes("cancel") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={cancelReturnMut.isPending}
+                      onClick={() =>
+                        void runAction("İade iptal edildi", async () => {
+                          await cancelReturnMut.mutateAsync(returnDetailData.id);
+                          await openReturnDetail(returnDetailData.id);
+                        })
+                      }
+                      className="h-8 text-xs"
+                    >
+                      İptal Et
+                    </Button>
+                  )}
+                  {returnDetailData.allowed_actions?.includes("mahsup") && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={mahsupMut.isPending}
+                      onClick={() =>
+                        void runAction("İade mahsup edildi", async () => {
+                          await mahsupMut.mutateAsync(returnDetailData.id);
+                          await openReturnDetail(returnDetailData.id);
+                        })
+                      }
+                      className="h-8 text-xs"
+                    >
+                      Mahsup Et
+                    </Button>
+                  )}
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1334,6 +1597,181 @@ export function LogisticsManagementView() {
                   Kapat
                 </Button>
               </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Alıcı Self-Service POD Görüntüleme / İndirme / Onay Dialog (/shipments/<id>/pod/) */}
+      <Dialog
+        open={buyerPodShipmentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setBuyerPodShipmentId(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Teslimat Kanıtı / POD{" "}
+              {buyerPodShipmentId != null ? `(SHP-#${buyerPodShipmentId})` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              GET/POST /shipments/&#123;id&#125;/pod/ — teslimat tutanağını görüntüleyin,
+              indirin veya teslimatı onaylayın.
+            </DialogDescription>
+          </DialogHeader>
+          {buyerPodQ.isLoading ? (
+            <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>POD bilgisi yükleniyor…</span>
+            </div>
+          ) : buyerPodQ.isError ? (
+            <div className="space-y-3">
+              <div className="rounded-[6px] border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {mapCommerceError(buyerPodQ.error, "POD bilgisi alınamadı.")}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void buyerPodQ.refetch()}
+                >
+                  Yeniden Dene
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBuyerPodShipmentId(null)}
+                >
+                  Kapat
+                </Button>
+              </div>
+            </div>
+          ) : buyerPodQ.data ? (
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-2 rounded-[6px] border border-border p-3">
+                <div>
+                  <span className="text-muted-foreground">Sipariş No</span>
+                  <p className="font-mono font-semibold">
+                    #{buyerPodQ.data.order_id}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Sevkiyat Durumu</span>
+                  <p className="font-mono">{buyerPodQ.data.durum}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Taşıyıcı</span>
+                  <p>{buyerPodQ.data.tasiyici || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Takip No</span>
+                  <p className="font-mono">{buyerPodQ.data.takip_no || "—"}</p>
+                </div>
+              </div>
+
+              {buyerPodQ.data.has_pod && buyerPodQ.data.pod ? (
+                <div className="rounded-[6px] border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">
+                      POD Kaydı Mevcut
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={downloadingPod}
+                      onClick={() =>
+                        void handleDownloadPod(buyerPodQ.data.shipment_id)
+                      }
+                      className="h-7 text-xs gap-1"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {downloadingPod ? "İndiriliyor…" : "POD İndir (.txt)"}
+                    </Button>
+                  </div>
+                  <p>
+                    Teslim Alan:{" "}
+                    <span className="font-medium">
+                      {buyerPodQ.data.pod.teslim_alan || "—"}
+                    </span>
+                  </p>
+                  {buyerPodQ.data.pod.belgeler_ref && (
+                    <p className="font-mono">
+                      Belge Ref: {buyerPodQ.data.pod.belgeler_ref}
+                    </p>
+                  )}
+                  {buyerPodQ.data.pod.notlar && (
+                    <p>Not: {buyerPodQ.data.pod.notlar}</p>
+                  )}
+                  {buyerPodQ.data.pod.olusturma_tarihi && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Kayıt: {formatDateTime(buyerPodQ.data.pod.olusturma_tarihi)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <form
+                  onSubmit={podForm.handleSubmit(onBuyerPodSubmit)}
+                  className="space-y-3 rounded-[6px] border border-border p-3"
+                >
+                  <p className="font-medium text-foreground">
+                    Henüz POD kaydı yok — Teslimatı Onayla
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="buyer-pod-alan">Teslim Alan *</Label>
+                    <Input
+                      id="buyer-pod-alan"
+                      placeholder="Ad Soyad"
+                      disabled={submitBuyerPodMut.isPending}
+                      {...podForm.register("teslim_alan")}
+                    />
+                    {podForm.formState.errors.teslim_alan && (
+                      <span className="text-[11px] text-destructive">
+                        {podForm.formState.errors.teslim_alan.message}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="buyer-pod-not">Notlar</Label>
+                    <Input
+                      id="buyer-pod-not"
+                      placeholder="Opsiyonel teslimat notu"
+                      disabled={submitBuyerPodMut.isPending}
+                      {...podForm.register("notlar")}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="buyer-pod-ref">Belge Ref</Label>
+                    <Input
+                      id="buyer-pod-ref"
+                      className="font-mono"
+                      placeholder="Opsiyonel referans"
+                      disabled={submitBuyerPodMut.isPending}
+                      {...podForm.register("belgeler_ref")}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBuyerPodShipmentId(null)}
+                    >
+                      Kapat
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={submitBuyerPodMut.isPending}
+                    >
+                      {submitBuyerPodMut.isPending
+                        ? "Onaylanıyor…"
+                        : "Teslimatı Onayla (POD)"}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           ) : null}
         </DialogContent>

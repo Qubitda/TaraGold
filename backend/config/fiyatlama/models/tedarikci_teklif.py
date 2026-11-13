@@ -121,6 +121,22 @@ class TedarikciTeklif(models.Model):
         related_name="eslestirme_teklifleri",
         help_text="Eşleştirme önerisinin hedef katalog ürünü (ADR-0005).",
     )
+    rfq = models.ForeignKey(
+        "siparis.RFQ",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tedarikci_teklifleri",
+        help_text="GAP-F3-06: teklifin yanıtladığı RFQ.",
+    )
+    rfq_line = models.ForeignKey(
+        "siparis.RFQLine",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tedarikci_teklifleri",
+        help_text="GAP-F3-06: teklifin yanıtladığı RFQ satırı.",
+    )
     olusturma_tarihi = models.DateTimeField(auto_now_add=True)
     guncelleme_tarihi = models.DateTimeField(auto_now=True)
 

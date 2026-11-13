@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth";
-import { belgelerService } from "../services";
+import { belgelerService, type DocumentsFilter } from "../services";
 import type { BelgeAyarlari, PodAttachRequest } from "../types";
 
 export const belgelerKeys = {
   all: ["belgeler"] as const,
-  list: (capKey: string) => [...belgelerKeys.all, "list", capKey] as const,
+  list: (capKey: string, tip?: string, orderId?: string) =>
+    [...belgelerKeys.all, "list", capKey, tip || "all", orderId || ""] as const,
   opsShipments: () => [...belgelerKeys.all, "ops-shipments"] as const,
   ayarlar: () => [...belgelerKeys.all, "ayarlar"] as const,
 };
@@ -20,19 +21,19 @@ function capKey(caps: Record<string, boolean> | null | undefined): string {
     .join(",");
 }
 
-export function useDocumentsQuery(enabled = true) {
+export function useDocumentsQuery(enabled = true, filters?: DocumentsFilter) {
   const { user } = useAuth();
   const key = capKey(user?.capabilities as Record<string, boolean> | undefined);
   return useQuery({
-    queryKey: belgelerKeys.list(key),
-    queryFn: () => belgelerService.getDocuments(user?.capabilities),
+    queryKey: belgelerKeys.list(key, filters?.tip, filters?.order_id),
+    queryFn: () => belgelerService.getDocuments(user?.capabilities, filters),
     enabled: enabled && Boolean(user),
   });
 }
 
 /** Belgeler ekranı uyumluluk sarmalayıcısı. */
-export function useDocuments() {
-  const q = useDocumentsQuery();
+export function useDocuments(filters?: DocumentsFilter) {
+  const q = useDocumentsQuery(true, filters);
   const snap = q.data;
   const failKeys = snap ? Object.keys(snap.errors) : [];
   const aggregateError =

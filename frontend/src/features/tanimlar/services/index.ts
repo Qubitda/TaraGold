@@ -1,5 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
-import type { SalesChannel, SalesChannelPage } from "../types";
+import type {
+  OpsDefinitionKaynak,
+  OpsDefinitionRow,
+  OpsDefinitionsPage,
+  SalesChannel,
+  SalesChannelPage,
+} from "../types";
 
 function normalizeSalesChannelPage(
   data: SalesChannelPage | SalesChannel[] | null | undefined
@@ -35,4 +41,44 @@ export const tanimlarService = {
   listSalesChannels(): Promise<SalesChannel[]> {
     return this.getSalesChannels();
   },
+
+  getOpsDefinitions(
+    kaynak: OpsDefinitionKaynak,
+    includeRefs = true
+  ): Promise<OpsDefinitionsPage> {
+    const q = includeRefs ? "?include_refs=1" : "";
+    return apiFetch<OpsDefinitionsPage>(`/ops/definitions/${kaynak}/${q}`);
+  },
+
+  createOpsDefinition(
+    kaynak: OpsDefinitionKaynak,
+    body: Record<string, unknown>
+  ): Promise<OpsDefinitionRow> {
+    return apiFetch<OpsDefinitionRow>(`/ops/definitions/${kaynak}/`, {
+      method: "POST",
+      body,
+    });
+  },
+
+  updateOpsDefinition(
+    kaynak: OpsDefinitionKaynak,
+    id: number | string,
+    body: Record<string, unknown>
+  ): Promise<OpsDefinitionRow> {
+    return apiFetch<OpsDefinitionRow>(`/ops/definitions/${kaynak}/${id}/`, {
+      method: "PATCH",
+      body,
+    });
+  },
+
+  deleteOpsDefinition(
+    kaynak: OpsDefinitionKaynak,
+    id: number | string
+  ): Promise<{ deleted: boolean; id: number; kaynak: string }> {
+    return apiFetch<{ deleted: boolean; id: number; kaynak: string }>(
+      `/ops/definitions/${kaynak}/${id}/`,
+      { method: "DELETE" }
+    );
+  },
 };
+

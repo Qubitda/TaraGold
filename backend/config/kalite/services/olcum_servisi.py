@@ -108,6 +108,8 @@ def kaydet_olcum(
     inspection: QualityInspection,
     order_line: OrderLine,
     olculen: Decimal,
+    olculen_ayar: Decimal | None = None,
+    olculen_gram: Decimal | None = None,
     override_gerekce: str = "",
 ) -> QualityMeasurement:
     """Ölçüm yazar; tolerans dışı → otomatik FAIL (override yoksa)."""
@@ -163,6 +165,8 @@ def kaydet_olcum(
             birim=order_line.birim,
             beklenen=sonuc.beklenen,
             olculen=sonuc.olculen,
+            olculen_ayar=olculen_ayar,
+            olculen_gram=olculen_gram,
             sapma_abs=sonuc.sapma_abs,
             tolerans_pct=sonuc.tolerans_pct,
             tolerans_abs=sonuc.tolerans_abs,
@@ -183,6 +187,8 @@ def kaydet_olcum(
             "order_line_id": order_line.pk,
             "beklenen": str(m.beklenen),
             "olculen": str(m.olculen),
+            "olculen_ayar": str(m.olculen_ayar) if m.olculen_ayar is not None else None,
+            "olculen_gram": str(m.olculen_gram) if m.olculen_gram is not None else None,
             "sonuc": m.sonuc,
             "override": use_override,
         }

@@ -38,6 +38,13 @@ class ReturnRequest(models.Model):
         default=False,
         help_text="F5-023: mahsup ledger yazıldı mı (ödeme iadesi yok).",
     )
+    mahsup_tutari = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="GAP-F4-04: mahsup edilen veya hesaplanan iade tutarı.",
+    )
     notlar = models.CharField(max_length=255, blank=True)
     # HTTP Idempotency-Key domain yedekleri (crash sonrası replay)
     idempotency_key = models.CharField(max_length=64, blank=True, default="")

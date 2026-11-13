@@ -79,6 +79,16 @@ export function useLedgerQuery(enabled = true) {
   });
 }
 
+export function useCreatePaymentIntentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: number) => finansService.createPaymentIntent(orderId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: finansKeys.all });
+    },
+  });
+}
+
 export function useOpsFinanceQuery(enabled = false) {
   return useQuery({
     queryKey: finansKeys.ops(),

@@ -23,13 +23,14 @@ from api.presenters.supplier import (
     present_movement,
     present_offer,
     present_rfq_supplier,
+    present_warehouse,
 )
 from api.throttles import SupplierRateThrottle
 from fiyatlama.models import TedarikciTeklif
 from fiyatlama.services import teklif_servisi
 from firmalar.role_permissions import P
 from firmalar.services.yetki_servisi import can_view_all_tenants, has_perm
-from siparis.models import RFQ
+from siparis.models import RFQ, RFQLine
 from siparis.selectors.rfq import (
     RFQNotFound,
     get_supplier_rfq_for_actor,
@@ -170,6 +171,38 @@ class SupplierOfferListView(IdempotencyMixin, APIView):
                 raise ValidationError(
                     detail={"uretim_suresi_gun": "Tam sayı gerekir."}
                 ) from exc
+
+        rfq_obj = None
+        rfq_line_obj = None
+        if body.get("rfq_id") not in (None, ""):
+            try:
+                rfq_pk = int(body.get("rfq_id"))
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(detail={"rfq_id": "Geçersiz tam sayı."}) from exc
+            try:
+                rfq_obj = get_supplier_rfq_for_actor(request.user, rfq_id=rfq_pk)
+            except RFQNotFound as exc:
+                raise ValidationError(detail={"rfq_id": "RFQ bulunamadı."}) from exc
+        if body.get("rfq_line_id") not in (None, ""):
+            try:
+                rfq_line_pk = int(body.get("rfq_line_id"))
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(detail={"rfq_line_id": "Geçersiz tam sayı."}) from exc
+            rfq_line_obj = RFQLine.objects.select_related("rfq").filter(pk=rfq_line_pk).first()
+            if rfq_line_obj is None:
+                raise ValidationError(detail={"rfq_line_id": "RFQ satırı bulunamadı."})
+            if rfq_obj is None:
+                try:
+                    rfq_obj = get_supplier_rfq_for_actor(
+                        request.user, rfq_id=rfq_line_obj.rfq_id
+                    )
+                except RFQNotFound as exc:
+                    raise ValidationError(detail={"rfq_line_id": "RFQ satırı bulunamadı."}) from exc
+            elif rfq_line_obj.rfq_id != rfq_obj.pk:
+                raise ValidationError(
+                    detail={"rfq_line_id": "RFQ satırı bu RFQ ile eşleşmiyor."}
+                )
+
         try:
             teklif = teklif_servisi.taslak_olustur(
                 request.user,
@@ -184,6 +217,8 @@ class SupplierOfferListView(IdempotencyMixin, APIView):
                 uretim_suresi_gun=gun_v,
                 iscilik_override=iscilik,
                 para_birimi=str(body.get("para_birimi") or "TRY"),
+                rfq=rfq_obj,
+                rfq_line=rfq_line_obj,
             )
         except (DjangoValidationError, DjangoPermissionDenied) as exc:
             raise_drf(exc)
@@ -304,6 +339,31 @@ class SupplierOfferVersionView(IdempotencyMixin, APIView):
                 status=status.HTTP_201_CREATED,
             ),
         )
+
+
+class SupplierWarehouseListView(APIView):
+    """GAP-F4-03 — GET /api/v1/supplier/warehouses/ (tedarikçi depoları)."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [SupplierRateThrottle]
+
+    def get(self, request):
+        _require_supplier(request.user)
+        request.query_params.get("firma_id")  # ignore
+        qs = Warehouse.objects.all()
+        if can_view_all_tenants(request.user):
+            ops_ted = _parse_ops_tedarikci_id(request)
+            if ops_ted is not None:
+                qs = qs.filter(sahip_firma_id=ops_ted)
+        else:
+            qs = qs.filter(sahip_firma_id=request.user.firma_id)
+        aktif_raw = (request.query_params.get("aktif") or "").strip().lower()
+        if aktif_raw in ("1", "true"):
+            qs = qs.filter(aktif=True)
+        elif aktif_raw in ("0", "false"):
+            qs = qs.filter(aktif=False)
+        qs = apply_ordering(qs, request, whitelist=("pk", "kod", "ad"), default="kod")
+        return paginate_queryset(request, qs, present=present_warehouse)
 
 
 class SupplierStockSummaryView(APIView):

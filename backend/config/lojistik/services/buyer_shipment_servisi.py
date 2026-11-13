@@ -65,6 +65,11 @@ def present_shipment(ship: Shipment) -> dict:
         "teslim_modeli": getattr(ship, "teslim_modeli", "PLATFORM_QC"),
         "sevk_yonu": getattr(ship, "sevk_yonu", "PLATFORM_TO_ALICI"),
         "kargo_firma": getattr(ship, "kargo_firma", "") or "",
+        "tasiyici": (
+            ship.tasiyici
+            if getattr(ship, "tasiyici", None) is not None
+            else (getattr(ship, "kargo_firma", "") or None)
+        ),
         "takip_no": ship.takip_no,
         "olusturma_tarihi": ship.olusturma_tarihi.isoformat()
         if ship.olusturma_tarihi

@@ -120,10 +120,11 @@ def iade_mahsup(*, actor, return_request: ReturnRequest) -> LedgerEntry | None:
         raise
 
     return_request.finans_mahsup_yapildi = True
+    return_request.mahsup_tutari = tutar
     return_request._allow_status_transition = True
     try:
         return_request.save(
-            update_fields=["finans_mahsup_yapildi", "guncelleme_tarihi"]
+            update_fields=["finans_mahsup_yapildi", "mahsup_tutari", "guncelleme_tarihi"]
         )
     finally:
         return_request._allow_status_transition = False

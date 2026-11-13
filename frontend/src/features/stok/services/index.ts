@@ -1,8 +1,26 @@
 import { apiFetch, newIdempotencyKey, unwrapResults } from "@/lib/api/client";
 import type { Paginated } from "@/lib/api/types";
-import type { StockAdjustmentRequest, StockBalance } from "../types";
+import type {
+  StockAdjustmentRequest,
+  StockBalance,
+  SupplierWarehouse,
+} from "../types";
 
 export const stokService = {
+  getWarehouses(
+    params?: Record<string, string>
+  ): Promise<Paginated<SupplierWarehouse>> {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return apiFetch<Paginated<SupplierWarehouse>>(
+      `/supplier/warehouses/${query}`
+    );
+  },
+  async listWarehouses(
+    params?: Record<string, string>
+  ): Promise<SupplierWarehouse[]> {
+    const page = await this.getWarehouses(params);
+    return unwrapResults(page);
+  },
   getSupplierStock(
     params?: Record<string, string>
   ): Promise<Paginated<StockBalance>> {
@@ -26,3 +44,4 @@ export const stokService = {
     });
   },
 };
+

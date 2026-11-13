@@ -42,9 +42,10 @@ REASON_REQUEST = _obj({"reason": _str(description="Red/fail gerekçesi")})
 TAKIP_NO_REQUEST = _obj(
     {
         "takip_no": _str(description="Elle takip no (ADR-0034 zorunlu)"),
-        "kargo_firma": _str(description="Elle taşıyıcı adı (ADR-0034 zorunlu)"),
+        "kargo_firma": _str(description="Elle taşıyıcı adı"),
+        "tasiyici": _str(description="Taşıyıcı firma adı (GAP-F4-01)"),
     },
-    ["takip_no", "kargo_firma"],
+    ["takip_no"],
 )
 REORDER_REQUEST = _obj(
     {"replace_cart": _bool(description="Varsayılan true")},
@@ -186,6 +187,7 @@ RETURN_CREATE = _obj(
         "order_id": _int(),
         "shipment_id": _int(),
         "sebep": _str(),
+        "iade_sebebi": _str(),
         "notlar": _str(),
         "lines": {"type": "array", "items": RETURN_LINE, "minItems": 1},
     },
@@ -247,6 +249,8 @@ SUPPLIER_OFFER_CREATE = _obj(
         "uretim_suresi_gun": _int(),
         "iscilik_override": _num_str(),
         "para_birimi": _str(),
+        "rfq_id": _int(),
+        "rfq_line_id": _int(),
     },
     ["varyant_id", "fiyat_modeli"],
 )
@@ -316,15 +320,21 @@ OPS_MEASUREMENT = _obj(
     {
         "order_line_id": _int(),
         "olculen": _num_str(),
+        "olculen_ayar": _num_str(),
+        "olculen_gram": _num_str(),
+        "ayar": _num_str(),
+        "gram": _num_str(),
         "override_gerekce": _str(),
     },
-    ["order_line_id", "olculen"],
+    ["order_line_id"],
 )
 OPS_SHIPMENT_CREATE = _obj(
     {
         "order_id": _int(),
         "notlar": _str(),
         "takip_no": _str(),
+        "tasiyici": _str(),
+        "kargo_firma": _str(),
     },
     ["order_id"],
 )
@@ -494,6 +504,7 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
     "/api/v1/rfqs/{id}/send/": {"post": "EmptyRequest"},
     "/api/v1/supplier/offers/{id}/submit/": {"post": "EmptyRequest"},
     "/api/v1/supplier/offers/{id}/deactivate/": {"post": "EmptyRequest"},
+    "/api/v1/shipments/{id}/pod/": {"post": "OpsPodRequest"},
 }
 
 

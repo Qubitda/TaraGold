@@ -102,17 +102,24 @@ export function DocumentsView() {
     user?.capabilities?.can_manage_shipment || user?.capabilities?.can_view_ops
   );
 
-  const actionToast = useActionToast();
-  const { documents, errors, loading, error, refresh } = useDocuments();
-  const podMut = useSubmitPodDocumentMutation();
-  const belgeAyarlariQ = useBelgeAyarlariQuery(isOps);
-  const updateAyarlarMut = useUpdateBelgeAyarlariMutation();
-
   const [q, setQ] = useState("");
+  const [orderIdFilter, setOrderIdFilter] = useState("");
   const [tip, setTip] = useState("all");
   const [durum, setDurum] = useState("all");
   const [kaynak, setKaynak] = useState("all");
   const [page, setPage] = useState(1);
+
+  const validOrderFilter = /^\d+$/.test(orderIdFilter.trim())
+    ? orderIdFilter.trim()
+    : undefined;
+
+  const actionToast = useActionToast();
+  const { documents, errors, loading, error, refresh } = useDocuments(
+    validOrderFilter ? { order_id: validOrderFilter } : undefined
+  );
+  const podMut = useSubmitPodDocumentMutation();
+  const belgeAyarlariQ = useBelgeAyarlariQuery(isOps);
+  const updateAyarlarMut = useUpdateBelgeAyarlariMutation();
   const [detail, setDetail] = useState<DocumentItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [podOpen, setPodOpen] = useState(false);
@@ -146,15 +153,17 @@ export function DocumentsView() {
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+    const oidNum = validOrderFilter ? Number(validOrderFilter) : null;
     return documents.filter((d) => {
       if (tip !== "all" && d.belge_tipi !== tip) return false;
       if (durum !== "all" && (d.durum || "") !== durum) return false;
       if (kaynak !== "all" && d.referans_tipi !== kaynak) return false;
+      if (oidNum != null && d.related_order_id !== oidNum) return false;
       if (!qq) return true;
       const blob = `${d.ad} ${d.belge_no || ""} ${d.raw_ref || ""} ${d.dosya_url || ""} ${d.referans_id}`.toLowerCase();
       return blob.includes(qq);
     });
-  }, [documents, q, tip, durum, kaynak]);
+  }, [documents, q, tip, durum, kaynak, validOrderFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -195,6 +204,7 @@ export function DocumentsView() {
 
   const clearFilters = () => {
     setQ("");
+    setOrderIdFilter("");
     setTip("all");
     setDurum("all");
     setKaynak("all");
@@ -251,14 +261,9 @@ export function DocumentsView() {
       await belgelerService.downloadUrl(doc.dosya_url, name);
       setSuccessMsg("İndirme başladı.");
     } catch (err) {
-      // CORS / dış URL: yeni sekme
-      try {
-        window.open(doc.dosya_url, "_blank", "noopener,noreferrer");
-      } catch {
-        setActionError(
-          err instanceof Error ? err.message : "İndirme başarısız."
-        );
-      }
+      setActionError(
+        err instanceof Error ? err.message : "İndirme başarısız."
+      );
     } finally {
       setDownloading(false);
     }
@@ -278,9 +283,9 @@ export function DocumentsView() {
             Belgeler
           </h1>
           <p className="text-xs text-muted-foreground max-w-[62ch] leading-relaxed">
-            Normatif proforma fatura ve irsaliye PDF belgeleri (<code className="font-mono">/belgeler/</code>)
-            ile sevkiyat/POD, sipariş, ledger, iade ve kalite kayıtları kör havuz
-            kurallarına göre listelenir.
+            Merkezi belge kasası (<code className="font-mono">GET /documents/</code>) üzerinden
+            proforma fatura ve irsaliye PDF belgeleri ile sevkiyat/POD, sipariş, ledger, iade ve
+            kalite kayıtları kör havuz kurallarına göre listelenir.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -367,6 +372,17 @@ export function DocumentsView() {
             className="pl-8 h-9"
           />
         </div>
+        <Input
+          value={orderIdFilter}
+          onChange={(e) => {
+            setOrderIdFilter(e.target.value.replace(/[^\d]/g, ""));
+            setPage(1);
+          }}
+          placeholder="Sipariş ID"
+          inputMode="numeric"
+          aria-label="Sipariş ID filtresi"
+          className="h-9 w-28 font-mono text-xs"
+        />
         <select
           value={durum}
           onChange={(e) => {
@@ -444,9 +460,7 @@ export function DocumentsView() {
       {Object.keys(errors).length > 0 && documents.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
           Kısmi kaynak hataları:{" "}
-          {Object.entries(errors)
-            .map(([k, v]) => `${k}`)
-            .join(", ")}
+          {Object.keys(errors).join(", ")}
         </p>
       ) : null}
 

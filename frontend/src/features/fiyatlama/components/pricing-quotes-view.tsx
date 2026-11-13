@@ -7,6 +7,8 @@ import {
   rememberQuoteId,
   useSessionQuotesAndLocks,
 } from "../hooks";
+import { useAuth } from "@/features/auth";
+import { OpsMarjPolitikasiCard } from "@/features/piyasa";
 import { siparisService } from "@/features/siparis";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import {
@@ -43,10 +45,13 @@ function lockBadgeVariant(
 }
 
 export function PricingQuotesView() {
+  const { user } = useAuth();
+  const canOps = Boolean(user?.capabilities?.can_view_ops && user?.firma?.platform_mu);
   const actionToast = useActionToast();
   const { quotes, locks, loading, error, refresh, setError } =
     useSessionQuotesAndLocks();
   const [lookupId, setLookupId] = useState("");
+  const [lockLookupId, setLockLookupId] = useState("");
   const [lockingId, setLockingId] = useState<number | null>(null);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
 
@@ -83,6 +88,25 @@ export function PricingQuotesView() {
     } catch (err) {
       setError(mapCommerceError(err, "Quote bulunamadı."));
       actionToast.error("Quote bulunamadı", err);
+    }
+  };
+
+  const handleLockLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = Number(lockLookupId);
+    if (!Number.isFinite(id) || id <= 0) {
+      setError("Geçerli bir PriceLock id girin.");
+      return;
+    }
+    try {
+      const lock = await fiyatlamaService.getPriceLock(id);
+      rememberLockId(lock.id);
+      setLockLookupId("");
+      await fetchPricing();
+      actionToast.success("PriceLock yüklendi", `#${lock.id}`);
+    } catch (err) {
+      setError(mapCommerceError(err, "PriceLock bulunamadı."));
+      actionToast.error("PriceLock bulunamadı", err);
     }
   };
 
@@ -138,13 +162,13 @@ export function PricingQuotesView() {
           Fiyatlama, Quote & PriceLock
         </h1>
         <p className="text-xs text-muted-foreground">
-          Liste GET yok. Sepetteki quote_id’ler ve oturumda oluşturulan kayıtlar
+          Sepetteki quote_id’ler ve ID ile sorgulanan Quote / PriceLock kayıtları
           gösterilir. Süre dolunca kilitleme kapanır; yenileme GET quote ile.
-          Borsa şeridi: <span className="font-mono text-[10px]">GET /piyasa/pano/</span>
-          . Global marj API yok —{" "}
-          <span className="font-mono text-[10px]">BACKEND_GAPS.md</span> GAP-F3-02.
+          Borsa şeridi: <span className="font-mono text-[10px]">GET /piyasa/pano/</span>.
         </p>
       </div>
+
+      {canOps ? <OpsMarjPolitikasiCard /> : null}
 
       <BlindPoolCallout role="buyer" />
 
@@ -156,36 +180,61 @@ export function PricingQuotesView() {
         </div>
       ) : null}
 
-      <form
-        onSubmit={handleLookup}
-        className="flex flex-col sm:flex-row gap-2 sm:items-end"
-      >
-        <div className="flex flex-col gap-1.5 flex-1">
-          <label className="text-xs text-muted-foreground" htmlFor="quote-lookup">
-            Quote id ile getir
-          </label>
-          <Input
-            id="quote-lookup"
-            value={lookupId}
-            onChange={(e) => setLookupId(e.target.value)}
-            inputMode="numeric"
-            className="font-mono"
-          />
-        </div>
-        <Button type="submit" size="sm" className="h-9">
-          Getir
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9"
-          onClick={() => void fetchPricing()}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <form
+          onSubmit={handleLookup}
+          className="flex flex-col sm:flex-row gap-2 sm:items-end"
         >
-          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-          Yenile
-        </Button>
-      </form>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-muted-foreground" htmlFor="quote-lookup">
+              Quote ID ile getir
+            </label>
+            <Input
+              id="quote-lookup"
+              value={lookupId}
+              onChange={(e) => setLookupId(e.target.value)}
+              inputMode="numeric"
+              placeholder="Örn: 101"
+              className="font-mono"
+            />
+          </div>
+          <Button type="submit" size="sm" className="h-9">
+            Quote Getir
+          </Button>
+        </form>
+
+        <form
+          onSubmit={handleLockLookup}
+          className="flex flex-col sm:flex-row gap-2 sm:items-end"
+        >
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs text-muted-foreground" htmlFor="lock-lookup">
+              PriceLock ID ile getir
+            </label>
+            <Input
+              id="lock-lookup"
+              value={lockLookupId}
+              onChange={(e) => setLockLookupId(e.target.value)}
+              inputMode="numeric"
+              placeholder="Örn: 55"
+              className="font-mono"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="secondary" className="h-9">
+            Kilit Getir
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => void fetchPricing()}
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            Yenile
+          </Button>
+        </form>
+      </div>
 
       {error && (
         <div

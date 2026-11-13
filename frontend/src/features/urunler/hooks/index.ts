@@ -10,6 +10,10 @@ export const urunlerKeys = {
     [...urunlerKeys.all, "catalog", filters ?? {}] as const,
   catalogDetail: (id: number | string) =>
     [...urunlerKeys.all, "catalog", "detail", String(id)] as const,
+  monturler: (filters?: Record<string, string | undefined>) =>
+    [...urunlerKeys.all, "monturler", filters ?? {}] as const,
+  taslar: (filters?: Record<string, string | undefined>) =>
+    [...urunlerKeys.all, "taslar", filters ?? {}] as const,
   ops: (filters?: Record<string, string | undefined>) =>
     [...urunlerKeys.all, "ops", filters ?? {}] as const,
   opsDetail: (id: number | string) =>
@@ -32,6 +36,28 @@ export function useCatalogDetailQuery(id: number | string | undefined, enabled =
     queryKey: urunlerKeys.catalogDetail(id ?? ""),
     queryFn: () => urunlerService.getProductDetail(id!),
     enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useMonturlerQuery(
+  filters?: Record<string, string | undefined>,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: urunlerKeys.monturler(filters),
+    queryFn: () => urunlerService.getMonturler(filters),
+    enabled,
+  });
+}
+
+export function useTaslarQuery(
+  filters?: Record<string, string | undefined>,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: urunlerKeys.taslar(filters),
+    queryFn: () => urunlerService.getTaslar(filters),
+    enabled,
   });
 }
 

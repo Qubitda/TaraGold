@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** OpenAPI OpsMeasurementRequest — ayar/gram ayrı alan yok (GAP-F4-02). */
+/** GAP-F4-02 — OpsMeasurementRequest: olculen_ayar, olculen_gram ve/veya olculen. */
 export const measurementSchema = z.object({
   order_line_id: z.number().int().positive("Sipariş satırı zorunlu."),
   olculen_ayar: z.string().trim().optional(),
@@ -21,21 +21,21 @@ export const measurementSchema = z.object({
 
 export type MeasurementInput = z.infer<typeof measurementSchema>;
 
-/** UI alanlarını OpenAPI `olculen` string’ine birleştirir. */
 export function toOpsMeasurementBody(input: MeasurementInput): {
   order_line_id: number;
-  olculen: string;
+  olculen?: string;
+  olculen_ayar?: string;
+  olculen_gram?: string;
   override_gerekce?: string;
 } {
-  const parts: string[] = [];
-  if (input.olculen_ayar?.trim()) parts.push(`ayar=${input.olculen_ayar.trim()}`);
-  if (input.olculen_gram?.trim()) parts.push(`gram=${input.olculen_gram.trim()}`);
-  const composed = parts.length
-    ? parts.join(";")
-    : (input.olculen?.trim() ?? "");
+  const ayar = input.olculen_ayar?.trim() || undefined;
+  const gram = input.olculen_gram?.trim() || undefined;
+  const raw = input.olculen?.trim() || undefined;
   return {
     order_line_id: input.order_line_id,
-    olculen: composed,
+    ...(ayar ? { olculen_ayar: ayar } : {}),
+    ...(gram ? { olculen_gram: gram } : {}),
+    ...(raw ? { olculen: raw } : !gram && ayar ? { olculen: ayar } : {}),
     ...(input.override_gerekce?.trim()
       ? { override_gerekce: input.override_gerekce.trim() }
       : {}),

@@ -5,6 +5,7 @@ import {
   useCariDetailQuery,
   useCariListQuery,
   useCheckCreditMutation,
+  useCreatePaymentIntentMutation,
   useCreditQuery,
   useElleTahsilatMutation,
   useElleTedarikciOdemeMutation,
@@ -16,7 +17,7 @@ import {
   useOpsFinancePaymentsQuery,
   useOpsFinanceQuery,
 } from "../hooks";
-import type { CreditCheckResponse, OpsHakEdisRow } from "../types";
+import type { CreditCheckResponse, OpsHakEdisRow, PaymentIntent } from "../types";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
@@ -83,14 +84,18 @@ export function FinanceDashboardView() {
   const [tedOdemeAciklama, setTedOdemeAciklama] = useState("");
 
   const [detailCariId, setDetailCariId] = useState<number | null>(null);
+  const [cariLookupInput, setCariLookupInput] = useState("");
+  const [intentOrderId, setIntentOrderId] = useState("");
+  const [intentResult, setIntentResult] = useState<PaymentIntent | null>(null);
+  const [intentError, setIntentError] = useState<string | null>(null);
   const [opsTab, setOpsTab] = useState<"cari" | "ledger" | "hak_edis" | "payments">(
     "cari"
   );
 
-  const meQ = useFinanceMeQuery(paraBirimi);
-  const creditQ = useCreditQuery(paraBirimi);
-  const cariQ = useCariListQuery();
-  const ledgerQ = useLedgerQuery();
+  const meQ = useFinanceMeQuery(paraBirimi, !canOpsFinance);
+  const creditQ = useCreditQuery(paraBirimi, !canOpsFinance);
+  const cariQ = useCariListQuery(!canOpsFinance);
+  const ledgerQ = useLedgerQuery(!canOpsFinance);
 
   const opsQ = useOpsFinanceQuery(canOpsFinance);
   const opsCariQ = useOpsFinanceCariQuery(canOpsFinance);
@@ -100,6 +105,7 @@ export function FinanceDashboardView() {
 
   const cariDetailQ = useCariDetailQuery(detailCariId, detailCariId !== null);
   const checkCreditMut = useCheckCreditMutation();
+  const createIntentMut = useCreatePaymentIntentMutation();
   const tahsilatMut = useElleTahsilatMutation();
   const tedOdemeMut = useElleTedarikciOdemeMutation();
 
@@ -167,6 +173,39 @@ export function FinanceDashboardView() {
       setCheckError(msg);
       actionToast.error("Kredi kontrolü başarısız", err);
     }
+  };
+
+  const handlePaymentIntent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIntentError(null);
+    setIntentResult(null);
+    const oid = Number(intentOrderId);
+    if (!Number.isInteger(oid) || oid <= 0) {
+      setIntentError("Geçerli bir Sipariş ID girin.");
+      return;
+    }
+    try {
+      const res = await createIntentMut.mutateAsync(oid);
+      setIntentResult(res);
+      actionToast.success("Ödeme niyeti oluşturuldu");
+    } catch (err) {
+      const msg = mapCommerceError(err, "Ödeme niyeti oluşturulamadı.");
+      setIntentError(msg);
+      actionToast.error("Ödeme niyeti başarısız", err);
+    }
+  };
+
+  const handleCariLookup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cid = Number(cariLookupInput);
+    if (!Number.isInteger(cid) || cid <= 0) {
+      actionToast.error(
+        "Geçersiz Cari ID",
+        new Error("Pozitif bir Cari Hesap ID girin.")
+      );
+      return;
+    }
+    setDetailCariId(cid);
   };
 
   const handleElleTahsilat = async (e: React.FormEvent) => {
@@ -335,7 +374,25 @@ export function FinanceDashboardView() {
                 <span className="font-medium">Kredi Özeti</span>
                 <CreditCard className="h-4 w-4" />
               </div>
-              {credit ? (
+              {creditQ.isLoading ? (
+                <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Kredi bilgisi yükleniyor…</span>
+                </div>
+              ) : creditQ.isError ? (
+                <div className="space-y-2 rounded-[6px] border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  <p>{mapCommerceError(creditQ.error, "Kredi limiti alınamadı.")}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void creditQ.refetch()}
+                    className="h-7 text-[11px] border-destructive/30"
+                  >
+                    Yeniden Dene
+                  </Button>
+                </div>
+              ) : credit ? (
                 <>
                   <p className="text-2xl font-semibold font-mono tabular-nums text-foreground">
                     {formatMoney(credit.kredi_limiti, credit.para_birimi)}
@@ -427,28 +484,94 @@ export function FinanceDashboardView() {
               </form>
             </div>
 
-            {/* Cari Özet & Manuel Tahsilat Bilgisi */}
+            {/* Cari Özet & Ödeme Niyeti (POST /payments/intents/) */}
             <div className="rounded-[8px] border border-border bg-card p-5 space-y-3">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="font-medium">Cari Hesaplar</span>
+                <span className="font-medium">Cari &amp; Finans Özeti</span>
                 <Wallet className="h-4 w-4" />
               </div>
-              <p className="text-2xl font-semibold font-mono tabular-nums text-foreground">
-                {cariList.length}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Aktif tenant cari hesap sayısı
-              </p>
-              <div className="border-t border-border pt-3 space-y-1.5 text-[11px] text-muted-foreground">
-                <p className="font-medium text-foreground flex items-center gap-1.5">
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p className="text-2xl font-semibold font-mono tabular-nums text-foreground">
+                    {cariList.length}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Aktif tenant cari hesap sayısı
+                  </p>
+                </div>
+                {meQ.data?.credit && (
+                  <div className="text-right text-[11px]">
+                    <span className="text-muted-foreground">Finans Özeti Bakiye</span>
+                    <p className="font-mono font-semibold text-foreground">
+                      {formatMoney(
+                        meQ.data.credit.bakiye,
+                        meQ.data.credit.para_birimi
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {meQ.isError && !canOpsFinance && (
+                <p className="text-[11px] text-destructive">
+                  {mapCommerceError(meQ.error, "Finans özeti alınamadı.")}
+                </p>
+              )}
+
+              <div className="border-t border-border pt-3 space-y-2">
+                <p className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
                   <Receipt className="h-3.5 w-3.5" />
-                  Tahsilat İşleyişi (Havale / EFT / Kasa)
+                  Ödeme Niyeti / Tahsilat Akışı
                 </p>
-                <p>
-                  Sanal POS devre dışıdır. Sipariş tahsilatları banka veya elden
-                  teslim teyidi sonrası platform operasyon ekibi tarafından
-                  manuel olarak işlenir ve cari hesabınız kapatılır.
+                <p className="text-[11px] text-muted-foreground">
+                  Tahsilatlar platform operasyon ekibi tarafından manuel işlenir.
+                  Online ödeme niyeti başlatmayı sunucudan sorgulayabilirsiniz:
                 </p>
+                <form onSubmit={handlePaymentIntent} className="flex gap-1.5">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Sipariş ID"
+                    value={intentOrderId}
+                    onChange={(e) => setIntentOrderId(e.target.value)}
+                    disabled={createIntentMut.isPending}
+                    className="h-8 text-xs font-mono tabular-nums"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    disabled={createIntentMut.isPending}
+                    className="h-8 text-xs shrink-0"
+                  >
+                    {createIntentMut.isPending ? "Gönderiliyor…" : "Ödeme Niyeti"}
+                  </Button>
+                </form>
+                {intentError && (
+                  <p className="rounded-[6px] border border-destructive/30 bg-destructive/10 p-2 text-[11px] text-destructive">
+                    {intentError}
+                  </p>
+                )}
+                {intentResult && (
+                  <div className="rounded-[6px] border border-emerald-500/30 bg-emerald-500/10 p-2 text-[11px] font-mono">
+                    Intent #{intentResult.id} · {intentResult.durum} ·{" "}
+                    {formatMoney(intentResult.tutar, intentResult.para_birimi)}
+                  </div>
+                )}
+                {meQ.data?.payment_intents && meQ.data.payment_intents.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[11px] text-muted-foreground">
+                      Son Ödeme Kayıtları ({meQ.data.payment_intents.length})
+                    </span>
+                    <ul className="space-y-0.5 font-mono text-[11px] text-muted-foreground">
+                      {meQ.data.payment_intents.slice(0, 3).map((pi) => (
+                        <li key={pi.id}>
+                          #{pi.id} · {pi.durum} ·{" "}
+                          {formatMoney(pi.tutar, pi.para_birimi)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -662,13 +785,36 @@ export function FinanceDashboardView() {
 
           {/* Alıcı Cari Hesap Dökümü */}
           <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-            <div className="border-b border-border px-4 py-3">
+            <div className="border-b border-border px-4 py-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-foreground">
                 Cari Hesap Dökümü
               </h2>
+              {!canOpsFinance && (
+                <form
+                  onSubmit={handleCariLookup}
+                  className="flex items-center gap-1.5"
+                >
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Cari ID"
+                    value={cariLookupInput}
+                    onChange={(e) => setCariLookupInput(e.target.value)}
+                    className="h-7 w-28 text-xs font-mono tabular-nums"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                  >
+                    Cari Getir
+                  </Button>
+                </form>
+              )}
             </div>
             {cariList.length === 0 ? (
-              <div className="flex h-28 flex-col items-center justify-center gap-1 text-center p-6 text-xs text-muted-foreground">
+              <div className="flex h-28 flex-col items-center justify-center gap-2 text-center p-6 text-xs text-muted-foreground">
                 <span>
                   {cariQ.isError
                     ? mapCommerceError(
@@ -677,6 +823,16 @@ export function FinanceDashboardView() {
                       )
                     : "Kayıtlı cari hesap verisi bulunamadı."}
                 </span>
+                {cariQ.isError && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void cariQ.refetch()}
+                    className="h-7 text-xs"
+                  >
+                    Yeniden Dene
+                  </Button>
+                )}
               </div>
             ) : (
               <Table>

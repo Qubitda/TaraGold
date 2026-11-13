@@ -12,6 +12,7 @@ import {
   useUpdateCartLineMutation,
   useCheckoutMutation,
   useCancelOrderMutation,
+  useReorderOrderMutation,
   useBulkOrderMutation,
   useOrderDetailQuery,
   useSupplierHazirlamaQuery,
@@ -52,6 +53,7 @@ import {
   FileText,
   FileSpreadsheet,
   Upload,
+  RotateCcw,
 } from "lucide-react";
 import { firmalarService, type FirmaAdresi } from "@/features/firmalar";
 import { useActionToast } from "@/hooks/use-action-toast";
@@ -81,6 +83,7 @@ export function OrderWorkflowView() {
   const updateLineMutation = useUpdateCartLineMutation();
   const checkoutMutation = useCheckoutMutation();
   const cancelMutation = useCancelOrderMutation();
+  const reorderMutation = useReorderOrderMutation();
   const bulkMutation = useBulkOrderMutation();
 
   const hazirlamaQuery = useSupplierHazirlamaQuery(showSupplierHazirlama);
@@ -356,6 +359,24 @@ export function OrderWorkflowView() {
     } catch (err) {
       setError(mapCommerceError(err, "Sipariş iptal edilemedi."));
       actionToast.error("Sipariş iptal edilemedi", err);
+    }
+  };
+
+  const handleReorderOrder = async (orderId: number) => {
+    setError(null);
+    try {
+      await reorderMutation.mutateAsync(orderId);
+      actionToast.success(`Sipariş #${orderId} kalemleri sepete aktarıldı`);
+      setOrderDetailOpen(false);
+      if (routeOrderId) {
+        navigate("/siparis?tab=cart", { replace: true });
+      } else {
+        setActiveTab("cart");
+      }
+    } catch (err) {
+      const msg = mapCommerceError(err, "Tekrar sipariş oluşturulamadı.");
+      setError(msg);
+      actionToast.error("Tekrar sipariş oluşturulamadı", msg);
     }
   };
 
@@ -687,15 +708,38 @@ export function OrderWorkflowView() {
                       {formatDateTime(order.olusturma_tarihi)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenOrderDetail(order.id)}
-                        className="h-8 text-xs gap-1.5"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>Detay</span>
-                      </Button>
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenOrderDetail(order.id)}
+                          className="h-8 text-xs gap-1.5"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Detay</span>
+                        </Button>
+                        {(!order.allowed_actions ||
+                          order.allowed_actions.includes("reorder")) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              reorderMutation.isPending &&
+                              reorderMutation.variables === order.id
+                            }
+                            onClick={() => void handleReorderOrder(order.id)}
+                            className="h-8 text-xs gap-1.5"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>
+                              {reorderMutation.isPending &&
+                              reorderMutation.variables === order.id
+                                ? "Aktarılıyor…"
+                                : "Tekrar Sipariş"}
+                            </span>
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -958,6 +1002,31 @@ export function OrderWorkflowView() {
             >
               <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
+          ) : orderDetailQuery.isError && !selectedOrder ? (
+            <div
+              className="flex flex-col gap-3 rounded-[6px] border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive"
+              role="alert"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>
+                  {mapCommerceError(
+                    orderDetailQuery.error,
+                    "Sipariş detayı yüklenemedi."
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void orderDetailQuery.refetch()}
+                  className="h-8 border-destructive/30"
+                >
+                  Yeniden Dene
+                </Button>
+              </div>
+            </div>
           ) : selectedOrder ? (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between border-b border-border pb-3">
@@ -1014,15 +1083,42 @@ export function OrderWorkflowView() {
                   ekranından indirebilirsiniz.
                 </div>
 
-                {selectedOrder.allowed_actions?.includes("cancel") && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleCancelOrder(selectedOrder.id)}
-                  >
-                    Siparişi İptal Et (Stok İade)
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {(!selectedOrder.allowed_actions ||
+                    selectedOrder.allowed_actions.includes("reorder")) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        reorderMutation.isPending &&
+                        reorderMutation.variables === selectedOrder.id
+                      }
+                      onClick={() => void handleReorderOrder(selectedOrder.id)}
+                      className="gap-1.5"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>
+                        {reorderMutation.isPending &&
+                        reorderMutation.variables === selectedOrder.id
+                          ? "Sepete Aktarılıyor…"
+                          : "Tekrar Sipariş Ver"}
+                      </span>
+                    </Button>
+                  )}
+
+                  {selectedOrder.allowed_actions?.includes("cancel") && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={cancelMutation.isPending}
+                      onClick={() => void handleCancelOrder(selectedOrder.id)}
+                    >
+                      {cancelMutation.isPending
+                        ? "İptal Ediliyor…"
+                        : "Siparişi İptal Et (Stok İade)"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ) : null}

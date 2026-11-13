@@ -8,6 +8,8 @@ import { useAuth } from "@/features/auth";
 import { urunlerService } from "../services";
 import {
   useCatalogQuery,
+  useMonturlerQuery,
+  useTaslarQuery,
   useOpsProductsQuery,
   useCreateOpsProductMutation,
   useOpsProductActionMutation,
@@ -71,7 +73,7 @@ import {
 import { VariantCompareModal } from "./variant-compare-modal";
 
 type ViewMode = "table" | "cards";
-type Scope = "buyer" | "ops";
+type Scope = "buyer" | "monturler" | "taslar" | "ops";
 type DetailTab = "general" | "tech" | "variants" | "commerce" | "images";
 
 const PAGE_SIZE = 20;
@@ -91,11 +93,15 @@ export function CatalogView() {
   const scope: Scope =
     scopeParam === "ops" && canOps
       ? "ops"
-      : scopeParam === "buyer"
-        ? "buyer"
-        : canOps
-          ? "ops"
-          : "buyer";
+      : scopeParam === "monturler"
+        ? "monturler"
+        : scopeParam === "taslar"
+          ? "taslar"
+          : scopeParam === "buyer"
+            ? "buyer"
+            : canOps
+              ? "ops"
+              : "buyer";
   const setScope = (next: Scope) =>
     setMany({
       scope: next,
@@ -186,25 +192,53 @@ export function CatalogView() {
     catalogFilters,
     scope === "buyer" && (canCatalog || canOps)
   );
+  const monturlerQuery = useMonturlerQuery(
+    catalogFilters,
+    scope === "monturler" && (canCatalog || canOps)
+  );
+  const taslarQuery = useTaslarQuery(
+    { q: q || undefined, page: String(page), page_size: String(PAGE_SIZE) },
+    scope === "taslar" && (canCatalog || canOps)
+  );
   const opsQuery = useOpsProductsQuery(opsFilters, scope === "ops" && canOps);
 
   const buyerItems = catalogQuery.data?.results || [];
+  const monturItems = monturlerQuery.data?.results || [];
+  const tasItems = taslarQuery.data?.results || [];
+  const tasReferanslar = taslarQuery.data?.referanslar;
   const opsItems = opsQuery.data?.results || [];
   const totalCount =
     scope === "ops"
       ? opsQuery.data?.count ?? 0
-      : catalogQuery.data?.count ?? 0;
+      : scope === "monturler"
+        ? monturlerQuery.data?.count ?? 0
+        : scope === "taslar"
+          ? taslarQuery.data?.count ?? 0
+          : catalogQuery.data?.count ?? 0;
   const pageSize =
     (scope === "ops"
       ? opsQuery.data?.page_size
-      : catalogQuery.data?.page_size) || PAGE_SIZE;
+      : scope === "monturler"
+        ? monturlerQuery.data?.page_size
+        : scope === "taslar"
+          ? taslarQuery.data?.page_size
+          : catalogQuery.data?.page_size) || PAGE_SIZE;
   const loading =
-    (scope === "ops" ? opsQuery.isLoading : catalogQuery.isLoading) ||
-    (scope === "ops" ? opsQuery.isFetching : catalogQuery.isFetching);
+    scope === "ops"
+      ? opsQuery.isLoading || opsQuery.isFetching
+      : scope === "monturler"
+        ? monturlerQuery.isLoading || monturlerQuery.isFetching
+        : scope === "taslar"
+          ? taslarQuery.isLoading || taslarQuery.isFetching
+          : catalogQuery.isLoading || catalogQuery.isFetching;
   const listError =
     scope === "ops"
       ? opsQuery.error
-      : catalogQuery.error;
+      : scope === "monturler"
+        ? monturlerQuery.error
+        : scope === "taslar"
+          ? taslarQuery.error
+          : catalogQuery.error;
   const fetchList = useCallback(async () => {
     setError(null);
     await queryClient.invalidateQueries({ queryKey: urunlerKeys.all });
@@ -236,9 +270,20 @@ export function CatalogView() {
       const cats = new Set(opsItems.map((i) => i.kategori).filter(Boolean)).size;
       return { total: totalCount, aktif, pasif, cats, pageNote: true };
     }
-    const aktif = buyerItems.filter(
-      (i) => !i.yayin_durumu || i.yayin_durumu === "aktif"
-    ).length;
+    if (scope === "monturler") {
+      const cats = new Set(monturItems.map((i) => i.kategori).filter(Boolean)).size;
+      return { total: totalCount, aktif: totalCount, pasif: 0, cats, pageNote: true };
+    }
+    if (scope === "taslar") {
+      const degerli = tasItems.filter((t) => t.degerli).length;
+      return {
+        total: totalCount,
+        aktif: degerli,
+        pasif: tasItems.length - degerli,
+        cats: tasReferanslar ? Object.keys(tasReferanslar).length : 0,
+        pageNote: true,
+      };
+    }
     const cats = new Set(buyerItems.map((i) => i.kategori).filter(Boolean)).size;
     return {
       total: totalCount,
@@ -247,7 +292,7 @@ export function CatalogView() {
       cats,
       pageNote: true,
     };
-  }, [scope, opsItems, buyerItems, totalCount]);
+  }, [scope, opsItems, buyerItems, monturItems, tasItems, tasReferanslar, totalCount]);
 
   const clearFilters = () => {
     setQInput("");
@@ -498,19 +543,41 @@ export function CatalogView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canOps ? (
-            <div className="flex rounded-[6px] border border-border bg-muted/40 p-1">
-              <button
-                type="button"
-                className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
-                  scope === "buyer" ? "bg-card shadow-xs" : "text-muted-foreground"
-                }`}
-                onClick={() => {
-                  setMany({ scope: "buyer", page: 1, ordering: "pk", onay: undefined, yayin: undefined });
-                }}
-              >
-                Alıcı katalog
-              </button>
+          <div className="flex flex-wrap rounded-[6px] border border-border bg-muted/40 p-1">
+            <button
+              type="button"
+              className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
+                scope === "buyer" ? "bg-card shadow-xs" : "text-muted-foreground"
+              }`}
+              onClick={() => {
+                setMany({ scope: "buyer", page: 1, ordering: "pk", onay: undefined, yayin: undefined });
+              }}
+            >
+              Alıcı katalog
+            </button>
+            <button
+              type="button"
+              className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
+                scope === "monturler" ? "bg-card shadow-xs" : "text-muted-foreground"
+              }`}
+              onClick={() => {
+                setMany({ scope: "monturler", page: 1, ordering: "pk", onay: undefined, yayin: undefined });
+              }}
+            >
+              Montürler
+            </button>
+            <button
+              type="button"
+              className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
+                scope === "taslar" ? "bg-card shadow-xs" : "text-muted-foreground"
+              }`}
+              onClick={() => {
+                setMany({ scope: "taslar", page: 1, ordering: undefined, onay: undefined, yayin: undefined });
+              }}
+            >
+              Taşlar
+            </button>
+            {canOps ? (
               <button
                 type="button"
                 className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
@@ -522,8 +589,8 @@ export function CatalogView() {
               >
                 Ops ürünler
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -670,17 +737,132 @@ export function CatalogView() {
           <RefreshCw className="h-4 w-4 animate-spin" />
           Katalog yükleniyor…
         </div>
-      ) : (scope === "buyer" ? buyerItems : opsItems).length === 0 ? (
+      ) : (scope === "buyer"
+          ? buyerItems
+          : scope === "monturler"
+            ? monturItems
+            : scope === "taslar"
+              ? tasItems
+              : opsItems
+        ).length === 0 ? (
         <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-[8px] border border-border bg-card p-6 text-center">
           <Gem className="h-8 w-8 text-muted-foreground opacity-50" />
           <p className="text-sm font-medium">
             {q || onayDurumu || yayinDurumu
               ? "Arama sonucu bulunamadı"
-              : "Katalogda ürün yok"}
+              : "Katalogda kayıt yok"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Filtreleri temizleyin veya ops ile taslak ürün oluşturun.
+            Filtreleri temizleyin veya farklı bir sekme seçin.
           </p>
+        </div>
+      ) : scope === "monturler" ? (
+        <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kod</TableHead>
+                <TableHead>Montür</TableHead>
+                <TableHead>Kategori</TableHead>
+                <TableHead>Ayar</TableHead>
+                <TableHead>Varyantlar (SKU / Gram)</TableHead>
+                <TableHead className="text-right">İşlem</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {monturItems.map((m) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-mono text-xs">{m.platform_kodu || "—"}</TableCell>
+                  <TableCell className="font-medium">{m.ad}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{m.kategori || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{m.ayar || "—"}</TableCell>
+                  <TableCell className="text-xs">
+                    <div className="flex flex-wrap gap-1">
+                      {(m.varyantlar || []).slice(0, 4).map((v) => (
+                        <Badge key={v.id} variant="outline" className="font-mono text-[10px]">
+                          #{v.id} {v.sku} {v.gram ? `(${v.gram}g)` : ""}
+                        </Badge>
+                      ))}
+                      {(m.varyantlar || []).length > 4 ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          +{(m.varyantlar || []).length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs gap-1"
+                      onClick={() => void openBuyerDetail(m.id)}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Detay
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : scope === "taslar" ? (
+        <div className="space-y-4">
+          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kod</TableHead>
+                  <TableHead>Taş Adı</TableHead>
+                  <TableHead>Sınıf</TableHead>
+                  <TableHead className="text-right">Sıra</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tasItems.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-mono text-xs font-semibold">{t.kod}</TableCell>
+                    <TableCell className="font-medium">{t.ad}</TableCell>
+                    <TableCell>
+                      <Badge variant={t.degerli ? "success" : "outline"} className="font-mono text-[10px]">
+                        {t.degerli ? "DEĞERLİ TAŞ" : "STANDART"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-xs">
+                      {t.sira}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {tasReferanslar ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(
+                [
+                  ["Kesimler", tasReferanslar.kesimler],
+                  ["Berraklıklar", tasReferanslar.berrakliklar],
+                  ["Renk Dereceleri", tasReferanslar.renk_dereceleri],
+                  ["Kesim Kaliteleri", tasReferanslar.kesim_kaliteleri],
+                  ["Sertifika Kurumları", tasReferanslar.sertifika_kurumlari],
+                  ["Menşeiler", tasReferanslar.menseiler],
+                ] as const
+              ).map(([title, list]) =>
+                list && list.length > 0 ? (
+                  <div key={title} className="rounded-[8px] border border-border bg-card p-3 space-y-2">
+                    <div className="text-xs font-semibold text-foreground">{title}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {list.map((r) => (
+                        <Badge key={r.id} variant="outline" className="font-mono text-[10px]">
+                          {r.kod} · {r.ad}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null
+              )}
+            </div>
+          ) : null}
         </div>
       ) : viewMode === "table" ? (
         <div className="rounded-[8px] border border-border bg-card overflow-hidden">

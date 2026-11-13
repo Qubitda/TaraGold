@@ -1,10 +1,11 @@
-import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
+import { apiDownload, apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type { Paginated } from "@/lib/api/types";
 import type {
   BuyerReturn,
   BuyerReturnDetail,
   BuyerReturnPage,
   BuyerShipment,
+  BuyerShipmentPodResponse,
   CreateReturnRequest,
   DispatchShipmentRequest,
   OpsShipment,
@@ -28,6 +29,25 @@ export const lojistikService = {
   },
   getBuyerShipmentDetail(id: number | string): Promise<BuyerShipment> {
     return apiFetch<BuyerShipment>(`/shipments/${id}/`);
+  },
+  getBuyerShipmentPod(id: number | string): Promise<BuyerShipmentPodResponse> {
+    return apiFetch<BuyerShipmentPodResponse>(`/shipments/${id}/pod/`);
+  },
+  submitBuyerPod(
+    id: number | string,
+    data: PodRequest
+  ): Promise<BuyerShipment> {
+    return apiFetch<BuyerShipment>(`/shipments/${id}/pod/`, {
+      method: "POST",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  downloadBuyerShipmentPod(id: number | string): Promise<void> {
+    return apiDownload(
+      `/shipments/${id}/pod/?download=1`,
+      `pod-shipment-${id}.txt`
+    );
   },
   createShipment(data: ShipmentCreateRequest): Promise<OpsShipment> {
     return apiFetch<OpsShipment>("/ops/shipments/", {
@@ -77,7 +97,10 @@ export const lojistikService = {
   createReturn(data: CreateReturnRequest): Promise<BuyerReturnDetail> {
     return apiFetch<BuyerReturnDetail>("/returns/", {
       method: "POST",
-      body: data,
+      body: {
+        ...data,
+        iade_sebebi: data.iade_sebebi ?? data.sebep,
+      },
       idempotencyKey: newIdempotencyKey(),
     });
   },

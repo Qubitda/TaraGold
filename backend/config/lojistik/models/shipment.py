@@ -48,6 +48,13 @@ class Shipment(models.Model):
         default="",
         help_text="ADR-0034: elle taşıyıcı adı; entegrasyon yok.",
     )
+    tasiyici = models.CharField(
+        max_length=80,
+        null=True,
+        blank=True,
+        default=None,
+        help_text="GAP-F4-01: taşıyıcı firma adı (nullable).",
+    )
     takip_no = models.CharField(
         max_length=64,
         blank=True,
@@ -112,6 +119,7 @@ class Shipment(models.Model):
                 "durum",
                 "takip_no",
                 "kargo_firma",
+                "tasiyici",
                 "teslim_modeli",
                 "sevk_yonu",
                 "notlar",

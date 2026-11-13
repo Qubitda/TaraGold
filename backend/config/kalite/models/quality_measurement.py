@@ -46,6 +46,20 @@ class QualityMeasurement(models.Model):
     birim = models.CharField(max_length=8, choices=SepetBirimi.CHOICES)
     beklenen = models.DecimalField(max_digits=18, decimal_places=6)
     olculen = models.DecimalField(max_digits=18, decimal_places=6)
+    olculen_ayar = models.DecimalField(
+        max_digits=8,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="GAP-F4-02: ölçülen ayar / milyem.",
+    )
+    olculen_gram = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="GAP-F4-02: ölçülen gram.",
+    )
     sapma_abs = models.DecimalField(max_digits=18, decimal_places=6)
     tolerans_pct = models.DecimalField(max_digits=8, decimal_places=4)
     tolerans_abs = models.DecimalField(max_digits=18, decimal_places=6)
