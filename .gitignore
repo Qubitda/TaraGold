@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+legacy_backup/
+
+# FE alternatif lockfile (npm = tek kaynak; bun.lock yok)
+frontend/bun.lock
+frontend/bun.lockb
+
+# Django
+staticfiles/
+media/
+db.sqlite3
+.pytest_cache/
+.ruff_cache/
+
+# Local recovery / temp
+_recovery/
+*.log
+
+# Archives (never commit zip dumps)
+*.zip
+
+# Geçici CAP/örnek veri (üretime gitmez; silinebilir)
+real_data/
