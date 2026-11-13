@@ -29,3 +29,9 @@ real_data/
 # Node modules (kök node_modules yeterli; frontend/node_modules symlink olabilir)
 node_modules/
 frontend/node_modules/
+
+# IDE
+.idea/
+
+# Local config (secrets içerir)
+backend/config/.env
