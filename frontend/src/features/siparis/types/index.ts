@@ -87,3 +87,19 @@ export interface BulkOrderResult {
     hata: string;
   }>;
 }
+
+export interface SupplierHazirlamaSatir {
+  order_line_id: number;
+  varyant_id: number;
+  platform_kodu?: string;
+  miktar: string;
+  birim: string;
+  teslim_modeli?: string;
+}
+
+export interface SupplierHazirlamaEmri {
+  order_id: number;
+  durum: string;
+  satirlar: SupplierHazirlamaSatir[];
+  alici: null | Record<string, unknown>;
+}

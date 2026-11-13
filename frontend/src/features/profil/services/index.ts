@@ -63,6 +63,16 @@ export const profilService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  updateAddress(
+    id: number | string,
+    data: Partial<FirmaAdresiCreateRequest>
+  ): Promise<FirmaAdresi> {
+    return apiFetch<FirmaAdresi>(`/me/addresses/${id}/`, {
+      method: "PATCH",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   deleteAddress(id: number | string): Promise<void> {
     return apiFetch<void>(`/me/addresses/${id}/`, {
       method: "DELETE",

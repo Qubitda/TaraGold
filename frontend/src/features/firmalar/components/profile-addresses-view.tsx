@@ -38,7 +38,7 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Building,
+  Pencil,
 } from "lucide-react";
 
 export function ProfileAddressesView() {
@@ -49,6 +49,7 @@ export function ProfileAddressesView() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<FirmaAdresi | null>(null);
 
   const {
     register: registerProfile,
@@ -121,20 +122,56 @@ export function ProfileAddressesView() {
     }
   };
 
+  const openCreateAddressModal = () => {
+    setEditingAddress(null);
+    resetAddress({
+      tip: "TESLIMAT",
+      il: "İstanbul",
+      ilce: "Fatih",
+      adres: "",
+      varsayilan: true,
+    });
+    setAddressModalOpen(true);
+  };
+
+  const openEditAddressModal = (addr: FirmaAdresi) => {
+    setEditingAddress(addr);
+    resetAddress({
+      tip: addr.tip === "FATURA" ? "FATURA" : "TESLIMAT",
+      il: addr.il || "",
+      ilce: addr.ilce || "",
+      adres: addr.adres || "",
+      varsayilan: Boolean(addr.varsayilan),
+    });
+    setAddressModalOpen(true);
+  };
+
   const onAddressSave = async (data: AddressInput) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      await firmalarService.createAddress({
-        tip: data.tip,
-        il: data.il,
-        ilce: data.ilce,
-        adres: data.adres,
-        varsayilan: data.varsayilan,
-      });
+      if (editingAddress) {
+        await firmalarService.updateAddress(editingAddress.id, {
+          tip: data.tip,
+          il: data.il,
+          ilce: data.ilce,
+          adres: data.adres,
+          varsayilan: data.varsayilan,
+        });
+        setSuccessMsg("Adres başarıyla güncellendi.");
+      } else {
+        await firmalarService.createAddress({
+          tip: data.tip,
+          il: data.il,
+          ilce: data.ilce,
+          adres: data.adres,
+          varsayilan: data.varsayilan,
+        });
+        setSuccessMsg("Yeni adres başarıyla kaydedildi.");
+      }
       setAddressModalOpen(false);
+      setEditingAddress(null);
       resetAddress();
-      setSuccessMsg("Yeni adres başarıyla kaydedildi.");
       await fetchData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Adres kaydedilemedi.");
@@ -271,7 +308,7 @@ export function ProfileAddressesView() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setAddressModalOpen(true)}
+                onClick={openCreateAddressModal}
                 className="h-8 text-xs gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -320,15 +357,26 @@ export function ProfileAddressesView() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteAddress(a.id)}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            aria-label="Adresi sil"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="inline-flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditAddressModal(a)}
+                              className="h-8 w-8"
+                              aria-label="Adresi düzenle"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteAddress(a.id)}
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              aria-label="Adresi sil"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -340,13 +388,22 @@ export function ProfileAddressesView() {
         </div>
       )}
 
-      {/* Yeni Adres Ekleme Dialog */}
-      <Dialog open={addressModalOpen} onOpenChange={setAddressModalOpen}>
+      <Dialog
+        open={addressModalOpen}
+        onOpenChange={(open) => {
+          setAddressModalOpen(open);
+          if (!open) setEditingAddress(null);
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yeni Adres Tanımı</DialogTitle>
+            <DialogTitle>
+              {editingAddress ? `Adresi Düzenle (#${editingAddress.id})` : "Yeni Adres Tanımı"}
+            </DialogTitle>
             <DialogDescription>
-              Sigortalı teslimat veya e-fatura için firma adresi ekleyin.
+              {editingAddress
+                ? "Mevcut firma adresi bilgilerini güncelleyin."
+                : "Sigortalı teslimat veya e-fatura için firma adresi ekleyin."}
             </DialogDescription>
           </DialogHeader>
 

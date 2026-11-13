@@ -5,11 +5,15 @@ import type {
   BuyerOrder,
   BulkOrderResult,
   CheckoutResult,
+  SupplierHazirlamaEmri,
 } from "../types";
 
 export const siparisService = {
   getMyCart(): Promise<BuyerCart> {
     return apiFetch<BuyerCart>("/carts/me/");
+  },
+  getCartById(id: number | string): Promise<BuyerCart> {
+    return apiFetch<BuyerCart>(`/carts/${id}/`);
   },
   addCartLine(quoteId: number, miktar: string): Promise<BuyerCart> {
     return apiFetch<BuyerCart>("/carts/me/lines/", {
@@ -85,5 +89,21 @@ export const siparisService = {
       body: data,
       idempotencyKey: newIdempotencyKey(),
     });
+  },
+  async getSupplierHazirlama(): Promise<SupplierHazirlamaEmri[]> {
+    const res = await apiFetch<
+      SupplierHazirlamaEmri[] | { results?: SupplierHazirlamaEmri[] }
+    >("/supplier/hazirlama/");
+    return Array.isArray(res) ? res : (res.results ?? []);
+  },
+  markSupplierHazir(orderId: number | string): Promise<SupplierHazirlamaEmri> {
+    return apiFetch<SupplierHazirlamaEmri>(
+      `/supplier/hazirlama/${orderId}/hazir/`,
+      {
+        method: "POST",
+        body: {},
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
   },
 };

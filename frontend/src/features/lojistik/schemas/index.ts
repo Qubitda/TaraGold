@@ -15,3 +15,22 @@ export const shipmentPodSchema = z.object({
 });
 
 export type ShipmentPodInput = z.infer<typeof shipmentPodSchema>;
+
+export const createShipmentSchema = z.object({
+  order_id: z.number().int().positive("Geçerli bir Sipariş ID girin."),
+  takip_no: z.string().trim().optional(),
+  notlar: z.string().trim().optional(),
+});
+
+export type CreateShipmentInput = z.infer<typeof createShipmentSchema>;
+
+export const createReturnSchema = z.object({
+  order_id: z.number().int().positive("Sipariş ID zorunludur."),
+  shipment_id: z.number().int().positive("Sevkiyat ID zorunludur."),
+  sebep: z.string().trim().min(2, "İade sebebi zorunludur."),
+  notlar: z.string().trim().optional(),
+  order_line_id: z.number().int().positive("Sipariş satırı seçilmelidir."),
+  miktar: z.string().trim().min(1, "İade miktarı zorunludur."),
+});
+
+export type CreateReturnInput = z.infer<typeof createReturnSchema>;

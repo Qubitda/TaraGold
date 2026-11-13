@@ -3,15 +3,26 @@
 import React, { useEffect, useState, useTransition } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiFetch, fetchMe, logout, ApiError } from "@/lib/api/client";
-import type { HealthResponse, MeResponse } from "@/lib/api/types";
+import type { HealthResponse, MeResponse, ReadyResponse } from "@/lib/api/types";
+import { authService } from "../services/auth-service";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShieldCheck, UserCheck, Activity, LogOut } from "lucide-react";
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "anon"; health: HealthResponse | null; healthError: string | null }
-  | { kind: "auth"; me: MeResponse; health: HealthResponse | null }
+  | {
+      kind: "anon";
+      health: HealthResponse | null;
+      ready: ReadyResponse | null;
+      healthError: string | null;
+    }
+  | {
+      kind: "auth";
+      me: MeResponse;
+      health: HealthResponse | null;
+      ready: ReadyResponse | null;
+    }
   | { kind: "error"; message: string };
 
 export function SessionPanel() {
@@ -24,6 +35,7 @@ export function SessionPanel() {
 
     (async () => {
       let health: HealthResponse | null = null;
+      let ready: ReadyResponse | null = null;
       let healthError: string | null = null;
 
       try {
@@ -36,12 +48,18 @@ export function SessionPanel() {
       }
 
       try {
+        ready = await authService.getReady();
+      } catch {
+        ready = null;
+      }
+
+      try {
         const me = await fetchMe();
-        if (!cancelled) setState({ kind: "auth", me, health });
+        if (!cancelled) setState({ kind: "auth", me, health, ready });
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 401) {
-          setState({ kind: "anon", health, healthError });
+          setState({ kind: "anon", health, ready, healthError });
           return;
         }
         setState({
@@ -109,6 +127,10 @@ export function SessionPanel() {
               <span className="font-mono text-foreground font-medium">
                 {state.health?.status || "bağlantı bekleniyor"}
               </span>
+              {" · "}Ready:{" "}
+              <span className="font-mono text-foreground font-medium">
+                {state.ready?.status || "—"}
+              </span>
             </span>
           </div>
           <Badge variant="outline">Aktif Oturum Yok</Badge>
@@ -127,7 +149,7 @@ export function SessionPanel() {
     );
   }
 
-  const { me, health } = state;
+  const { me, health, ready } = state;
   const activeCapabilities = Object.entries(me.capabilities)
     .filter(([, active]) => active)
     .map(([key]) => key);
@@ -151,6 +173,10 @@ export function SessionPanel() {
             API Health:{" "}
             <span className="font-mono text-foreground">
               {health?.status || "200 OK"}
+            </span>
+            {" · "}Ready:{" "}
+            <span className="font-mono text-foreground">
+              {ready?.status || "—"}
             </span>
           </span>
           <Button

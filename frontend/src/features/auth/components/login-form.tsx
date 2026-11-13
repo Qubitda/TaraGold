@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { loginSchema, type LoginInput } from "../schemas/login";
 import { authService } from "../services/auth-service";
@@ -12,6 +12,7 @@ import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AiStudioFrame } from "@/components/ui/ai-studio-frame";
 import { AlertCircle, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 
 const mfaSchema = z.object({
@@ -115,7 +116,10 @@ export function LoginForm() {
   };
 
   return (
-    <div className="flex w-full max-w-[420px] flex-col gap-5 rounded-[8px] border border-border bg-card p-6 sm:p-8">
+    <AiStudioFrame
+      className="w-full max-w-[420px]"
+      contentClassName="flex flex-col gap-5 p-6 sm:p-8 shadow-sm"
+    >
       <div className="flex flex-col gap-1 border-b border-border pb-4">
         <h2 className="text-base font-semibold tracking-tight text-foreground">
           {step === "credentials" ? "Platform Girişi" : "İki Adımlı Doğrulama"}
@@ -213,6 +217,21 @@ export function LoginForm() {
               "Giriş Yap"
             )}
           </Button>
+
+          <div className="flex items-center justify-between gap-3 pt-1 text-xs">
+            <Link
+              to="/reset-password"
+              className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+            >
+              Parolamı unuttum
+            </Link>
+            <Link
+              to="/invite"
+              className="text-foreground hover:underline underline-offset-4"
+            >
+              Davet kodunu kullan
+            </Link>
+          </div>
         </form>
       ) : (
         <form
@@ -281,6 +300,6 @@ export function LoginForm() {
           </div>
         </form>
       )}
-    </div>
+    </AiStudioFrame>
   );
 }

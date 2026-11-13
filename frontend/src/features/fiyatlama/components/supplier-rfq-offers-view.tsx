@@ -5,7 +5,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { fiyatlamaService } from "../services";
-import type { SupplierOfferImportSatir, SupplierRfq } from "../types";
+import type {
+  OpsRfqMatch,
+  OpsRfqMatchCandidate,
+  SupplierOffer,
+  SupplierOfferImportSatir,
+  SupplierRfq,
+} from "../types";
 import { formatMoney } from "@/lib/format";
 import {
   useSupplierRfqsQuery,
@@ -14,6 +20,7 @@ import {
   useSupplierRfqQuery,
   useFiyatlamaInvalidate,
 } from "../hooks";
+import { useAuth } from "@/features/auth";
 import { ApiError } from "@/lib/api/client";
 import {
   Table,
@@ -45,6 +52,10 @@ import {
   CheckCircle2,
   Sparkles,
   Upload,
+  Eye,
+  MessageSquare,
+  GitBranch,
+  Loader2,
 } from "lucide-react";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { BlindPoolCallout } from "./blind-pool-callout";
@@ -83,6 +94,7 @@ export function SupplierRfqOffersView({
   focusRfqId?: string;
 }) {
   const actionToast = useActionToast();
+  const { user } = useAuth();
   const invalidateFiyatlama = useFiyatlamaInvalidate();
   const [activeTab, setActiveTab] = useState<"rfqs" | "offers" | "buyer_rfqs">("rfqs");
 
@@ -107,6 +119,36 @@ export function SupplierRfqOffersView({
   const [selectedRfq, setSelectedRfq] = useState<SupplierRfq | null>(null);
 
   const [buyerRfqModalOpen, setBuyerRfqModalOpen] = useState(false);
+
+  // Offer detail & versioning
+  const [offerDetail, setOfferDetail] = useState<SupplierOffer | null>(null);
+  const [offerDetailLoading, setOfferDetailLoading] = useState(false);
+  const [offerDetailOpen, setOfferDetailOpen] = useState(false);
+  const [versionDraft, setVersionDraft] = useState({
+    fiyat_modeli: "GRAM",
+    gram: "",
+    birim_fiyat: "",
+  });
+  const [versionSaving, setVersionSaving] = useState(false);
+
+  // RFQ detail, messages, revisions & ops matching
+  const [rfqDetailOpen, setRfqDetailOpen] = useState(false);
+  const [rfqDetailMode, setRfqDetailMode] = useState<"buyer" | "supplier">("supplier");
+  const [rfqDetail, setRfqDetail] = useState<SupplierRfq | null>(null);
+  const [rfqDetailLoading, setRfqDetailLoading] = useState(false);
+  const [msgText, setMsgText] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [revText, setRevText] = useState("");
+  const [revSending, setRevSending] = useState(false);
+
+  const [matchCandidates, setMatchCandidates] = useState<
+    Record<number, OpsRfqMatchCandidate[]>
+  >({});
+  const [lineMatches, setLineMatches] = useState<Record<number, OpsRfqMatch[]>>({});
+  const [matchSuggestInput, setMatchSuggestInput] = useState<
+    Record<number, { varyant_id: string; kanit: string; skor: string }>
+  >({});
+  const [matchBusyLineId, setMatchBusyLineId] = useState<number | null>(null);
 
   const [importBusy, setImportBusy] = useState(false);
   const [importPreviewRows, setImportPreviewRows] = useState<
@@ -287,6 +329,196 @@ export function SupplierRfqOffersView({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Teklif pasifleştirilemedi.");
       actionToast.error("Teklif pasifleştirilemedi", err);
+    }
+  };
+
+  const openOfferDetail = async (id: number) => {
+    setOfferDetailOpen(true);
+    setOfferDetailLoading(true);
+    setError(null);
+    try {
+      const detail = await fiyatlamaService.getSupplierOfferDetail(id);
+      setOfferDetail(detail);
+      setVersionDraft({
+        fiyat_modeli: detail.fiyat_modeli || "GRAM",
+        gram: detail.gram || "",
+        birim_fiyat: detail.birim_fiyat || "",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Teklif detayı alınamadı.");
+      actionToast.error("Teklif detayı alınamadı", err);
+    } finally {
+      setOfferDetailLoading(false);
+    }
+  };
+
+  const handleCreateOfferVersion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offerDetail) return;
+    setVersionSaving(true);
+    setError(null);
+    try {
+      const created = await fiyatlamaService.createSupplierOfferVersion(offerDetail.id, {
+        fiyat_modeli: versionDraft.fiyat_modeli || undefined,
+        gram: versionDraft.gram.trim() || undefined,
+        birim_fiyat: versionDraft.birim_fiyat.trim() || undefined,
+      });
+      setOfferDetail(created);
+      setSuccessMsg(`Teklif yeni versiyonu oluşturuldu (#${created.id}).`);
+      actionToast.success("Yeni versiyon oluşturuldu");
+      await fetchData();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Yeni versiyon oluşturulamadı.";
+      setError(msg);
+      actionToast.error("Yeni versiyon oluşturulamadı", err);
+    } finally {
+      setVersionSaving(false);
+    }
+  };
+
+  const openRfqDetail = async (id: number, mode: "buyer" | "supplier") => {
+    setRfqDetailOpen(true);
+    setRfqDetailMode(mode);
+    setRfqDetailLoading(true);
+    setRfqDetail(null);
+    setMatchCandidates({});
+    setLineMatches({});
+    setMsgText("");
+    setRevText("");
+    setError(null);
+    try {
+      const detail =
+        mode === "buyer"
+          ? await fiyatlamaService.getBuyerRfqDetail(id)
+          : await fiyatlamaService.getSupplierRfq(id);
+      setRfqDetail(detail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "RFQ detayı alınamadı.");
+      actionToast.error("RFQ detayı alınamadı", err);
+    } finally {
+      setRfqDetailLoading(false);
+    }
+  };
+
+  const reloadActiveRfqDetail = async () => {
+    if (!rfqDetail) return;
+    const detail =
+      rfqDetailMode === "buyer"
+        ? await fiyatlamaService.getBuyerRfqDetail(rfqDetail.id)
+        : await fiyatlamaService.getSupplierRfq(rfqDetail.id);
+    setRfqDetail(detail);
+  };
+
+  const handleSendRfqMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rfqDetail || !msgText.trim()) return;
+    setMsgSending(true);
+    try {
+      if (rfqDetailMode === "buyer") {
+        await fiyatlamaService.addBuyerRfqMessage(rfqDetail.id, msgText.trim());
+      } else {
+        await fiyatlamaService.addSupplierRfqMessage(rfqDetail.id, msgText.trim());
+      }
+      setMsgText("");
+      actionToast.success("Mesaj gönderildi");
+      await reloadActiveRfqDetail();
+    } catch (err) {
+      actionToast.error("Mesaj gönderilemedi", err);
+    } finally {
+      setMsgSending(false);
+    }
+  };
+
+  const handleAddRfqRevision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rfqDetail || !revText.trim()) return;
+    setRevSending(true);
+    try {
+      if (rfqDetailMode === "buyer") {
+        await fiyatlamaService.addBuyerRfqRevision(rfqDetail.id, revText.trim());
+      } else {
+        await fiyatlamaService.addSupplierRfqRevision(rfqDetail.id, revText.trim());
+      }
+      setRevText("");
+      actionToast.success("Revizyon eklendi");
+      await reloadActiveRfqDetail();
+    } catch (err) {
+      actionToast.error("Revizyon eklenemedi", err);
+    } finally {
+      setRevSending(false);
+    }
+  };
+
+  const handleLoadCandidates = async (lineId: number) => {
+    setMatchBusyLineId(lineId);
+    try {
+      const res = await fiyatlamaService.getRfqMatchCandidates(lineId);
+      setMatchCandidates((prev) => ({ ...prev, [lineId]: res.results || [] }));
+    } catch (err) {
+      actionToast.error("Adaylar alınamadı", err);
+    } finally {
+      setMatchBusyLineId(null);
+    }
+  };
+
+  const handleLoadMatches = async (lineId: number) => {
+    setMatchBusyLineId(lineId);
+    try {
+      const res = await fiyatlamaService.getRfqLineMatches(lineId);
+      setLineMatches((prev) => ({ ...prev, [lineId]: res.results || [] }));
+    } catch (err) {
+      actionToast.error("Eşleştirmeler alınamadı", err);
+    } finally {
+      setMatchBusyLineId(null);
+    }
+  };
+
+  const handleSuggestMatch = async (lineId: number) => {
+    const form = matchSuggestInput[lineId];
+    const varyantId = Number(form?.varyant_id);
+    if (!Number.isInteger(varyantId) || varyantId <= 0) {
+      actionToast.error("Geçerli bir varyant ID girin", null);
+      return;
+    }
+    setMatchBusyLineId(lineId);
+    try {
+      await fiyatlamaService.createRfqLineMatch(lineId, {
+        varyant_id: varyantId,
+        kanit: form?.kanit || undefined,
+        skor: form?.skor || undefined,
+      });
+      actionToast.success("Eşleştirme önerildi");
+      await handleLoadMatches(lineId);
+    } catch (err) {
+      actionToast.error("Eşleştirme önerilemedi", err);
+    } finally {
+      setMatchBusyLineId(null);
+    }
+  };
+
+  const handleApproveMatch = async (lineId: number, matchId: number) => {
+    setMatchBusyLineId(lineId);
+    try {
+      await fiyatlamaService.approveRfqMatch(matchId);
+      actionToast.success("Eşleştirme onaylandı");
+      await handleLoadMatches(lineId);
+    } catch (err) {
+      actionToast.error("Onay başarısız", err);
+    } finally {
+      setMatchBusyLineId(null);
+    }
+  };
+
+  const handleRejectMatch = async (lineId: number, matchId: number) => {
+    setMatchBusyLineId(lineId);
+    try {
+      await fiyatlamaService.rejectRfqMatch(matchId);
+      actionToast.success("Eşleştirme reddedildi");
+      await handleLoadMatches(lineId);
+    } catch (err) {
+      actionToast.error("Reddetme başarısız", err);
+    } finally {
+      setMatchBusyLineId(null);
     }
   };
 
@@ -475,7 +707,16 @@ export function SupplierRfqOffersView({
                       <TableCell className="text-right font-mono tabular-nums text-xs">
                         {rfq.lines?.length || 1}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void openRfqDetail(rfq.id, "supplier")}
+                          className="h-8 text-xs gap-1"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Detay / Mesaj</span>
+                        </Button>
                         <Button
                           variant="default"
                           size="sm"
@@ -594,6 +835,15 @@ export function SupplierRfqOffersView({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void openOfferDetail(offer.id)}
+                            className="h-8 text-xs gap-1"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Detay & Versiyon</span>
+                          </Button>
                           {actions.includes("submit") && (
                             <Button
                               variant="default"
@@ -690,21 +940,32 @@ export function SupplierRfqOffersView({
                           {b.lines?.length || 1}
                         </TableCell>
                         <TableCell className="text-right">
-                          {actions.includes("send") ? (
+                          <div className="inline-flex items-center gap-1.5">
                             <Button
-                              variant="default"
+                              variant="outline"
                               size="sm"
-                              onClick={() => handleSendBuyerRfq(b.id)}
+                              onClick={() => void openRfqDetail(b.id, "buyer")}
                               className="h-7 text-xs gap-1"
                             >
-                              <Send className="h-3 w-3" />
-                              <span>Havuzda Yayınla</span>
+                              <Eye className="h-3 w-3" />
+                              <span>Detay / Mesaj</span>
                             </Button>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground font-medium">
-                              {b.durum === "GONDERILDI" ? "Tedarikçilere Açık" : "İşlemde"}
-                            </span>
-                          )}
+                            {actions.includes("send") ? (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleSendBuyerRfq(b.id)}
+                                className="h-7 text-xs gap-1"
+                              >
+                                <Send className="h-3 w-3" />
+                                <span>Havuzda Yayınla</span>
+                              </Button>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground font-medium">
+                                {b.durum === "GONDERILDI" ? "Tedarikçilere Açık" : "İşlemde"}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -976,6 +1237,384 @@ export function SupplierRfqOffersView({
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Teklif Detay & Versiyon Dialog */}
+      <Dialog open={offerDetailOpen} onOpenChange={setOfferDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Teklif Detayı {offerDetail ? `— OFFER-#${offerDetail.id}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Teklif bilgilerini inceleyin ve yeni versiyon (<code className="font-mono">/versions/</code>) oluşturun.
+            </DialogDescription>
+          </DialogHeader>
+          {offerDetailLoading ? (
+            <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Teklif detayı yükleniyor…
+            </div>
+          ) : offerDetail ? (
+            <div className="space-y-4 pt-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-[6px] border border-border p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Varyant</div>
+                  <div className="font-mono font-semibold">#{offerDetail.varyant_id}</div>
+                </div>
+                <div className="rounded-[6px] border border-border p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Versiyon / Durum</div>
+                  <div className="font-mono font-semibold">
+                    v{offerDetail.versiyon ?? 1} · {offerDetail.durum}
+                  </div>
+                </div>
+                <div className="rounded-[6px] border border-border p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Model / Gram</div>
+                  <div className="font-mono">
+                    {offerDetail.fiyat_modeli || "—"} / {offerDetail.gram || "—"} gr
+                  </div>
+                </div>
+                <div className="rounded-[6px] border border-border p-2.5">
+                  <div className="text-[10px] text-muted-foreground">Birim Fiyat</div>
+                  <div className="font-mono font-semibold">
+                    {offerDetail.birim_fiyat
+                      ? formatMoney(offerDetail.birim_fiyat, offerDetail.para_birimi)
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateOfferVersion} className="space-y-3 border-t pt-3">
+                <h3 className="text-xs font-semibold">Yeni Teklif Versiyonu Oluştur</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-[11px]">Fiyat Modeli</Label>
+                    <select
+                      value={versionDraft.fiyat_modeli}
+                      onChange={(e) =>
+                        setVersionDraft((d) => ({ ...d, fiyat_modeli: e.target.value }))
+                      }
+                      className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                    >
+                      <option value="GRAM">GRAM</option>
+                      <option value="ADET">ADET</option>
+                      <option value="METAL_BAZLI">METAL_BAZLI</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Gram</Label>
+                    <Input
+                      value={versionDraft.gram}
+                      onChange={(e) =>
+                        setVersionDraft((d) => ({ ...d, gram: e.target.value }))
+                      }
+                      placeholder="12.500"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Birim Fiyat</Label>
+                    <Input
+                      value={versionDraft.birim_fiyat}
+                      onChange={(e) =>
+                        setVersionDraft((d) => ({ ...d, birim_fiyat: e.target.value }))
+                      }
+                      placeholder="2500.00"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm" disabled={versionSaving}>
+                    {versionSaving ? "Oluşturuluyor…" : "Yeni Versiyon Oluştur"}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* RFQ Detay, Mesajlaşma, Revizyon ve Ops Eşleştirme Dialog */}
+      <Dialog open={rfqDetailOpen} onOpenChange={setRfqDetailOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              RFQ Detayı {rfqDetail ? `— #${rfqDetail.id} (${rfqDetail.durum})` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Satır detayları, mesajlaşma, revizyon geçmişi ve (Ops için) katalog eşleştirme.
+            </DialogDescription>
+          </DialogHeader>
+
+          {rfqDetailLoading ? (
+            <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              RFQ detayı yükleniyor…
+            </div>
+          ) : rfqDetail ? (
+            <div className="space-y-5 pt-2 text-xs">
+              <div className="space-y-2">
+                <h3 className="font-semibold">Satırlar ({rfqDetail.lines?.length ?? 0})</h3>
+                <div className="space-y-2">
+                  {(rfqDetail.lines ?? []).map((ln, idx) => {
+                    const lineId = ln.id;
+                    const candidates = lineId ? matchCandidates[lineId] : undefined;
+                    const matches = lineId ? lineMatches[lineId] : undefined;
+                    const suggest = lineId ? matchSuggestInput[lineId] : undefined;
+                    return (
+                      <div
+                        key={lineId ?? idx}
+                        className="rounded-[6px] border border-border p-3 space-y-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-mono font-semibold">
+                            Satır {lineId ? `#${lineId}` : idx + 1} · Miktar: {ln.miktar || "1"}{" "}
+                            {ln.birim || "ADET"}
+                          </span>
+                          <span className="font-mono text-muted-foreground">
+                            Varyant: {ln.varyant_id ? `#${ln.varyant_id}` : "Eşleşmemiş"}
+                          </span>
+                        </div>
+                        {ln.aciklama ? (
+                          <p className="text-muted-foreground whitespace-pre-wrap">
+                            {ln.aciklama}
+                          </p>
+                        ) : null}
+
+                        {user?.capabilities?.can_view_ops && lineId ? (
+                          <div className="border-t border-border pt-2 space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px]"
+                                disabled={matchBusyLineId === lineId}
+                                onClick={() => void handleLoadCandidates(lineId)}
+                              >
+                                Adayları Getir
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px]"
+                                disabled={matchBusyLineId === lineId}
+                                onClick={() => void handleLoadMatches(lineId)}
+                              >
+                                Mevcut Eşleştirmeler
+                              </Button>
+                            </div>
+
+                            {candidates && (
+                              <div className="rounded bg-muted/40 p-2 space-y-1">
+                                <div className="font-medium text-[11px]">
+                                  Aday Varyantlar ({candidates.length})
+                                </div>
+                                {candidates.map((c) => (
+                                  <div
+                                    key={c.varyant_id}
+                                    className="flex items-center justify-between text-[11px] font-mono"
+                                  >
+                                    <span>
+                                      #{c.varyant_id} {c.sku || ""} {c.urun_ad || ""}
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 text-[11px]"
+                                      onClick={() =>
+                                        setMatchSuggestInput((prev) => ({
+                                          ...prev,
+                                          [lineId]: {
+                                            varyant_id: String(c.varyant_id),
+                                            kanit: c.neden || "Aday seçimi",
+                                            skor: String(c.skor ?? "0.90"),
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      Seç
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                              <Input
+                                placeholder="Varyant ID *"
+                                className="h-8 font-mono text-xs"
+                                value={suggest?.varyant_id ?? ""}
+                                onChange={(e) =>
+                                  setMatchSuggestInput((prev) => ({
+                                    ...prev,
+                                    [lineId]: {
+                                      varyant_id: e.target.value,
+                                      kanit: prev[lineId]?.kanit ?? "",
+                                      skor: prev[lineId]?.skor ?? "0.95",
+                                    },
+                                  }))
+                                }
+                              />
+                              <Input
+                                placeholder="Kanıt / not"
+                                className="h-8 text-xs"
+                                value={suggest?.kanit ?? ""}
+                                onChange={(e) =>
+                                  setMatchSuggestInput((prev) => ({
+                                    ...prev,
+                                    [lineId]: {
+                                      varyant_id: prev[lineId]?.varyant_id ?? "",
+                                      kanit: e.target.value,
+                                      skor: prev[lineId]?.skor ?? "0.95",
+                                    },
+                                  }))
+                                }
+                              />
+                              <Input
+                                placeholder="Skor (0.95)"
+                                className="h-8 font-mono text-xs"
+                                value={suggest?.skor ?? ""}
+                                onChange={(e) =>
+                                  setMatchSuggestInput((prev) => ({
+                                    ...prev,
+                                    [lineId]: {
+                                      varyant_id: prev[lineId]?.varyant_id ?? "",
+                                      kanit: prev[lineId]?.kanit ?? "",
+                                      skor: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 text-xs"
+                                disabled={matchBusyLineId === lineId}
+                                onClick={() => void handleSuggestMatch(lineId)}
+                              >
+                                Eşleştirme Öner
+                              </Button>
+                            </div>
+
+                            {matches && matches.length > 0 && (
+                              <div className="space-y-1">
+                                {matches.map((m) => (
+                                  <div
+                                    key={m.id}
+                                    className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
+                                  >
+                                    <span className="font-mono">
+                                      Match #{m.id} → Varyant #{m.varyant_id} · {m.durum}
+                                    </span>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-6 text-[10px]"
+                                        disabled={matchBusyLineId === lineId}
+                                        onClick={() =>
+                                          void handleApproveMatch(lineId, m.id)
+                                        }
+                                      >
+                                        Onayla
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-6 text-[10px]"
+                                        disabled={matchBusyLineId === lineId}
+                                        onClick={() =>
+                                          void handleRejectMatch(lineId, m.id)
+                                        }
+                                      >
+                                        Reddet
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Mesajlar ({rfqDetail.messages?.length ?? 0})
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 rounded border border-border p-2">
+                    {(rfqDetail.messages ?? []).length === 0 ? (
+                      <p className="text-muted-foreground">Henüz mesaj yok.</p>
+                    ) : (
+                      (rfqDetail.messages ?? []).map((m, i) => (
+                        <div key={m.id ?? i} className="border-b border-border/50 pb-1 last:border-0">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            [{m.gonderen_rol || "KULLANICI"}]
+                          </span>{" "}
+                          <span>{m.govde}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <form onSubmit={handleSendRfqMessage} className="flex gap-2">
+                    <Input
+                      value={msgText}
+                      onChange={(e) => setMsgText(e.target.value)}
+                      placeholder="Mesaj yazın…"
+                      disabled={msgSending}
+                    />
+                    <Button type="submit" size="sm" disabled={msgSending}>
+                      {msgSending ? "…" : "Gönder"}
+                    </Button>
+                  </form>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <GitBranch className="h-3.5 w-3.5" />
+                    Revizyonlar ({rfqDetail.revizyonlar?.length ?? 0})
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 rounded border border-border p-2">
+                    {(rfqDetail.revizyonlar ?? []).length === 0 ? (
+                      <p className="text-muted-foreground">Henüz revizyon yok.</p>
+                    ) : (
+                      (rfqDetail.revizyonlar ?? []).map((r, i) => (
+                        <div key={r.id ?? i} className="border-b border-border/50 pb-1 last:border-0">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            v{r.versiyon ?? i + 1}
+                          </span>{" "}
+                          <span>{r.ozet}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <form onSubmit={handleAddRfqRevision} className="flex gap-2">
+                    <Input
+                      value={revText}
+                      onChange={(e) => setRevText(e.target.value)}
+                      placeholder="Revizyon özeti…"
+                      disabled={revSending}
+                    />
+                    <Button type="submit" size="sm" variant="outline" disabled={revSending}>
+                      {revSending ? "…" : "Revizyon Ekle"}
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

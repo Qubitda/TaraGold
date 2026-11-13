@@ -11,6 +11,7 @@ export const siparisKeys = {
     [...siparisKeys.all, "orders", filters ?? {}] as const,
   order: (id: number | string) =>
     [...siparisKeys.all, "order", String(id)] as const,
+  hazirlama: () => [...siparisKeys.all, "hazirlama"] as const,
 };
 
 export function useCartQuery(enabled = true) {
@@ -94,6 +95,23 @@ export function useBulkOrderMutation() {
       rows?: Array<{ sku: string; miktar: string; birim?: string }>;
       csv?: string;
     }) => siparisService.createBulkOrder(data),
+    onSuccess: () => invalidateCommerce(qc),
+  });
+}
+
+export function useSupplierHazirlamaQuery(enabled = true) {
+  return useQuery({
+    queryKey: siparisKeys.hazirlama(),
+    queryFn: () => siparisService.getSupplierHazirlama(),
+    enabled,
+  });
+}
+
+export function useMarkSupplierHazirMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: number | string) =>
+      siparisService.markSupplierHazir(orderId),
     onSuccess: () => invalidateCommerce(qc),
   });
 }

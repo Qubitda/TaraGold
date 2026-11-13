@@ -22,7 +22,7 @@ import {
   type AddressInput,
   type EmailVerifyConfirmInput,
 } from "../schemas";
-import type { MeProfile } from "../types";
+import type { FirmaAdresi, MeProfile } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +59,7 @@ import {
   Mail,
   LogOut,
   ArrowRight,
+  Pencil,
 } from "lucide-react";
 
 type TabId = "personal" | "security" | "addresses" | "firma" | "prefs";
@@ -108,6 +109,7 @@ export function ProfileView() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<FirmaAdresi | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const {
@@ -272,21 +274,58 @@ export function ProfileView() {
     }
   };
 
+  const openCreateAddressModal = () => {
+    setEditingAddress(null);
+    resetAddress({
+      tip: "TESLIMAT",
+      il: "",
+      ilce: "",
+      adres: "",
+      varsayilan: true,
+    });
+    setAddressModalOpen(true);
+  };
+
+  const openEditAddressModal = (addr: FirmaAdresi) => {
+    setEditingAddress(addr);
+    resetAddress({
+      tip: addr.tip === "FATURA" ? "FATURA" : "TESLIMAT",
+      il: addr.il || "",
+      ilce: addr.ilce || "",
+      adres: addr.adres || "",
+      varsayilan: Boolean(addr.varsayilan),
+    });
+    setAddressModalOpen(true);
+  };
+
   const onAddressSave = async (data: AddressInput) => {
     setActionError(null);
     setSuccessMsg(null);
     try {
-      await profilService.createAddress({
-        tip: data.tip,
-        il: data.il,
-        ilce: data.ilce,
-        adres: data.adres,
-        varsayilan: data.varsayilan,
-      });
+      if (editingAddress) {
+        await profilService.updateAddress(editingAddress.id, {
+          tip: data.tip,
+          il: data.il,
+          ilce: data.ilce,
+          adres: data.adres,
+          varsayilan: data.varsayilan,
+        });
+        setSuccessMsg("Adres güncellendi.");
+        actionToast.success("Adres güncellendi");
+      } else {
+        await profilService.createAddress({
+          tip: data.tip,
+          il: data.il,
+          ilce: data.ilce,
+          adres: data.adres,
+          varsayilan: data.varsayilan,
+        });
+        setSuccessMsg("Adres kaydedildi.");
+        actionToast.success("Adres kaydedildi");
+      }
       setAddressModalOpen(false);
+      setEditingAddress(null);
       resetAddress();
-      setSuccessMsg("Adres kaydedildi.");
-      actionToast.success("Adres kaydedildi");
       await fetchData();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Adres kaydedilemedi.");
@@ -695,7 +734,7 @@ export function ProfileView() {
                     size="sm"
                     variant="outline"
                     className="gap-1.5"
-                    onClick={() => setAddressModalOpen(true)}
+                    onClick={openCreateAddressModal}
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Yeni adres
@@ -750,15 +789,26 @@ export function ProfileView() {
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive"
-                                onClick={() => void onDeleteAddress(a.id)}
-                                aria-label="Adresi sil"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="inline-flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openEditAddressModal(a)}
+                                  aria-label="Adresi düzenle"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={() => void onDeleteAddress(a.id)}
+                                  aria-label="Adresi sil"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -863,12 +913,22 @@ export function ProfileView() {
         </div>
       )}
 
-      <Dialog open={addressModalOpen} onOpenChange={setAddressModalOpen}>
+      <Dialog
+        open={addressModalOpen}
+        onOpenChange={(open) => {
+          setAddressModalOpen(open);
+          if (!open) setEditingAddress(null);
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yeni adres</DialogTitle>
+            <DialogTitle>
+              {editingAddress ? `Adresi düzenle (#${editingAddress.id})` : "Yeni adres"}
+            </DialogTitle>
             <DialogDescription>
-              Teslimat veya fatura adresi (`POST /me/addresses/`).
+              {editingAddress
+                ? `PATCH /me/addresses/${editingAddress.id}/`
+                : "Teslimat veya fatura adresi (POST /me/addresses/)."}
             </DialogDescription>
           </DialogHeader>
           <form

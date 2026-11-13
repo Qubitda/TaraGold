@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { firmalarService } from "../services";
+import { opsFirmalarService } from "../services/ops-firmalar";
+import { authService, useAuth } from "@/features/auth";
 import {
   useAddressesQuery,
   useApprovalsQuery,
@@ -58,12 +61,13 @@ import {
   Search,
   Eye,
   UserPlus,
+  UserCog,
 } from "lucide-react";
 import { useActionToast } from "@/hooks/use-action-toast";
 
 const PAGE_SIZE = 10;
 
-type TabId = "units" | "approvals" | "invites";
+type TabId = "units" | "approvals" | "invites" | "users";
 type StatusFilter = "all" | "active" | "passive";
 
 function firmTypeLabel(firma: MeResponse["firma"]): string {
@@ -77,7 +81,10 @@ function firmTypeLabel(firma: MeResponse["firma"]): string {
 
 export function FirmalarOrgView() {
   const actionToast = useActionToast();
+  const qc = useQueryClient();
+  const { refresh: refreshAuth } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("units");
+  const [firmaUsersFilterId, setFirmaUsersFilterId] = useState("");
 
   const meQ = useMeQuery();
   const dashQ = useMeDashboardQuery();
@@ -116,6 +123,41 @@ export function FirmalarOrgView() {
   const members: OrgMember[] = membersQ.data ?? [];
   const membersLoading = membersQ.isLoading;
 
+  const usersQ = useQuery({
+    queryKey: ["firma-kullanicilar", firmaUsersFilterId],
+    queryFn: () => opsFirmalarService.listKullanicilar(firmaUsersFilterId || undefined),
+  });
+
+  const updateUserM = useMutation({
+    mutationFn: (vars: { userId: number; rol?: string; aktif?: boolean }) =>
+      opsFirmalarService.updateKullanici(vars.userId, {
+        ...(vars.rol !== undefined ? { rol: vars.rol } : {}),
+        ...(vars.aktif !== undefined ? { aktif: vars.aktif } : {}),
+      }),
+    onSuccess: () => {
+      actionToast.success("Kullanıcı güncellendi");
+      qc.invalidateQueries({ queryKey: ["firma-kullanicilar"] });
+    },
+    onError: (err) => {
+      actionToast.error("Kullanıcı güncellenemedi", err);
+    },
+  });
+
+  const actAsUserM = useMutation({
+    mutationFn: (userId: number) => authService.startActAs(userId),
+    onSuccess: async (res) => {
+      await refreshAuth();
+      await qc.invalidateQueries();
+      actionToast.success(
+        "Act-As başlatıldı",
+        `${res.target_username} (#${res.target_id})`
+      );
+    },
+    onError: (err) => {
+      actionToast.error("Act-As başlatılamadı", err);
+    },
+  });
+
   const fetchData = async () => {
     await Promise.all([
       meQ.refetch(),
@@ -124,6 +166,7 @@ export function FirmalarOrgView() {
       approvalsQ.refetch(),
       invitesQ.refetch(),
       addressesQ.refetch(),
+      usersQ.refetch(),
       ...(detailUnit ? [membersQ.refetch()] : []),
     ]);
   };
@@ -421,6 +464,7 @@ export function FirmalarOrgView() {
             ["units", "Birimler", units.length, Building2],
             ["approvals", "Onaylar", approvals.length, CheckSquare],
             ["invites", "Davetler", invites.length, Users],
+            ["users", "Kullanıcılar & Roller", (usersQ.data ?? []).length, UserCog],
           ] as const
         ).map(([id, label, count, Icon]) => (
           <button
@@ -661,7 +705,7 @@ export function FirmalarOrgView() {
             </Table>
           )}
         </div>
-      ) : (
+      ) : activeTab === "invites" ? (
         <div className="flex flex-col gap-4">
           <div className="flex justify-end">
             <Button
@@ -713,6 +757,125 @@ export function FirmalarOrgView() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {inv.expires_at ? formatDateTime(inv.expires_at) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {me?.capabilities?.can_view_ops && (
+            <div className="flex items-end gap-2 max-w-xs">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="firma-users-filter" className="text-xs">
+                  Firma ID (Opsiyonel)
+                </Label>
+                <Input
+                  id="firma-users-filter"
+                  value={firmaUsersFilterId}
+                  onChange={(e) => setFirmaUsersFilterId(e.target.value)}
+                  placeholder="Örn: 1"
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+            </div>
+          )}
+          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+            {usersQ.isLoading ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Kullanıcılar yükleniyor…
+              </div>
+            ) : usersQ.isError ? (
+              <div className="p-6 text-xs text-destructive">
+                {usersQ.error instanceof Error
+                  ? usersQ.error.message
+                  : "Kullanıcı listesi alınamadı."}
+              </div>
+            ) : (usersQ.data ?? []).length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Firma kullanıcısı bulunamadı.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Kullanıcı ID</TableHead>
+                    <TableHead>Kullanıcı Adı</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead>Durum</TableHead>
+                    <TableHead className="text-right">İşlem</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(usersQ.data ?? []).map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-mono text-xs">
+                        #{u.kullanici_id}
+                      </TableCell>
+                      <TableCell className="font-medium font-mono text-xs">
+                        {u.username}
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          aria-label={`${u.username} rolü`}
+                          value={u.rol}
+                          disabled={updateUserM.isPending}
+                          onChange={(e) =>
+                            updateUserM.mutate({
+                              userId: u.kullanici_id,
+                              rol: e.target.value,
+                            })
+                          }
+                          className="h-8 rounded-[6px] border border-border bg-background px-2 font-mono text-xs"
+                        >
+                          <option value="ALICI_SATINALMA">ALICI_SATINALMA</option>
+                          <option value="ALICI_FINANS">ALICI_FINANS</option>
+                          <option value="ALICI_YONETICI">ALICI_YONETICI</option>
+                          <option value="TEDARIKCI_SATIS">TEDARIKCI_SATIS</option>
+                          <option value="TEDARIKCI_ATOLYE">TEDARIKCI_ATOLYE</option>
+                          <option value="TEDARIKCI_YONETICI">TEDARIKCI_YONETICI</option>
+                          <option value="PLATFORM_YONETICI">PLATFORM_YONETICI</option>
+                          <option value="PLATFORM_OPS">PLATFORM_OPS</option>
+                          <option value="PLATFORM_FINANS">PLATFORM_FINANS</option>
+                        </select>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={u.aktif ? "success" : "secondary"}
+                          className="font-mono text-[10px]"
+                        >
+                          {u.aktif ? "AKTİF" : "PASİF"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          disabled={updateUserM.isPending}
+                          onClick={() =>
+                            updateUserM.mutate({
+                              userId: u.kullanici_id,
+                              aktif: !u.aktif,
+                            })
+                          }
+                        >
+                          {u.aktif ? "Pasif Yap" : "Aktif Yap"}
+                        </Button>
+                        {me?.capabilities?.can_act_as && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs"
+                            disabled={actAsUserM.isPending}
+                            onClick={() => actAsUserM.mutate(u.kullanici_id)}
+                          >
+                            Act-As
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

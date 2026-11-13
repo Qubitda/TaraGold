@@ -10,3 +10,4 @@ export * from "./dropdown-menu";
 export * from "./tooltip";
 export * from "./badge";
 export * from "./toast";
+export * from "./ai-studio-frame";

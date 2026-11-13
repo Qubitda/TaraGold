@@ -48,6 +48,38 @@ export interface SupplierRfqLine {
   aciklama?: string;
 }
 
+export interface RfqMessage {
+  id?: number;
+  gonderen_rol?: string;
+  govde: string;
+  olusturma_tarihi?: string | null;
+}
+
+export interface RfqRevision {
+  id?: number;
+  versiyon?: number;
+  ozet: string;
+  olusturma_tarihi?: string | null;
+}
+
+export interface OpsRfqMatchCandidate {
+  varyant_id: number;
+  sku?: string;
+  urun_ad?: string;
+  skor?: string | number;
+  neden?: string;
+}
+
+export interface OpsRfqMatch {
+  id: number;
+  rfq_line_id: number;
+  varyant_id: number;
+  durum: string;
+  skor?: string | number | null;
+  kanit?: string;
+  allowed_actions?: string[];
+}
+
 export interface SupplierRfq {
   id: number;
   baslik?: string;
@@ -56,8 +88,8 @@ export interface SupplierRfq {
   allowed_actions: string[];
   server_now?: string;
   lines?: SupplierRfqLine[];
-  messages?: any[];
-  revizyonlar?: any[];
+  messages?: RfqMessage[];
+  revizyonlar?: RfqRevision[];
 }
 
 export interface SupplierRfqPage {
@@ -81,12 +113,16 @@ export interface BuyerRfqCreateRequest {
 export interface SupplierOffer {
   id: number;
   varyant_id: number;
+  fiyat_modeli?: string;
   birim_fiyat: string | null;
+  gram?: string | null;
+  iscilik_override?: string | null;
   para_birimi: string;
-  durum: "TASLAK" | "GONDERILDI" | "ONAYLANDI" | "PASIF" | string;
+  durum: "TASLAK" | "GONDERILDI" | "ONAYLANDI" | "YAYINDA" | "PASIF" | string;
   allowed_actions: string[];
   tedarikci_kodu?: string;
   versiyon?: number;
+  uretim_suresi_gun?: number | null;
   gecerlilik_bitis?: string | null;
 }
 

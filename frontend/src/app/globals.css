@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -83,6 +84,68 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Google AI Studio inspired rotating spectrum border & diffused ambient halo */
+@keyframes ai-studio-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.ai-studio-halo {
+  position: absolute;
+  inset: -8px;
+  z-index: -20;
+  border-radius: 18px;
+  filter: blur(22px);
+  opacity: 0.56;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+
+.dark .ai-studio-halo {
+  opacity: 0.72;
+}
+
+.ai-studio-halo-clip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.ai-studio-ring {
+  position: absolute;
+  inset: -2px;
+  z-index: -10;
+  border-radius: 12px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ai-studio-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 160vmax;
+  height: 160vmax;
+  background: conic-gradient(
+    from 0deg,
+    #4285f4 0deg,
+    #7b61ff 55deg,
+    #ea4335 125deg,
+    #fbbc04 200deg,
+    #34a853 275deg,
+    #38bdf8 325deg,
+    #4285f4 360deg
+  );
+  animation: ai-studio-spin 6s linear infinite;
+  will-change: transform;
 }
 
 /* Reduced motion support */

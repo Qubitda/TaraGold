@@ -2,7 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lojistikService } from "../services";
-import type { DispatchShipmentRequest, PodRequest } from "../types";
+import type {
+  CreateReturnRequest,
+  DispatchShipmentRequest,
+  PodRequest,
+  ShipmentCreateRequest,
+} from "../types";
 
 export const lojistikKeys = {
   all: ["lojistik"] as const,
@@ -20,6 +25,17 @@ export function useOpsShipmentsQuery(enabled = true) {
     queryKey: lojistikKeys.opsShipments(),
     queryFn: async () => {
       const page = await lojistikService.getShipments();
+      return page.results ?? [];
+    },
+    enabled,
+  });
+}
+
+export function useBuyerShipmentsQuery(enabled = true) {
+  return useQuery({
+    queryKey: lojistikKeys.buyerShipments(),
+    queryFn: async () => {
+      const page = await lojistikService.getBuyerShipments();
       return page.results ?? [];
     },
     enabled,
@@ -84,10 +100,53 @@ export function useSubmitPodMutation() {
   });
 }
 
+export function useCreateShipmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ShipmentCreateRequest) =>
+      lojistikService.createShipment(data),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
+export function useCreateReturnMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateReturnRequest) =>
+      lojistikService.createReturn(data),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
+export function useSubmitReturnMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => lojistikService.submitReturn(id),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
 export function useApproveReturnMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => lojistikService.approveReturn(id),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
+export function useRejectReturnMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      lojistikService.rejectReturn(id, reason),
+    onSuccess: () => invalidateLojistik(qc),
+  });
+}
+
+export function useCancelReturnMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => lojistikService.cancelReturn(id),
     onSuccess: () => invalidateLojistik(qc),
   });
 }

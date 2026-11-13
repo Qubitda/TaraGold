@@ -13,10 +13,19 @@ type S = components["schemas"];
 export type ProblemDetail = S["ProblemDetail"];
 export type Capabilities = S["Capabilities"];
 export type FirmaMasked = S["FirmaMasked"];
+export interface ActAsState {
+  active: boolean;
+  actor_id?: number | null;
+  actor_username?: string | null;
+  target_id?: number | null;
+  target_username?: string | null;
+}
+
 export type MeResponse = S["MeResponse"] & {
   /** Login yanıtında olabilir */
   mfa_required?: boolean;
   mfa_ok?: boolean;
+  act_as?: ActAsState | null;
 };
 export type LoginResponse = MeResponse;
 export type MeDashboard = S["MeDashboard"];

@@ -2,8 +2,10 @@ import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type { Paginated } from "@/lib/api/types";
 import type {
   BuyerReturn,
+  BuyerReturnDetail,
   BuyerReturnPage,
   BuyerShipment,
+  CreateReturnRequest,
   DispatchShipmentRequest,
   OpsShipment,
   OpsShipmentPage,
@@ -15,11 +17,17 @@ export const lojistikService = {
   getShipments(): Promise<OpsShipmentPage> {
     return apiFetch<OpsShipmentPage>("/ops/shipments/");
   },
+  getOpsShipmentDetail(id: number | string): Promise<OpsShipment> {
+    return apiFetch<OpsShipment>(`/ops/shipments/${id}/`);
+  },
   getBuyerShipments(
     params?: Record<string, string>
   ): Promise<Paginated<BuyerShipment>> {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return apiFetch(`/shipments/${query}`);
+  },
+  getBuyerShipmentDetail(id: number | string): Promise<BuyerShipment> {
+    return apiFetch<BuyerShipment>(`/shipments/${id}/`);
   },
   createShipment(data: ShipmentCreateRequest): Promise<OpsShipment> {
     return apiFetch<OpsShipment>("/ops/shipments/", {
@@ -66,15 +74,48 @@ export const lojistikService = {
   getReturns(): Promise<BuyerReturnPage> {
     return apiFetch<BuyerReturnPage>("/returns/");
   },
+  createReturn(data: CreateReturnRequest): Promise<BuyerReturnDetail> {
+    return apiFetch<BuyerReturnDetail>("/returns/", {
+      method: "POST",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  getReturnDetail(id: number | string): Promise<BuyerReturnDetail> {
+    return apiFetch<BuyerReturnDetail>(`/returns/${id}/`);
+  },
+  submitReturn(id: number | string): Promise<BuyerReturn> {
+    return apiFetch<BuyerReturn>(`/returns/${id}/submit/`, {
+      method: "POST",
+      body: {},
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   approveReturn(id: number | string): Promise<BuyerReturn> {
     return apiFetch<BuyerReturn>(`/returns/${id}/approve/`, {
       method: "POST",
+      body: {},
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  rejectReturn(id: number | string, reason?: string): Promise<BuyerReturn> {
+    return apiFetch<BuyerReturn>(`/returns/${id}/reject/`, {
+      method: "POST",
+      body: reason ? { reason } : {},
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  cancelReturn(id: number | string): Promise<BuyerReturn> {
+    return apiFetch<BuyerReturn>(`/returns/${id}/cancel/`, {
+      method: "POST",
+      body: {},
       idempotencyKey: newIdempotencyKey(),
     });
   },
   mahsupReturn(id: number | string): Promise<BuyerReturn> {
     return apiFetch<BuyerReturn>(`/returns/${id}/mahsup/`, {
       method: "POST",
+      body: {},
       idempotencyKey: newIdempotencyKey(),
     });
   },

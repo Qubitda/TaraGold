@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cd frontend && vite --port=3000 --host=127.0.0.1",
+    "dev": "cd frontend && vite --port=3000 --host=0.0.0.0",
     "dev:lan": "cd frontend && vite --port=3000 --host=0.0.0.0",
     "build": "cd frontend && npm run build",
-    "preview": "cd frontend && vite preview --port=3000 --host=127.0.0.1",
+    "preview": "cd frontend && vite preview --port=3000 --host=0.0.0.0",
     "lint": "cd frontend && npm run lint",
     "test": "cd frontend && npm run test",
     "test:e2e": "cd frontend && npm run test:e2e"

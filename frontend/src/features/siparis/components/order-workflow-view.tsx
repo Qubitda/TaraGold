@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { BuyerOrder } from "../types";
+import type { BuyerCart, BuyerOrder } from "../types";
 import { formatMoney, formatDateTime } from "@/lib/format";
+import { siparisService } from "../services";
 import {
   useCartQuery,
   useOrdersQuery,
@@ -13,6 +14,8 @@ import {
   useCancelOrderMutation,
   useBulkOrderMutation,
   useOrderDetailQuery,
+  useSupplierHazirlamaQuery,
+  useMarkSupplierHazirMutation,
   siparisKeys,
 } from "../hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -58,11 +61,16 @@ import type { BulkOrderResult } from "../types";
 import { OpsOnayHavuzu } from "./ops-onay-havuzu";
 import { useAuthContext } from "@/features/auth/components/auth-provider";
 
-type TabId = "cart" | "orders" | "bulk";
+type TabId = "cart" | "orders" | "bulk" | "hazirlama";
 
 export function OrderWorkflowView() {
   const { user } = useAuthContext();
   const showOpsOnay = Boolean(user?.capabilities?.can_view_ops);
+  const showSupplierHazirlama = Boolean(
+    user?.capabilities?.can_manage_offers ||
+      user?.capabilities?.can_view_ops ||
+      user?.firma?.tedarikci_mi
+  );
   const actionToast = useActionToast();
   const navigate = useNavigate();
   const { id: routeOrderId } = useParams<{ id?: string }>();
@@ -76,9 +84,15 @@ export function OrderWorkflowView() {
   const cancelMutation = useCancelOrderMutation();
   const bulkMutation = useBulkOrderMutation();
 
+  const hazirlamaQuery = useSupplierHazirlamaQuery(showSupplierHazirlama);
+  const markHazirMutation = useMarkSupplierHazirMutation();
+
   const tabParam = searchParams.get("tab");
   const activeTab: TabId =
-    tabParam === "orders" || tabParam === "bulk" || tabParam === "cart"
+    tabParam === "orders" ||
+    tabParam === "bulk" ||
+    tabParam === "cart" ||
+    (tabParam === "hazirlama" && showSupplierHazirlama)
       ? tabParam
       : routeOrderId
         ? "orders"
@@ -126,6 +140,42 @@ export function OrderWorkflowView() {
   const [bulkText, setBulkText] = useState("");
   const [bulkResult, setBulkResult] = useState<BulkOrderResult | null>(null);
   const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+
+  // Sepet ID ile Görüntüleme
+  const [lookupCartId, setLookupCartId] = useState("");
+  const [lookedUpCart, setLookedUpCart] = useState<BuyerCart | null>(null);
+  const [lookupCartLoading, setLookupCartLoading] = useState(false);
+
+  const handleLookupCart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = lookupCartId.trim();
+    if (!id) return;
+    setLookupCartLoading(true);
+    setError(null);
+    setLookedUpCart(null);
+    try {
+      const c = await siparisService.getCartById(id);
+      setLookedUpCart(c);
+    } catch (err) {
+      const msg = mapCommerceError(err, "Sepet bilgisi alınamadı.");
+      setError(msg);
+      actionToast.error("Sepet sorgulanamadı", msg);
+    } finally {
+      setLookupCartLoading(false);
+    }
+  };
+
+  const handleMarkHazir = async (orderId: number) => {
+    setError(null);
+    try {
+      await markHazirMutation.mutateAsync(orderId);
+      actionToast.success(`Sipariş #${orderId} hazır işaretlendi`);
+    } catch (err) {
+      const msg = mapCommerceError(err, "Hazır işaretleme başarısız.");
+      setError(msg);
+      actionToast.error("Hazır işaretlenemedi", msg);
+    }
+  };
 
   const handleBulkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,6 +429,22 @@ export function OrderWorkflowView() {
             <FileSpreadsheet className="h-3.5 w-3.5" />
             <span>Toplu Sipariş / CSV</span>
           </button>
+          {showSupplierHazirlama && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("hazirlama")}
+              className={`flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === "hazirlama"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" />
+              <span>
+                Tedarikçi Hazırlama ({(hazirlamaQuery.data ?? []).length})
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -532,6 +598,55 @@ export function OrderWorkflowView() {
               </Button>
             </div>
           )}
+
+          {/* Sepet ID ile Görüntüleme (GET /carts/{id}/) */}
+          <div className="rounded-[8px] border border-border bg-card p-4 space-y-3">
+            <form
+              onSubmit={handleLookupCart}
+              className="flex flex-wrap items-end gap-2"
+            >
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-foreground">
+                  Sepet ID ile Görüntüle (<code className="font-mono">GET /carts/{"{id}"}/</code>)
+                </span>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="Sepet ID"
+                  value={lookupCartId}
+                  onChange={(e) => setLookupCartId(e.target.value)}
+                  className="h-8 w-40 font-mono text-xs"
+                />
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={lookupCartLoading}
+              >
+                {lookupCartLoading ? "Sorgulanıyor…" : "Sepeti Getir"}
+              </Button>
+            </form>
+            {lookedUpCart && (
+              <div className="rounded-[6px] border border-border bg-muted/30 p-3 text-xs space-y-1">
+                <div className="font-mono font-semibold">
+                  Sepet #{lookedUpCart.id} · Alıcı Firma #{lookedUpCart.alici_firma_id} ·{" "}
+                  {lookedUpCart.line_count} satır
+                </div>
+                {lookedUpCart.lines.length > 0 && (
+                  <ul className="space-y-0.5 font-mono text-[11px] text-muted-foreground">
+                    {lookedUpCart.lines.map((l) => (
+                      <li key={l.id}>
+                        Satır #{l.id} · Varyant #{l.varyant_id} · {l.miktar} {l.birim} ·{" "}
+                        {formatMoney(l.birim_fiyat_vergisiz, l.para_birimi)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       ) : activeTab === "orders" ? (
         /* Sipariş Geçmişi Tablosu */
@@ -585,7 +700,7 @@ export function OrderWorkflowView() {
             </Table>
           )}
         </div>
-      ) : (
+      ) : activeTab === "bulk" ? (
         /* Toplu Sipariş / Hızlı SKU Girişi (F4-081) */
         <div className="flex flex-col gap-6">
           <form
@@ -717,6 +832,75 @@ export function OrderWorkflowView() {
               )}
             </div>
           )}
+        </div>
+      ) : (
+        /* Tedarikçi Hazırlama Emirleri (/supplier/hazirlama/) */
+        <div className="space-y-4">
+          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+            {hazirlamaQuery.isLoading ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Hazırlama emirleri yükleniyor…
+              </div>
+            ) : hazirlamaQuery.isError ? (
+              <div className="p-6 text-xs text-destructive">
+                {hazirlamaQuery.error instanceof Error
+                  ? hazirlamaQuery.error.message
+                  : "Hazırlama emirleri alınamadı."}
+              </div>
+            ) : (hazirlamaQuery.data ?? []).length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Aktif hazırlama emri bulunmamaktadır.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Sipariş ID</TableHead>
+                    <TableHead>Durum</TableHead>
+                    <TableHead>Satırlar (Kör Havuz)</TableHead>
+                    <TableHead className="text-right">İşlem</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(hazirlamaQuery.data ?? []).map((emri) => (
+                    <TableRow key={emri.order_id}>
+                      <TableCell className="font-mono text-xs font-semibold">
+                        #{emri.order_id}
+                      </TableCell>
+                      <TableCell>{renderDurumBadge(emri.durum)}</TableCell>
+                      <TableCell className="text-xs">
+                        <ul className="space-y-0.5 font-mono text-[11px]">
+                          {emri.satirlar.map((s) => (
+                            <li key={s.order_line_id}>
+                              #{s.order_line_id} · {s.platform_kodu || `Varyant #${s.varyant_id}`} ·{" "}
+                              {s.miktar} {s.birim}
+                              {s.teslim_modeli ? ` (${s.teslim_modeli})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {emri.durum !== "HAZIR" && emri.durum !== "TAMAMLANDI" ? (
+                          <Button
+                            size="sm"
+                            disabled={markHazirMutation.isPending}
+                            onClick={() => void handleMarkHazir(emri.order_id)}
+                            className="h-8 text-xs"
+                          >
+                            {markHazirMutation.isPending ? "İşleniyor…" : "Hazır İşaretle"}
+                          </Button>
+                        ) : (
+                          <Badge variant="success" className="font-mono text-[10px]">
+                            HAZIR
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </div>
       )}
 

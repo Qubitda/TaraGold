@@ -2,7 +2,12 @@ import { Suspense, useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/layout";
-import { AuthProvider, RequireCapability } from "@/features/auth";
+import {
+  AcceptInvitePage,
+  AuthProvider,
+  RequireCapability,
+  ResetPasswordPage,
+} from "@/features/auth";
 import { AppErrorBoundary } from "@/components/error-boundary";
 import { DomainLoading } from "@/components/route-states";
 import { ToastProvider, useToast } from "@/components/ui/toast";
@@ -74,6 +79,8 @@ export default function App() {
                 <Suspense fallback={<DomainLoading label="Uygulama" />}>
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/reset-password" element={<ResetPasswordPage />} />
+                    <Route path="/invite" element={<AcceptInvitePage />} />
 
                     <Route element={<PortalLayout />}>
                       <Route index element={<HomePage />} />

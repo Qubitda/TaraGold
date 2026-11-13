@@ -2,7 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { kaliteService } from "../services";
-import type { InspectionMeasurementRequest } from "../types";
+import type {
+  InspectionCreateRequest,
+  InspectionMeasurementRequest,
+} from "../types";
 
 export const kaliteKeys = {
   all: ["kalite"] as const,
@@ -23,6 +26,26 @@ export function useInspectionsQuery(enabled = true) {
       return page.results ?? [];
     },
     enabled,
+  });
+}
+
+export function useInspectionDetailQuery(
+  id: number | null,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: kaliteKeys.detail(id ?? 0),
+    queryFn: () => kaliteService.getInspectionDetail(id!),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useCreateInspectionMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: InspectionCreateRequest) =>
+      kaliteService.createInspection(data),
+    onSuccess: () => invalidateKalite(qc),
   });
 }
 

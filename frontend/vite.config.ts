@@ -2,10 +2,21 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vitest/config";
+import { mockApiPlugin } from "./mock-api-plugin.ts";
+
+const rawDjangoOrigin = process.env.DJANGO_ORIGIN?.trim();
+const hasExternalDjango =
+  Boolean(rawDjangoOrigin) &&
+  !rawDjangoOrigin!.includes("127.0.0.1:8000") &&
+  !rawDjangoOrigin!.includes("localhost:8000");
 
 export default defineConfig({
   base: "/",
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(!hasExternalDjango ? [mockApiPlugin()] : []),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(process.cwd(), "./src"),
@@ -39,12 +50,24 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: {
-      "/api": {
-        target: process.env.DJANGO_ORIGIN || "http://127.0.0.1:8000",
-        changeOrigin: true,
-      },
-    },
+    host: "0.0.0.0",
+    port: 3000,
+    allowedHosts: true,
+    ...(hasExternalDjango
+      ? {
+          proxy: {
+            "/api": {
+              target: rawDjangoOrigin,
+              changeOrigin: true,
+            },
+          },
+        }
+      : {}),
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: 3000,
+    allowedHosts: true,
   },
   test: {
     environment: "jsdom",

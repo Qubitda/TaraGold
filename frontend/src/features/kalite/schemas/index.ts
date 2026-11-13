@@ -41,3 +41,11 @@ export function toOpsMeasurementBody(input: MeasurementInput): {
       : {}),
   };
 }
+
+export const createInspectionSchema = z.object({
+  order_id: z.number().int().positive("Sipariş ID zorunludur."),
+  order_line_id: z.string().trim().optional(),
+  notlar: z.string().trim().optional(),
+});
+
+export type CreateInspectionInput = z.infer<typeof createInspectionSchema>;
