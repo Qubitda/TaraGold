@@ -34,7 +34,7 @@ class EnrichedOpenAPISchemaView(APIView):
 
         # public=True: generator auth istemez; HTTP erişim permission_classes’ta
         generator = SchemaGenerator(
-            title="Kuyumbank API",
+            title="TaraGold API",
             description="API v1 — ADR-0017",
             version="1.0.0",
             url="/api/v1/",

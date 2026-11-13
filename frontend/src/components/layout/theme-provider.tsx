@@ -21,7 +21,7 @@ export function ThemeProvider({
 }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === "undefined") return defaultTheme;
-    const stored = localStorage.getItem("kuyumbank-theme") as Theme | null;
+    const stored = localStorage.getItem("taragold-theme") as Theme | null;
     return stored || defaultTheme;
   });
 
@@ -60,7 +60,7 @@ export function ThemeProvider({
   }, [theme]);
 
   const setTheme = (next: Theme) => {
-    localStorage.setItem("kuyumbank-theme", next);
+    localStorage.setItem("taragold-theme", next);
     setThemeState(next);
   };
 

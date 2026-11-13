@@ -1125,10 +1125,10 @@ def enrich_openapi_schema(schema: dict) -> dict:
         schema["openapi"] = "3.1.0"
 
     info = schema.setdefault("info", {})
-    info.setdefault("title", "Kuyumbank API")
+    info.setdefault("title", "TaraGold API")
     info.setdefault("version", "1.0.0")
     info["description"] = (
-        "Kuyumbank `/api/v1/` — ADR-0017. "
+        "TaraGold `/api/v1/` — ADR-0017. "
         "Auth: session+CSRF (tarayıcı) veya Token (S2S). "
         "Hata: application/problem+json. "
         "Tenant: client firma_id yok sayılır. "

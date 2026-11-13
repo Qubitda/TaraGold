@@ -10,6 +10,33 @@ export default defineConfig({
       "@": path.resolve(process.cwd(), "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Vendor chunk'ları ayır — ana bundle'u küçült
+          if (id.includes("node_modules")) {
+            if (id.includes("react") || id.includes("react-dom")) {
+              return "vendor-react";
+            }
+            if (id.includes("@tanstack")) {
+              return "vendor-tanstack";
+            }
+            if (id.includes("react-router")) {
+              return "vendor-router";
+            }
+            if (id.includes("@radix-ui")) {
+              return "vendor-radix";
+            }
+            if (id.includes("lucide-react")) {
+              return "vendor-lucide";
+            }
+            return "vendor-other";
+          }
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {

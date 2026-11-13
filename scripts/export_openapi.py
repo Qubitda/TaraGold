@@ -34,7 +34,7 @@ def generate_schema() -> dict:
     from api.urls import api_urlpatterns
 
     generator = SchemaGenerator(
-        title="Kuyumbank API",
+        title="TaraGold API",
         description="API v1 — ADR-0017",
         version="1.0.0",
         url="/api/v1/",

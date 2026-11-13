@@ -8,11 +8,11 @@ from urunler.tests._base import KatalogTestTaban
 
 
 class SeoBrandTests(KatalogTestTaban):
-    @override_settings(PLATFORM_BRAND_NAME="Kuyumbank")
+    @override_settings(PLATFORM_BRAND_NAME="TaraGold")
     def test_urun_meta_baslik_uses_brand(self):
         u = self.urun(meta_baslik="", meta_aciklama="")
         u.refresh_from_db()
-        self.assertIn("Kuyumbank", u.meta_baslik)
+        self.assertIn("TaraGold", u.meta_baslik)
         self.assertNotIn("Örnek Kuyumculuk", u.meta_baslik)
 
     @override_settings(PLATFORM_BRAND_NAME="")
@@ -22,10 +22,10 @@ class SeoBrandTests(KatalogTestTaban):
         self.assertEqual(u.meta_baslik, "Alyans Test")
         self.assertEqual(u.meta_aciklama, "")
 
-    @override_settings(PLATFORM_BRAND_NAME="Kuyumbank")
+    @override_settings(PLATFORM_BRAND_NAME="TaraGold")
     def test_kategori_seo_no_ornek_marka(self):
         grup = FiyatGrubu.objects.create(kod="SEO_G", ad="SEO G")
         k = Kategori.objects.create(kod="SEO_K", ad="Kolye", fiyat_grubu=grup)
-        self.assertIn("Kuyumbank", k.seo_baslik)
+        self.assertIn("TaraGold", k.seo_baslik)
         self.assertNotIn("Örnek Kuyumculuk", k.seo_baslik or "")
         self.assertNotIn("En şık ve kaliteli", k.seo_aciklama or "")

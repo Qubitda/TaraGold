@@ -70,7 +70,7 @@ def issue_email_otp(*, user) -> None:
     cache.set(_otp_cache_key(user.pk), _hash_otp(code), _OTP_TTL)
     try:
         send_mail(
-            subject="Kuyumbank doğrulama kodu",
+            subject="TaraGold doğrulama kodu",
             message=(
                 f"Doğrulama kodunuz: {code}\n"
                 "Kod on dakika icinde gecersiz olur."

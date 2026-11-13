@@ -1,7 +1,7 @@
 {
-  "name": "Kuyumbank B2B Pazaryeri Platformu",
-  "short_name": "Kuyumbank",
-  "description": "Kuyumbank B2B toptan altın, mücevher ve finans yönetim portalı.",
+  "name": "TaraGold B2B Pazaryeri Platformu",
+  "short_name": "TaraGold",
+  "description": "TaraGold B2B toptan altın, mücevher ve finans yönetim portalı.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

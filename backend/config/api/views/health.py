@@ -16,7 +16,7 @@ class HealthView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({"status": "ok", "service": "kuyumbank", "api": "v1"})
+        return Response({"status": "ok", "service": "taragold", "api": "v1"})
 
 
 class ReadyView(APIView):
@@ -35,7 +35,7 @@ class ReadyView(APIView):
             return Response(
                 {
                     "status": "not_ready",
-                    "service": "kuyumbank",
+                    "service": "taragold",
                     "api": "v1",
                     "checks": {"database": "error"},
                 },
@@ -44,7 +44,7 @@ class ReadyView(APIView):
         return Response(
             {
                 "status": "ready",
-                "service": "kuyumbank",
+                "service": "taragold",
                 "api": "v1",
                 "checks": {"database": "ok"},
             }

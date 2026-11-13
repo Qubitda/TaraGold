@@ -130,7 +130,7 @@ def create_invite(
         link = f"/api/v1/auth/invites/accept/ token={token}"
     try:
         send_mail(
-            subject="Kuyumbank firma daveti",
+            subject="TaraGold firma daveti",
             message=(
                 f"{target_firma.ad} firmasına davet edildiniz (rol: {rol}).\n"
                 f"Kabul: {link}\n"

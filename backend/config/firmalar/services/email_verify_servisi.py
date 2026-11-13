@@ -87,7 +87,7 @@ def request_verification(*, email: str = "", user=None) -> str:
             link = f"/api/v1/auth/email-verify/confirm/ uid={uid} token={token}"
         try:
             send_mail(
-                subject="Kuyumbank e-posta doğrulama",
+                subject="TaraGold e-posta doğrulama",
                 message=f"E-postanızı doğrulamak için:\n{link}\n",
                 from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None)
                 or "webmaster@localhost",

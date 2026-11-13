@@ -43,7 +43,7 @@ export function Header({ user, onLogout }: HeaderProps) {
     return seg ? `/${seg}` : "/";
   })();
   const currentTitle =
-    ROUTE_TITLES[pathname] || ROUTE_TITLES[basePath] || "Kuyumbank Portal";
+    ROUTE_TITLES[pathname] || ROUTE_TITLES[basePath] || "TaraGold Portal";
 
   return (
     <header

@@ -13,8 +13,8 @@ def forwards(apps, schema_editor):
         platform = Firma.objects.filter(firma_kodu="PLATFORM").first()
     if platform is None:
         platform = Firma.objects.create(
-            ad="Kuyumbank Platform",
-            unvan="Kuyumbank Platform",
+            ad="TaraGold Platform",
+            unvan="TaraGold Platform",
             firma_kodu="PLATFORM",
             platform_mu=True,
             aktif=True,

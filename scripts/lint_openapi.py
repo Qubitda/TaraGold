@@ -76,7 +76,7 @@ def main() -> int:
     errors: list[str] = []
 
     raw = SchemaGenerator(
-        title="Kuyumbank API",
+        title="TaraGold API",
         description="API v1 — ADR-0017",
         version="1.0.0",
         url="/api/v1/",

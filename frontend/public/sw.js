@@ -1,12 +1,12 @@
 /**
- * Kuyumbank SW
+ * TaraGold SW
  * - index.html / navigasyon: network-first (stale UI yok)
  * - /assets/* (Vite hash’li): cache-first
  * - /api/*: network only
  * CACHE_NAME sürümle; deploy’da artır.
  */
 const CACHE_VERSION = "v3";
-const CACHE_NAME = `kuyumbank-pwa-${CACHE_VERSION}`;
+const CACHE_NAME = `taragold-pwa-${CACHE_VERSION}`;
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

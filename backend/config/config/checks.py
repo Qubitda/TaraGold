@@ -27,14 +27,14 @@ def check_shared_cache_for_throttle(app_configs, **kwargs):
             Warning(
                 "ALLOW_LOCMEM_CACHE=1: LocMem prod'da bilerek açık "
                 "(throttle limitleri worker başına).",
-                id="kuyumbank.W001",
+                id="taragold.W001",
             )
         ]
     return [
         Error(
             "CACHES default LocMemCache prod'da yasak. "
             "DatabaseCache/Redis kullanın veya ALLOW_LOCMEM_CACHE=1.",
-            id="kuyumbank.E001",
+            id="taragold.E001",
         )
     ]
 
@@ -47,7 +47,7 @@ def check_fake_providers_in_prod(app_configs, **kwargs):
         return [
             Warning(
                 "ALLOW_FAKE_PROVIDERS=1: fake ödeme/kargo prod'da açık.",
-                id="kuyumbank.W002",
+                id="taragold.W002",
             )
         ]
     errors = []
@@ -56,7 +56,7 @@ def check_fake_providers_in_prod(app_configs, **kwargs):
             Error(
                 "PAYMENT_PROVIDER=fake prod'da yasak. Gerçek adaptör veya "
                 "ALLOW_FAKE_PROVIDERS=1.",
-                id="kuyumbank.E002",
+                id="taragold.E002",
             )
         )
     if (getattr(settings, "CARRIER_PROVIDER", "") or "").lower() == "fake":
@@ -64,7 +64,7 @@ def check_fake_providers_in_prod(app_configs, **kwargs):
             Error(
                 "CARRIER_PROVIDER=fake prod'da yasak. Gerçek adaptör veya "
                 "ALLOW_FAKE_PROVIDERS=1.",
-                id="kuyumbank.E003",
+                id="taragold.E003",
             )
         )
     return errors
@@ -79,6 +79,6 @@ def check_mfa_enforce_in_prod(app_configs, **kwargs):
     return [
         Warning(
             "MFA_ENFORCE_PLATFORM=False: platform/act-as e-posta OTP kapalı.",
-            id="kuyumbank.W003",
+            id="taragold.W003",
         )
     ]

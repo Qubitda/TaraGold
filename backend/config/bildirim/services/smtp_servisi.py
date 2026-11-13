@@ -121,7 +121,7 @@ def test_connection(*, to_email: str) -> str:
                 server.login(smtp.username, password or "")
             mime = MIMEMultipart("alternative")
             name, from_email = resolve_from_email(smtp)
-            mime["Subject"] = "Kuyumbank SMTP test"
+            mime["Subject"] = "TaraGold SMTP test"
             mime["From"] = f"{name} <{from_email}>" if name else from_email
             mime["To"] = to_email
             mime.attach(MIMEText("<p>SMTP test OK</p>", "html", "utf-8"))
@@ -134,7 +134,7 @@ def test_connection(*, to_email: str) -> str:
     # Env / console fallback
     send_raw(
         to=[to_email],
-        subject="Kuyumbank SMTP test (env/console)",
+        subject="TaraGold SMTP test (env/console)",
         body_html="<p>SMTP test OK (Django EMAIL_* / console)</p>",
     )
     return "ok"

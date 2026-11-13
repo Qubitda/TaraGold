@@ -124,7 +124,7 @@ def problem_exception_handler(exc, context):
     detail_val = _detail_text(raw, errors)
     title = type(exc).__name__
     code = _resolve_code(exc, response.status_code, errors)
-    type_uri = f"https://kuyumbank.local/problems/{code}"
+    type_uri = f"https://taragold.local/problems/{code}"
 
     body: dict[str, Any] = {
         "type": type_uri,

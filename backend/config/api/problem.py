@@ -19,7 +19,7 @@ def problem_response(
 ) -> HttpResponse:
     """Middleware / non-DRF yollar için tek problem+json zarfı (NX-3)."""
     body: dict[str, Any] = {
-        "type": f"https://kuyumbank.local/problems/{code}",
+        "type": f"https://taragold.local/problems/{code}",
         "title": title or code,
         "status": status,
         "detail": detail,

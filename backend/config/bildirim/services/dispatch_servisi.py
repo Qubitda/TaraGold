@@ -83,7 +83,7 @@ def _build_context(event_type: str, payload: dict[str, Any]) -> dict[str, str]:
             ctx["firma_adi"] = f.ad
             ctx.setdefault("firma_kodu", f.firma_kodu or "")
     if "platform_name" not in ctx:
-        ctx["platform_name"] = getattr(settings, "PLATFORM_BRAND_NAME", "") or "Kuyumbank"
+        ctx["platform_name"] = getattr(settings, "PLATFORM_BRAND_NAME", "") or "TaraGold"
     # Document tips
     if payload.get("document_notes"):
         ctx["document_notes"] = payload["document_notes"]

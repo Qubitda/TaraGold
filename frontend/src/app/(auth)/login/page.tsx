@@ -36,7 +36,7 @@ export default function LoginPage() {
           >
             K
           </span>
-          <span>Kuyumbank</span>
+          <span>TaraGold</span>
         </div>
         <ThemeToggle />
       </header>
@@ -52,7 +52,7 @@ export default function LoginPage() {
               id="login-heading"
               className="text-2xl font-semibold tracking-tight text-foreground"
             >
-              Kuyumbank
+              TaraGold
             </h1>
             <p className="text-xs text-muted-foreground max-w-[32ch] leading-relaxed">
               Jewelry B2B Commerce & Trading Platform — güvenli firma oturumu

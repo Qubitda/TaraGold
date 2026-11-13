@@ -41,13 +41,13 @@ export function Sidebar({
             <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary text-primary-foreground font-mono text-xs">
               K
             </span>
-            <span>Kuyumbank</span>
+            <span>TaraGold</span>
           </Link>
         ) : (
           <Link
             to="/"
             className="mx-auto flex h-7 w-7 items-center justify-center rounded-[4px] bg-primary text-primary-foreground font-mono text-xs font-semibold"
-            title="Kuyumbank Ana Sayfa"
+            title="TaraGold Ana Sayfa"
           >
             K
           </Link>

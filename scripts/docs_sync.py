@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kuyumbank docs AUTO blokları + kırık markdown link + docs lint.
+"""TaraGold docs AUTO blokları + kırık markdown link + docs lint.
 
 Kullanım:
   python scripts/docs_sync.py                 # MASTER AUTO + DATA_DICTIONARY güncelle

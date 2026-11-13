@@ -81,7 +81,7 @@ def _help(field) -> str:
 
 def render() -> str:
     lines = [
-        "# Kuyumbank — Veri sözlüğü",
+        "# TaraGold — Veri sözlüğü",
         "",
         "> **Otomatik üretilir** (`python scripts/docs_sync.py`). Elle düzenlemeyin; "
         "açıklama için modeldeki `help_text` / docstring güncellenir.",

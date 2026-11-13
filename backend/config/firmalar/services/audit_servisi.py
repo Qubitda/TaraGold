@@ -20,12 +20,12 @@ from django.utils import timezone
 from ..models.audit_olay import AuditOlay
 
 _in_domain_atomic: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "kuyumbank_domain_atomic", default=False
+    "taragold_domain_atomic", default=False
 )
 
 # (real_actor, target) — ActAsMiddleware tarafından set edilir
 _act_as_pair: contextvars.ContextVar[tuple | None] = contextvars.ContextVar(
-    "kuyumbank_act_as_pair", default=None
+    "taragold_act_as_pair", default=None
 )
 
 

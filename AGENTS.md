@@ -1,4 +1,4 @@
-# Kuyumbank — Agent Talimatı
+# TaraGold — Agent Talimatı
 
 Bu dosya proje genelinde bağlayıcıdır. Teknik doğruluk ve veri güvenliği, hızdan önce gelir.
 Proje bağlamını burada tekrar etme; kanonik durum için master’a git.
@@ -52,7 +52,7 @@ AUTO blokları ve veri sözlüğü: `python scripts/docs_sync.py` (+ CI `--check
 ## Django docs vs proje skill’leri
 
 - Django docs/kaynak = framework kullanımı için normatif.
-- `.cursor/skills/` = yalnız Kuyumbank kuralları; Django docs yerine geçmez.
+- `.cursor/skills/` = yalnız TaraGold kuralları; Django docs yerine geçmez.
 
 ## Görev yürütme protokolü (token tasarrufu)
 

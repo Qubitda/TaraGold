@@ -87,7 +87,7 @@ function needsIdempotency(path: string, method: string): boolean {
 function emitCsrfFailed(message: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
-    new CustomEvent("kuyumbank:csrf-failed", { detail: { message } })
+    new CustomEvent("taragold:csrf-failed", { detail: { message } })
   );
 }
 
@@ -206,7 +206,7 @@ export async function apiFetch<T>(
         (res.status === 403 && problem.code === "mfa_required"))
     ) {
       window.dispatchEvent(
-        new CustomEvent("kuyumbank:auth-expired", {
+        new CustomEvent("taragold:auth-expired", {
           detail: { status: res.status, code: problem.code, path },
         })
       );

@@ -56,7 +56,7 @@ def request_password_reset(*, email: str, request=None) -> str:
             link = f"/api/v1/auth/password-reset/confirm/ (uid={uid} token={token})"
         try:
             send_mail(
-                subject="Kuyumbank şifre sıfırlama",
+                subject="TaraGold şifre sıfırlama",
                 message=(
                     "Şifre sıfırlama talebi aldık.\n\n"
                     f"Bağlantı / bilgiler:\n{link}\n\n"

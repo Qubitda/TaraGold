@@ -55,7 +55,7 @@ class EmailTemplateAdmin(admin.ModelAdmin):
             "reason": "admin-test",
             "line_count": "0",
             "document_notes": "",
-            "platform_name": "Kuyumbank",
+            "platform_name": "TaraGold",
         }
         ok = 0
         for tpl in queryset:

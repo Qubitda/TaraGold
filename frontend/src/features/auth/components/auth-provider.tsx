@@ -109,8 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         navigate("/login", { replace: true });
       }
     };
-    window.addEventListener("kuyumbank:auth-expired", onExpired);
-    return () => window.removeEventListener("kuyumbank:auth-expired", onExpired);
+    window.addEventListener("taragold:auth-expired", onExpired);
+    return () => window.removeEventListener("taragold:auth-expired", onExpired);
   }, [pathname, navigate]);
 
   useEffect(() => {

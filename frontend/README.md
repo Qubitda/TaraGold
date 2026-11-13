@@ -1,4 +1,4 @@
-# Kuyumbank frontend (Vite SPA)
+# TaraGold frontend (Vite SPA)
 
 Vite + React + TypeScript portal. Normatif API: [`docs/API_CONTRACT.md`](../docs/API_CONTRACT.md) + [`docs/api/openapi-v1.json`](../docs/api/openapi-v1.json) — **repo kökünde** (`frontend/` içinde kopya yok).  
 UI runtime: [ADR-0031](../docs/decisions/ADR-0031-vite-spa-portal.md) **Kabul**. API sözleşmesi: [ADR-0017](../docs/decisions/ADR-0017-nextjs-api-sozlesmesi.md) NX-1…12.

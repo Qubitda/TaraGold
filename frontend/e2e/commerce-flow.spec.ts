@@ -30,7 +30,7 @@ test.describe("portal akışları (mock API)", () => {
   test("login sayfası Türkçe ve erişilebilir", async ({ page }) => {
     await page.goto("/login");
     await expect(page.locator("html")).toHaveAttribute("lang", "tr");
-    await expect(page.getByRole("heading", { name: /Kuyumbank/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /TaraGold/i })).toBeVisible();
   });
 
   test("yetkisiz firma URL’i login’e düşer", async ({ page }) => {

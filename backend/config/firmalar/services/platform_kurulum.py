@@ -25,8 +25,8 @@ def ensure_platform_firma() -> Firma:
         return by_kod
 
     return Firma.objects.create(
-        ad="Kuyumbank Platform",
-        unvan="Kuyumbank Platform",
+        ad="TaraGold Platform",
+        unvan="TaraGold Platform",
         firma_kodu=roles.PLATFORM_FIRMA_KODU,
         platform_mu=True,
         aktif=True,

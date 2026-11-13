@@ -13,7 +13,7 @@ class ApiB7OpenApiFreezeTests(SimpleTestCase):
     def test_schema_paths_no_double_prefix_covers_b1_b6(self):
         schema = enrich_openapi_schema(
             SchemaGenerator(
-                title="Kuyumbank API",
+                title="TaraGold API",
                 description="API v1 — ADR-0017",
                 version="1.0.0",
                 url="/api/v1/",

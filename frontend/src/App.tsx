@@ -51,11 +51,11 @@ function GlobalFeedbackBridge() {
         detail?.message || "Sayfayı yenileyip tekrar deneyin."
       );
     };
-    window.addEventListener("kuyumbank:auth-expired", onExpired);
-    window.addEventListener("kuyumbank:csrf-failed", onCsrf);
+    window.addEventListener("taragold:auth-expired", onExpired);
+    window.addEventListener("taragold:csrf-failed", onCsrf);
     return () => {
-      window.removeEventListener("kuyumbank:auth-expired", onExpired);
-      window.removeEventListener("kuyumbank:csrf-failed", onCsrf);
+      window.removeEventListener("taragold:auth-expired", onExpired);
+      window.removeEventListener("taragold:csrf-failed", onCsrf);
     };
   }, [toast]);
 

@@ -1,4 +1,4 @@
-# Kuyumbank
+# TaraGold
 
 Jewelry B2B commerce platform (Django modular monolith).
 

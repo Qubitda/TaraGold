@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fiyatlamaService } from "../services";
 import type { PriceLock, PriceQuote } from "../types";
 
-const QUOTE_KEY = "kuyumbank.session.quote_ids";
-const LOCK_KEY = "kuyumbank.session.lock_ids";
+const QUOTE_KEY = "taragold.session.quote_ids";
+const LOCK_KEY = "taragold.session.lock_ids";
 
 function readIds(key: string): number[] {
   if (typeof window === "undefined") return [];

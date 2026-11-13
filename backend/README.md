@@ -1,4 +1,4 @@
-# Kuyumbank backend
+# TaraGold backend
 
 Django **6.1.2** modular monolith. Proje paketi: `config/` · `manage.py` bu dizinde.
 
@@ -7,7 +7,7 @@ Django **6.1.2** modular monolith. Proje paketi: `config/` · `manage.py` bu diz
 | Bilgi | Dosya |
 |-------|--------|
 | Agent kuralları | [`../AGENTS.md`](../AGENTS.md) |
-| Kanonik ürün/teknik durum | [`../docs/KUYUMBANK_MASTER.md`](../docs/KUYUMBANK_MASTER.md) (§2, §12) |
+| Kanonik ürün/teknik durum | [`../docs/MASTER.md`](../docs/MASTER.md) (§2, §12) |
 | Repo özeti | [`../README.md`](../README.md) |
 
 ## Gereksinimler

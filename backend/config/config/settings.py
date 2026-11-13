@@ -29,7 +29,7 @@ SECRET_KEY = env("SECRET_KEY")
 # Varsayılan False: DEBUG'ı yalnızca geliştirme .env dosyasında True yap.
 DEBUG = env("DEBUG")
 
-# Örn. .env içinde: ALLOWED_HOSTS=kuyumbank.com,www.kuyumbank.com
+# Örn. .env içinde: ALLOWED_HOSTS=taragold.com,www.taragold.com
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 if DEBUG and not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
@@ -60,7 +60,7 @@ if DEBUG and not CSRF_TRUSTED_ORIGINS:
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
-# Ortak üst alan (opsiyonel cookie paylaşımı): .kuyumbank.local
+# Ortak üst alan (opsiyonel cookie paylaşımı): .taragold.local
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN", default="") or None
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default="") or None
 # Mutlak oturum süresi (varsayılan 8 saat) + boşta kalma (varsayılan 30 dk)
@@ -83,7 +83,7 @@ _CACHE_BACKEND = env(
 )
 _CACHE_LOCATION = env(
     "CACHE_LOCATION",
-    default="kuyumbank-default" if DEBUG else "kuyumbank_cache",
+    default="taragold-default" if DEBUG else "taragold_cache",
 )
 CACHES = {
     "default": {
@@ -170,7 +170,7 @@ REST_FRAMEWORK = {
 
 # TECH-OPENAPI-02 — Swagger/ReDoc UI (şema üretimi DRF+enrich; bkz. schema_views)
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Kuyumbank API",
+    "TITLE": "TaraGold API",
     "DESCRIPTION": "API v1 — ADR-0017 / API_CONTRACT",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,

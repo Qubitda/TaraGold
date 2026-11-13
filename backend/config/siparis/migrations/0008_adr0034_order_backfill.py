@@ -1,4 +1,4 @@
-"""Açık OLUSTURULDU → ONAYLANDI (mevcut QC/sevkiyat yolu kırılmasın)."""
+"""Acik OLUSTURULDU -> ONAYLANDI (mevcut QC/sevkiyat yolu kirilmasin)."""
 
 from django.db import migrations
 
@@ -6,7 +6,7 @@ from django.db import migrations
 def forwards(apps, schema_editor):
     Order = apps.get_model("siparis", "Order")
     n = Order.objects.filter(durum="OLUSTURULDU").update(durum="ONAYLANDI")
-    print(f"ADR-0034 backfill OLUSTURULDU→ONAYLANDI: {n}")
+    print(f"ADR-0034 backfill OLUSTURULDI->ONAYLANDI: {n}")
 
 
 def backwards(apps, schema_editor):

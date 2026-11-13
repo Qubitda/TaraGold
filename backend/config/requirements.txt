@@ -1,7 +1,7 @@
-# Kuyumbank backend — doğrudan bağımlılıklar
+# TaraGold backend — doğrudan bağımlılıklar
 # Kural: yalnızca kodun import ettiği / INSTALLED_APPS’te olan paketler.
 # Celery/Redis yok (F8). DRF: PRE ince API (U-012 / PRE-001).
-# Kaynak: docs/KUYUMBANK_MASTER.md §6 ADR-0002
+# Kaynak: docs/MASTER.md §6 ADR-0002
 
 Django==6.1.2
 djangorestframework==3.18.3
