@@ -1,0 +1,15 @@
+{
+  "name": "taragold",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm -w frontend run dev",
+    "build": "npm -w frontend run build",
+    "preview": "npm -w frontend run preview",
+    "lint": "npm -w frontend run lint",
+    "test": "npm -w frontend run test",
+    "test:e2e": "npm -w frontend run test:e2e"
+  }
+}
