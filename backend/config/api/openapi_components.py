@@ -92,6 +92,7 @@ CAPABILITIES = {
             "can_manage_users",
             "can_manage_addresses",
             "can_act_as",
+            "can_manage_smtp",
         )
     },
 }

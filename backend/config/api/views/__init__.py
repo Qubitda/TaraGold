@@ -136,6 +136,11 @@ from .ops_qc import (
     OpsInspectionPassView,
     OpsInspectionStartView,
 )
+from .ops_email import (
+    OpsEmailSendTestView,
+    OpsEmailSettingsView,
+    OpsEmailTestConnectionView,
+)
 from .ops_definitions import (
     OpsDefinitionsDetailView,
     OpsDefinitionsListCreateView,
@@ -321,6 +326,9 @@ __all__ = [
     "OpsDefinitionsListCreateView",
     "OpsSalesChannelProductsView",
     "OpsCanliPiyasaView",
+    "OpsEmailSendTestView",
+    "OpsEmailSettingsView",
+    "OpsEmailTestConnectionView",
     "OpsMarjKuraliDetailView",
     "OpsMarjKuraliListCreateView",
     "OpsPiyasaMarjPolitikasiView",

@@ -13,6 +13,7 @@ import {
   Briefcase,
   User,
   BarChart3,
+  Mail,
 } from "lucide-react";
 import type { Capabilities } from "@/lib/api/types";
 
@@ -107,5 +108,11 @@ export const DOMAIN_NAV_ITEMS: NavItem[] = [
     label: "Raporlar & Analitik",
     icon: BarChart3,
     requiredCapability: "can_view_ops",
+  },
+  {
+    href: "/ayarlar/eposta",
+    label: "Ayarlar · E-posta (SMTP)",
+    icon: Mail,
+    requiredCapability: "can_manage_smtp",
   },
 ];

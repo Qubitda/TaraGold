@@ -29,6 +29,7 @@ import BelgelerPage from "@/app/(portal)/belgeler/page";
 import ProfilPage from "@/app/(portal)/profil/page";
 import TekliflerPage from "@/app/(portal)/teklifler/page";
 import RaporlarPage from "@/app/(portal)/raporlar/page";
+import EpostaAyarlariPage from "@/app/(portal)/ayarlar/eposta/page";
 
 const queryClient = createAppQueryClient();
 
@@ -173,6 +174,16 @@ export default function App() {
                       >
                         <Route path="teklifler" element={<TekliflerPage />} />
                         <Route path="teklifler/:id" element={<TekliflerPage />} />
+                      </Route>
+                      <Route
+                        element={
+                          <RequireCapability capability="can_manage_smtp" />
+                        }
+                      >
+                        <Route
+                          path="ayarlar/eposta"
+                          element={<EpostaAyarlariPage />}
+                        />
                       </Route>
 
                       <Route path="*" element={<NotFoundPage />} />

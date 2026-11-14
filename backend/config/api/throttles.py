@@ -1,4 +1,4 @@
-"""F7-013 — buyer / supplier ayrı rate scope."""
+"""F7-013 — buyer / supplier / ops / smtp_test ayrı rate scope."""
 
 from rest_framework.throttling import UserRateThrottle
 
@@ -13,3 +13,7 @@ class SupplierRateThrottle(UserRateThrottle):
 
 class OpsRateThrottle(UserRateThrottle):
     scope = "ops"
+
+
+class SmtpTestRateThrottle(UserRateThrottle):
+    scope = "smtp_test"

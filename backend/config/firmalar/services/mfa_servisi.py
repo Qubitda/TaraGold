@@ -14,6 +14,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 
+from bildirim.services.smtp_servisi import resolve_from_header
 from firmalar import roles
 from firmalar.services.audit_servisi import record_audit_durable
 
@@ -75,8 +76,7 @@ def issue_email_otp(*, user) -> None:
                 f"Doğrulama kodunuz: {code}\n"
                 "Kod on dakika icinde gecersiz olur."
             ),
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None)
-            or "webmaster@localhost",
+            from_email=resolve_from_header(),
             recipient_list=[email],
             fail_silently=False,
         )

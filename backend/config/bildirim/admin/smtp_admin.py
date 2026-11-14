@@ -22,6 +22,7 @@ class SmtpSettingsForm(forms.ModelForm):
             "host",
             "port",
             "encryption",
+            "timeout",
             "username",
             "password",
             "from_name",
@@ -48,7 +49,22 @@ class SmtpSettingsForm(forms.ModelForm):
 @admin.register(SmtpSettings)
 class SmtpSettingsAdmin(admin.ModelAdmin):
     form = SmtpSettingsForm
-    list_display = ("host", "port", "encryption", "from_email", "enabled")
+    list_display = (
+        "host",
+        "port",
+        "encryption",
+        "from_email",
+        "enabled",
+        "last_test_success",
+        "last_test_at",
+    )
+    readonly_fields = (
+        "last_test_at",
+        "last_test_success",
+        "last_test_message",
+        "updated_by",
+        "guncelleme_tarihi",
+    )
     actions = ("action_test_email",)
 
     def has_add_permission(self, request):
@@ -68,6 +84,10 @@ class SmtpSettingsAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return self.has_module_permission(request)
 
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
     @admin.action(description="Test e-posta gönder (kendi e-postanıza)")
     def action_test_email(self, request, queryset):
         to = (getattr(request.user, "email", None) or "").strip()
@@ -75,7 +95,7 @@ class SmtpSettingsAdmin(admin.ModelAdmin):
             self.message_user(request, "Kullanıcı e-postası yok.", level=messages.ERROR)
             return
         try:
-            smtp_servisi.test_connection(to_email=to)
+            smtp_servisi.send_test_email(to_email=to, actor=request.user)
             self.message_user(request, f"Test gönderildi: {to}", level=messages.SUCCESS)
         except ValidationError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)

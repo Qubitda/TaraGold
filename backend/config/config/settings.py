@@ -17,7 +17,7 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, []),
     DB_HOST=(str, "localhost"),
     DB_PORT=(str, "5432"),
-    EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
+    EMAIL_BACKEND=(str, "bildirim.backends.DynamicDatabaseEmailBackend"),
 )
 # .env dosyası varsa oku (canlıda gerçek ortam değişkenleri de çalışır)
 environ.Env.read_env(BASE_DIR / ".env")
@@ -161,6 +161,8 @@ REST_FRAMEWORK = {
         "login": env("DRF_THROTTLE_LOGIN", default="10/min"),
         # Webhook AllowAny — provider retry (IP başına)
         "webhook": env("DRF_THROTTLE_WEBHOOK", default="120/min"),
+        # SMTP bağlantı/test e-posta gönderim kötüye kullanım koruması
+        "smtp_test": env("DRF_THROTTLE_SMTP_TEST", default="10/min"),
     },
     "EXCEPTION_HANDLER": "api.exception_handler.problem_exception_handler",
     # Path keşfi: DRF AutoSchema (APIView). DTO: api.openapi_components.enrich.
@@ -328,8 +330,21 @@ MEDIA_ROOT = Path(env("MEDIA_ROOT", default=str(BASE_DIR / "media")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- E-posta ----------------------------------------------------------------
-# Geliştirmede konsola yazar. Canlıda .env içinde SMTP backend'i verilir.
+# Veritabanındaki aktif SMTP ayarlarını dinamik okur; yoksa EMAIL_FALLBACK_BACKEND'e düşer.
 EMAIL_BACKEND = env("EMAIL_BACKEND")
+EMAIL_FALLBACK_BACKEND = env(
+    "EMAIL_FALLBACK_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@taragold.local")
+EMAIL_ENCRYPTION_KEY = env("EMAIL_ENCRYPTION_KEY", default="")
 
 # --- Marka / SEO (K-015, ADR-0005) ------------------------------------------
 # Boşsa SEO fallback yalnızca ürün/kategori adıdır; pazarlama metni üretilmez.

@@ -13,6 +13,7 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
+from bildirim.services.smtp_servisi import resolve_from_header
 from firmalar.services.audit_servisi import record_audit_durable
 
 logger = logging.getLogger(__name__)
@@ -62,8 +63,7 @@ def request_password_reset(*, email: str, request=None) -> str:
                     f"Bağlantı / bilgiler:\n{link}\n\n"
                     "Talep sizden değilse bu e-postayı yok sayın."
                 ),
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None)
-                or "webmaster@localhost",
+                from_email=resolve_from_header(),
                 recipient_list=[user.email],
                 fail_silently=False,
             )

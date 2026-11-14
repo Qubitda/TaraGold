@@ -8,6 +8,7 @@ from firmalar.services.yetki_servisi import (
     can_manage_all_users,
     can_view_all_tenants,
     has_perm,
+    is_platform_firm_user,
 )
 
 
@@ -55,6 +56,10 @@ def capabilities_for(user) -> dict[str, bool]:
         "can_manage_addresses": can_manage_all_users(user)
         or has_perm(user, P["manage_users"]),
         "can_act_as": has_perm(user, P["act_as_user"]),
+        "can_manage_smtp": bool(
+            (getattr(user, "is_superuser", False) and getattr(user, "is_staff", False))
+            or (is_platform_firm_user(user) and has_perm(user, P["manage_smtp"]))
+        ),
     }
 
 

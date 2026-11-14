@@ -52,6 +52,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/profil": "Profil",
   "/teklifler": "Tedarikçi Teklifleri",
   "/raporlar": "Raporlar & İhracat",
+  "/ayarlar/eposta": "Ayarlar · E-posta (SMTP)",
   "/login": "Kullanıcı Girişi",
 };
 

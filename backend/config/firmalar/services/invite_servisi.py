@@ -14,6 +14,7 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
+from bildirim.services.smtp_servisi import resolve_from_header
 from firmalar import roles
 from firmalar.models import Firma, FirmaInvite
 from firmalar.role_permissions import P
@@ -136,8 +137,7 @@ def create_invite(
                 f"Kabul: {link}\n"
                 f"Geçerlilik: {_invite_ttl_hours()} saat.\n"
             ),
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None)
-            or "webmaster@localhost",
+            from_email=resolve_from_header(),
             recipient_list=[email],
             fail_silently=False,
         )

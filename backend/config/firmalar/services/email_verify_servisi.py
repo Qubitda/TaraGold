@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
+from bildirim.services.smtp_servisi import resolve_from_header
 from firmalar.services.audit_servisi import record_audit_durable
 
 logger = logging.getLogger(__name__)
@@ -89,8 +90,7 @@ def request_verification(*, email: str = "", user=None) -> str:
             send_mail(
                 subject="TaraGold e-posta doğrulama",
                 message=f"E-postanızı doğrulamak için:\n{link}\n",
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None)
-                or "webmaster@localhost",
+                from_email=resolve_from_header(),
                 recipient_list=[u.email],
                 fail_silently=False,
             )

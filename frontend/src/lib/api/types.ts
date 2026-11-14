@@ -11,7 +11,9 @@ export type { components, paths, operations } from "./schema";
 type S = components["schemas"];
 
 export type ProblemDetail = S["ProblemDetail"];
-export type Capabilities = S["Capabilities"];
+export type Capabilities = S["Capabilities"] & {
+  can_manage_smtp?: boolean;
+};
 export type FirmaMasked = S["FirmaMasked"];
 export interface ActAsState {
   active: boolean;
