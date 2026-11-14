@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -19,7 +20,9 @@ from firmalar.services.audit_servisi import record_audit
 from firmalar.services.yetki_servisi import can_view_all_tenants
 
 
-def _present_document(doc: Document, *, include_meta: bool = False) -> dict:
+def _present_document(
+    doc: Document, *, include_meta: bool = False, include_firma_ad: bool = False
+) -> dict:
     meta = dict(doc.metadata or {})
     meta.pop("pdf_lines", None)
     row = {
@@ -37,6 +40,8 @@ def _present_document(doc: Document, *, include_meta: bool = False) -> dict:
         if doc.olusturma_tarihi
         else None,
     }
+    if include_firma_ad:
+        row["firma_ad"] = getattr(getattr(doc, "firma", None), "ad", "") or ""
     if include_meta:
         row["metadata"] = meta
     return row
@@ -52,7 +57,7 @@ class BelgeListView(APIView):
         user = request.user
         is_ops = can_view_all_tenants(user)
         if is_ops:
-            qs = Document.objects.all()
+            qs = Document.objects.select_related("firma").all()
             firma_id = request.query_params.get("firma_id")
             if firma_id:
                 try:
@@ -84,6 +89,15 @@ class BelgeListView(APIView):
                 raise ValidationError({"order_id": "Geçersiz."}) from exc
             qs = qs.filter(metadata__order_id=oid)
 
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = Q(baslik__icontains=q)
+            if is_ops:
+                cond |= Q(firma__ad__icontains=q)
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(metadata__order_id=int(q))
+            qs = qs.filter(cond)
+
         qs = apply_ordering(qs, request, whitelist=("pk", "olusturma_tarihi"), default="-pk")
         context = "auto"
         if not is_ops:
@@ -94,7 +108,7 @@ class BelgeListView(APIView):
                 context = "buyer"
 
         def _present(doc: Document) -> dict:
-            data = _present_document(doc, include_meta=is_ops)
+            data = _present_document(doc, include_meta=is_ops, include_firma_ad=is_ops)
             if context != "auto":
                 assert_masked(data, context=context)
             return data

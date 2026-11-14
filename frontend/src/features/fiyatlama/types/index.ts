@@ -8,7 +8,6 @@ export interface BuyerQuoteNetOzet {
 export interface PriceQuote {
   id: number;
   varyant_id: number;
-  /** Gösterim: gram_basi veya toplam (OpenAPI BuyerQuote) */
   birim_fiyat: string;
   para_birimi: string;
   expires_at?: string;
@@ -17,11 +16,15 @@ export interface PriceQuote {
   gram?: string;
   gram_basi_vergisiz?: string;
   toplam_vergisiz?: string;
-  /** gram × katalog milyem (alıcıya yalnız net fiyat + has gram gösterilir) */
   has_gram?: string | null;
   net_ozet?: BuyerQuoteNetOzet;
   varyant_sku?: string;
   urun?: string;
+}
+
+export interface PriceQuotePage {
+  count: number;
+  results: PriceQuote[];
 }
 
 export interface PriceLock {
@@ -32,6 +35,30 @@ export interface PriceLock {
   durum: "AKTIF" | "KULLANILDI" | "SURESI_DOLDU" | "IPTAL" | string;
   expires_at: string;
   gecerli?: boolean;
+  varyant_sku?: string;
+  urun_ad?: string;
+}
+
+export interface PriceLockPage {
+  count: number;
+  results: PriceLock[];
+}
+
+export interface SupplierVariantOption {
+  id: number;
+  sku: string;
+  urun_id: number;
+  urun_ad: string;
+  platform_kodu: string;
+  gram?: string | null;
+  renk?: string;
+  beden?: string;
+  etiket: string;
+}
+
+export interface SupplierVariantPage {
+  count: number;
+  results: SupplierVariantOption[];
 }
 
 export interface SupplierRfqLine {
@@ -94,7 +121,6 @@ export interface SupplierRfqPage {
   results: SupplierRfq[];
 }
 
-/** OpenAPI RfqCreateRequest — line: miktar, birim?, varyant_id?, aciklama? */
 export interface BuyerRfqCreateRequest {
   baslik?: string;
   talep_tipi: "STANDART" | "KATALOG_DISI" | "OZEL_URETIM" | string;
@@ -110,12 +136,16 @@ export interface BuyerRfqCreateRequest {
 export interface SupplierOffer {
   id: number;
   varyant_id: number;
+  varyant_sku?: string;
+  urun_ad?: string;
+  platform_kodu?: string;
   fiyat_modeli?: string;
+  temin_tipi?: string;
   birim_fiyat: string | null;
   gram?: string | null;
   iscilik_override?: string | null;
   para_birimi: string;
-  durum: "TASLAK" | "GONDERILDI" | "ONAYLANDI" | "YAYINDA" | "PASIF" | string;
+  durum: "TASLAK" | "ONAY_BEKLIYOR" | "GONDERILDI" | "ONAYLANDI" | "YAYINDA" | "PASIF" | string;
   allowed_actions: string[];
   tedarikci_kodu?: string;
   versiyon?: number;
@@ -130,7 +160,6 @@ export interface SupplierOfferPage {
   results: SupplierOffer[];
 }
 
-/** OpenAPI SupplierOfferCreateRequest */
 export interface SupplierOfferCreateRequest {
   varyant_id: number;
   fiyat_modeli: string;
@@ -147,7 +176,6 @@ export interface SupplierOfferCreateRequest {
   rfq_line_id?: number;
 }
 
-/** GAP-F3-04 — CSV föy satırı */
 export interface SupplierOfferImportSatir {
   satir_no: number;
   varyant_id: number;

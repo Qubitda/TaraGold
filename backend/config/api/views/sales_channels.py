@@ -12,7 +12,7 @@ from tanimlar.models import SatisKanali
 
 
 class SalesChannelListView(APIView):
-    """GET /api/v1/sales-channels/ — [{id, kod, ad, quote_ttl_saniye}]."""
+    """GET /api/v1/sales-channels/ — [{id, kod, ad, tip, quote_ttl_saniye, sira, aktif}]."""
 
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [BuyerRateThrottle]
@@ -21,7 +21,7 @@ class SalesChannelListView(APIView):
         rows = list(
             SatisKanali.objects.filter(aktif=True)
             .order_by("sira", "kod")
-            .values("id", "kod", "ad", "quote_ttl_saniye")
+            .values("id", "kod", "ad", "tip", "fiyat_grubu_id", "quote_ttl_saniye", "sira", "aktif")
         )
         return Response(
             {

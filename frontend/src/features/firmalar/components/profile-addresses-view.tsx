@@ -23,22 +23,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { ConfirmDialog, EntityModal, RowActions } from "@/components/crud";
 import {
   User,
   MapPin,
   Plus,
-  Trash2,
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Pencil,
 } from "lucide-react";
 
 export function ProfileAddressesView() {
@@ -50,6 +42,7 @@ export function ProfileAddressesView() {
 
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<FirmaAdresi | null>(null);
+  const [deletingAddress, setDeletingAddress] = useState<FirmaAdresi | null>(null);
 
   const {
     register: registerProfile,
@@ -58,17 +51,14 @@ export function ProfileAddressesView() {
     formState: { isSubmitting: isProfileSubmitting },
   } = useForm<ProfileInput>({
     resolver: zodResolver(profileSchema),
-    defaultValues: {
-      first_name: "",
-      last_name: "",
-    },
+    defaultValues: { first_name: "", last_name: "" },
   });
 
   const {
     register: registerAddress,
     handleSubmit: handleAddressSubmit,
     reset: resetAddress,
-    formState: { errors: addressErrors, isSubmitting: isAddressSubmitting },
+    formState: { errors: addressErrors, isDirty: isAddressDirty, isSubmitting: isAddressSubmitting },
   } = useForm<AddressInput>({
     resolver: zodResolver(addressSchema),
     defaultValues: {
@@ -107,8 +97,8 @@ export function ProfileAddressesView() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onProfileSave = async (data: ProfileInput) => {
     setError(null);
@@ -151,22 +141,10 @@ export function ProfileAddressesView() {
     setSuccessMsg(null);
     try {
       if (editingAddress) {
-        await firmalarService.updateAddress(editingAddress.id, {
-          tip: data.tip,
-          il: data.il,
-          ilce: data.ilce,
-          adres: data.adres,
-          varsayilan: data.varsayilan,
-        });
+        await firmalarService.updateAddress(editingAddress.id, data);
         setSuccessMsg("Adres başarıyla güncellendi.");
       } else {
-        await firmalarService.createAddress({
-          tip: data.tip,
-          il: data.il,
-          ilce: data.ilce,
-          adres: data.adres,
-          varsayilan: data.varsayilan,
-        });
+        await firmalarService.createAddress(data);
         setSuccessMsg("Yeni adres başarıyla kaydedildi.");
       }
       setAddressModalOpen(false);
@@ -178,9 +156,11 @@ export function ProfileAddressesView() {
     }
   };
 
-  const handleDeleteAddress = async (id: number) => {
+  const confirmDeleteAddress = async () => {
+    if (!deletingAddress) return;
     try {
-      await firmalarService.deleteAddress(id);
+      await firmalarService.deleteAddress(deletingAddress.id);
+      setDeletingAddress(null);
       await fetchData();
       setSuccessMsg("Adres silindi.");
     } catch (err) {
@@ -190,24 +170,23 @@ export function ProfileAddressesView() {
 
   return (
     <div className="flex flex-col gap-8 max-w-4xl">
-      {/* Başlık */}
       <div className="flex flex-col gap-1 border-b border-border pb-4">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Kullanıcı Profili & Firma Adresleri
+          Kullanıcı Profili &amp; Firma Adresleri
         </h1>
         <p className="text-xs text-muted-foreground">
-          Kişisel hesap ayarları, fatura ve zırhlı kargo teslimat adresleri yönetimi (ADR-0017 / F9-017).
+          Kişisel hesap ayarlarınız, fatura ve zırhlı kargo teslimat adreslerinizin yönetimi.
         </p>
       </div>
 
-      {successMsg && (
+      {successMsg ? (
         <div className="flex items-center gap-2 rounded-[6px] border border-border bg-muted/60 p-3 text-xs text-foreground font-medium">
           <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
           <span>{successMsg}</span>
         </div>
-      )}
+      ) : null}
 
-      {error && (
+      {error ? (
         <div
           className="flex items-center justify-between rounded-[8px] border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive"
           role="alert"
@@ -219,13 +198,13 @@ export function ProfileAddressesView() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            onClick={() => void fetchData()}
             className="h-8 border-destructive/30"
           >
             Yeniden Dene
           </Button>
         </div>
-      )}
+      ) : null}
 
       {loading ? (
         <div className="flex h-48 w-full items-center justify-center">
@@ -236,16 +215,16 @@ export function ProfileAddressesView() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {/* 1. Profil Bilgileri Formu */}
           <div className="rounded-[8px] border border-border bg-card p-6 space-y-4">
             <div className="flex items-center gap-2 border-b border-border pb-3">
               <User className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-foreground">
-                Kişisel Bilgiler
-              </h2>
+              <h2 className="text-sm font-semibold text-foreground">Kişisel Bilgiler</h2>
             </div>
 
-            <form onSubmit={handleProfileSubmit(onProfileSave)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form
+              onSubmit={handleProfileSubmit(onProfileSave)}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+            >
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prof-first">Ad</Label>
                 <Input
@@ -268,17 +247,11 @@ export function ProfileAddressesView() {
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prof-email">E-posta</Label>
-                <Input
-                  id="prof-email"
-                  type="email"
-                  value={profile?.email || ""}
-                  disabled
-                  readOnly
-                />
+                <Input id="prof-email" type="email" value={profile?.email || ""} disabled readOnly />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="prof-username">Kullanıcı adı</Label>
+                <Label htmlFor="prof-username">Kullanıcı Adı</Label>
                 <Input
                   id="prof-username"
                   value={profile?.username || ""}
@@ -296,13 +269,12 @@ export function ProfileAddressesView() {
             </form>
           </div>
 
-          {/* 2. Firma Adresleri Listesi ve Ekleme */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold text-foreground">
-                  Kayıtlı Firma Adresleri (Teslimat & Fatura)
+                  Kayıtlı Firma Adresleri (Teslimat &amp; Fatura)
                 </h2>
               </div>
               <Button
@@ -325,11 +297,11 @@ export function ProfileAddressesView() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[110px]">Adres Tipi</TableHead>
+                      <TableHead className="w-[120px]">Adres Tipi</TableHead>
                       <TableHead>İl / İlçe</TableHead>
                       <TableHead>Açık Adres</TableHead>
-                      <TableHead className="text-right">Varsayılan</TableHead>
-                      <TableHead className="text-right">İşlem</TableHead>
+                      <TableHead>Varsayılan</TableHead>
+                      <TableHead className="text-right">İşlemler</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -338,9 +310,9 @@ export function ProfileAddressesView() {
                         <TableCell>
                           <Badge
                             variant={a.tip === "TESLIMAT" ? "default" : "secondary"}
-                            className="font-mono text-[10px]"
+                            className="text-[10px]"
                           >
-                            {a.tip}
+                            {a.tip === "TESLIMAT" ? "Teslimat" : "Fatura"}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium text-foreground">
@@ -349,34 +321,22 @@ export function ProfileAddressesView() {
                         <TableCell className="text-xs text-muted-foreground max-w-sm truncate">
                           {a.adres}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {a.varsayilan && (
-                            <Badge variant="outline" className="font-mono text-[10px]">
-                              VARSAYILAN
+                        <TableCell>
+                          {a.varsayilan ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Varsayılan
                             </Badge>
+                          ) : (
+                            "—"
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditAddressModal(a)}
-                              className="h-8 w-8"
-                              aria-label="Adresi düzenle"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteAddress(a.id)}
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              aria-label="Adresi sil"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <RowActions
+                            itemLabel={`${a.il} adresi`}
+                            onEdit={() => openEditAddressModal(a)}
+                            onDelete={() => setDeletingAddress(a)}
+                            inline
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -388,115 +348,101 @@ export function ProfileAddressesView() {
         </div>
       )}
 
-      <Dialog
+      <EntityModal
         open={addressModalOpen}
         onOpenChange={(open) => {
           setAddressModalOpen(open);
           if (!open) setEditingAddress(null);
         }}
+        title={editingAddress ? "Adresi Düzenle" : "Yeni Adres Tanımı"}
+        description={
+          editingAddress
+            ? "Mevcut firma adresi bilgilerini güncelleyin."
+            : "Sigortalı teslimat veya e-fatura için firma adresi ekleyin."
+        }
+        size="sm"
+        isDirty={isAddressDirty}
+        isSubmitting={isAddressSubmitting}
+        submitLabel="Adresi Kaydet"
+        onSubmit={handleAddressSubmit(onAddressSave)}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingAddress ? `Adresi Düzenle (#${editingAddress.id})` : "Yeni Adres Tanımı"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingAddress
-                ? "Mevcut firma adresi bilgilerini güncelleyin."
-                : "Sigortalı teslimat veya e-fatura için firma adresi ekleyin."}
-            </DialogDescription>
-          </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="addr-tip" className="text-xs">Adres Türü</Label>
+            <select
+              id="addr-tip"
+              className="h-9 w-full rounded-[6px] border border-input bg-background px-3 py-1 text-xs"
+              disabled={isAddressSubmitting}
+              {...registerAddress("tip")}
+            >
+              <option value="TESLIMAT">Teslimat Adresi (Zırhlı Kargo)</option>
+              <option value="FATURA">Fatura Adresi (Resmi)</option>
+            </select>
+            {addressErrors.tip ? (
+              <span className="text-[11px] text-destructive">{addressErrors.tip.message}</span>
+            ) : null}
+          </div>
 
-          <form onSubmit={handleAddressSubmit(onAddressSave)} className="flex flex-col gap-4 pt-2">
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="addr-tip">Adres Türü</Label>
-              <select
-                id="addr-tip"
-                className="h-9 w-full rounded-[6px] border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isAddressSubmitting}
-                {...registerAddress("tip")}
-              >
-                <option value="TESLIMAT">TESLİMAT ADRESİ (Zırhlı Kargo)</option>
-                <option value="FATURA">FATURA ADRESİ (Resmi)</option>
-              </select>
-              {addressErrors.tip && (
-                <span className="text-[11px] text-destructive">
-                  {addressErrors.tip.message}
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="addr-il">İl</Label>
-                <Input
-                  id="addr-il"
-                  placeholder="Örn: İstanbul"
-                  disabled={isAddressSubmitting}
-                  {...registerAddress("il")}
-                />
-                {addressErrors.il && (
-                  <span className="text-[11px] text-destructive">
-                    {addressErrors.il.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="addr-ilce">İlçe</Label>
-                <Input
-                  id="addr-ilce"
-                  placeholder="Örn: Fatih"
-                  disabled={isAddressSubmitting}
-                  {...registerAddress("ilce")}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="addr-text">Açık Adres (Cadde, Kapı No, Posta Kodu)</Label>
+              <Label htmlFor="addr-il" className="text-xs">İl</Label>
               <Input
-                id="addr-text"
-                placeholder="Kapalıçarşı Kalpakçılar Cad. No: 42"
+                id="addr-il"
+                placeholder="Örn: İstanbul"
                 disabled={isAddressSubmitting}
-                {...registerAddress("adres")}
+                {...registerAddress("il")}
               />
-              {addressErrors.adres && (
-                <span className="text-[11px] text-destructive">
-                  {addressErrors.adres.message}
-                </span>
-              )}
+              {addressErrors.il ? (
+                <span className="text-[11px] text-destructive">{addressErrors.il.message}</span>
+              ) : null}
             </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                id="addr-def"
-                type="checkbox"
-                className="h-4 w-4 rounded-[4px] border-border text-primary focus:ring-ring"
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="addr-ilce" className="text-xs">İlçe</Label>
+              <Input
+                id="addr-ilce"
+                placeholder="Örn: Fatih"
                 disabled={isAddressSubmitting}
-                {...registerAddress("varsayilan")}
+                {...registerAddress("ilce")}
               />
-              <Label htmlFor="addr-def" className="text-xs cursor-pointer font-normal">
-                Bu adresi varsayılan olarak belirle
-              </Label>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAddressModalOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button type="submit" size="sm" disabled={isAddressSubmitting}>
-                {isAddressSubmitting ? "Kaydediliyor…" : "Adresi Kaydet"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="addr-text" className="text-xs">Açık Adres</Label>
+            <Input
+              id="addr-text"
+              placeholder="Kapalıçarşı Kalpakçılar Cad. No: 42"
+              disabled={isAddressSubmitting}
+              {...registerAddress("adres")}
+            />
+            {addressErrors.adres ? (
+              <span className="text-[11px] text-destructive">{addressErrors.adres.message}</span>
+            ) : null}
+          </div>
+
+          <label className="flex items-center gap-2 pt-1 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded-[4px] border-border"
+              disabled={isAddressSubmitting}
+              {...registerAddress("varsayilan")}
+            />
+            Bu adresi varsayılan olarak belirle
+          </label>
+        </div>
+      </EntityModal>
+
+      <ConfirmDialog
+        open={Boolean(deletingAddress)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingAddress(null);
+        }}
+        title="Adresi Sil"
+        description={`${deletingAddress?.il || "Bu"} adresi kalıcı olarak silinecek.`}
+        confirmLabel="Evet, Sil"
+        variant="destructive"
+        onConfirm={confirmDeleteAddress}
+      />
     </div>
   );
 }

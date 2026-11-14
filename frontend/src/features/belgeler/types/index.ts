@@ -30,6 +30,7 @@ export interface DocumentItem {
   belge_tipi: DocumentCategory | string;
   ad: string;
   belge_no?: string;
+  firma_ad?: string;
   durum?: string;
   /** Doğrudan indirilebilir PDF API yolu veya harici http(s) URL */
   dosya_url?: string;
@@ -47,6 +48,7 @@ export interface DocumentItem {
 export interface BackendDocumentRow {
   id: number;
   firma_id: number;
+  firma_ad?: string;
   tip: string;
   baslik: string;
   content_type?: string;

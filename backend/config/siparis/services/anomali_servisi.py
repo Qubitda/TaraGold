@@ -80,7 +80,7 @@ def ciro_esik_tara(
         qs = qs.filter(order__alici_firma_id=int(alici_firma_id))
 
     rows = (
-        qs.values("order__alici_firma_id")
+        qs.values("order__alici_firma_id", "order__alici_firma__ad")
         .annotate(
             ciro=Coalesce(Sum("snapshot_satir_tutari_vergisiz"), Decimal("0"))
         )
@@ -95,6 +95,7 @@ def ciro_esik_tara(
         uyarilar.append(
             {
                 "alici_firma_id": int(row["order__alici_firma_id"]),
+                "alici_firma_ad": row.get("order__alici_firma__ad") or "",
                 "ciro_vergisiz": str(ciro),
                 "esik_ciro": str(esik),
                 "anomali": True,

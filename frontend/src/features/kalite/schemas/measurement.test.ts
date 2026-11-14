@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { measurementSchema, toOpsMeasurementBody } from "./index";
 
 describe("QC measurement OpenAPI mapping", () => {
-  it("ayar+gram → olculen string", () => {
+  it("ayar+gram → olculen_ayar + olculen_gram", () => {
     const parsed = measurementSchema.parse({
       order_line_id: 7,
       olculen_ayar: "14",
@@ -11,7 +11,8 @@ describe("QC measurement OpenAPI mapping", () => {
     const body = toOpsMeasurementBody(parsed);
     expect(body).toEqual({
       order_line_id: 7,
-      olculen: "ayar=14;gram=12.50",
+      olculen_ayar: "14",
+      olculen_gram: "12.50",
     });
   });
 

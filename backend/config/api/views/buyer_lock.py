@@ -1,6 +1,7 @@
 """API-B2 — PriceLock oluştur / oku. ADR-0019 commerce W."""
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -8,6 +9,7 @@ from rest_framework.views import APIView
 
 from api.exc import raise_drf
 from api.mixins import IdempotencyMixin
+from api.pagination import apply_ordering, paginate_queryset
 from api.permissions import IsBuyerCommerceRead, IsBuyerCommerceWrite
 from api.presenters.buyer import BuyerPriceLockPresenter
 from api.throttles import BuyerRateThrottle
@@ -29,10 +31,30 @@ def _get_lock(user, lock_id: int) -> PriceLock:
 
 
 class PriceLockCreateView(IdempotencyMixin, APIView):
-    """POST /api/v1/price-locks/ — {quote_id} (+ Idempotency-Key)."""
+    """GET liste / POST /api/v1/price-locks/ — {quote_id} (+ Idempotency-Key)."""
 
     permission_classes = [IsBuyerCommerceWrite]
     throttle_classes = [BuyerRateThrottle]
+
+    def get(self, request):
+        qs = scope_price_lock_queryset(
+            PriceLock.objects.select_related(
+                "quote", "quote__varyant", "quote__varyant__urun"
+            ),
+            request.user,
+        )
+        durum = (request.query_params.get("durum") or "").strip().upper()
+        if durum in ("AKTIF", "SURESI_DOLDU"):
+            qs = qs.filter(durum=durum)
+        term = (request.query_params.get("q") or "").strip()
+        if term:
+            qs = qs.filter(
+                Q(quote__varyant__sku__icontains=term)
+                | Q(quote__varyant__urun__ad__icontains=term)
+                | Q(quote__varyant__urun__platform_kodu__icontains=term)
+            )
+        qs = apply_ordering(qs, request, whitelist=("pk", "kilit_zamani"), default="-pk")
+        return paginate_queryset(request, qs, present=BuyerPriceLockPresenter)
 
     def post(self, request):
         if can_view_all_tenants(request.user):

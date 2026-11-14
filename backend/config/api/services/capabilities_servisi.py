@@ -75,6 +75,7 @@ def present_me(user, *, request=None) -> dict:
     return {
         "id": user.pk,
         "username": user.get_username(),
+        "profil_foto": getattr(user, "profil_foto", "") or "",
         "rol": getattr(user, "rol", "") or "",
         "email_verified": is_email_verified(user),
         "firma": present_firma_masked(firma),

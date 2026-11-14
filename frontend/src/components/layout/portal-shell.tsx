@@ -24,12 +24,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       await authService.stopActAs();
       await refresh();
       await queryClient.invalidateQueries();
-      toast.success("Act-As sonlandırıldı", "Asıl yönetici oturumuna dönüldü.");
+      toast.success("Vekil oturum sonlandırıldı", "Asıl yönetici oturumuna dönüldü.");
     } catch (err) {
       const msg =
         err instanceof ApiError
           ? err.problem.detail || err.message
-          : "Act-As sonlandırılamadı.";
+          : "Vekil oturum sonlandırılamadı.";
       toast.error("İşlem hatası", msg);
     } finally {
       setStoppingActAs(false);
@@ -67,15 +67,13 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <span>
-                  Act-As Oturumu Aktif:{" "}
+                  Vekil Oturum Aktif:{" "}
                   <strong className="font-mono">
-                    {user.act_as.actor_username || `#${user.act_as.actor_id ?? "?"}`}
+                    {user.act_as.actor_username || "Yönetici"}
                   </strong>{" "}
                   →{" "}
                   <strong className="font-mono">
-                    {user.act_as.target_username ||
-                      user.username ||
-                      `#${user.act_as.target_id ?? "?"}`}
+                    {user.act_as.target_username || user.username || "Kullanıcı"}
                   </strong>
                 </span>
               </div>
@@ -93,7 +91,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                     Sonlandırılıyor…
                   </span>
                 ) : (
-                  "Act-As Sonlandır"
+                  "Vekil Oturumu Sonlandır"
                 )}
               </Button>
             </div>

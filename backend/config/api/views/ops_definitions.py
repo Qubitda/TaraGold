@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -20,6 +21,8 @@ from api.throttles import OpsRateThrottle
 from firmalar.role_permissions import P
 from firmalar.services.audit_servisi import domain_atomic, record_audit
 from firmalar.services.yetki_servisi import can_view_all_tenants, has_perm
+from piyasa.models import MarjKurali
+from stok.birim_constants import StokBirimi
 from tanimlar.fiyat_kaynagi import FiyatKaynagi
 from tanimlar.models import (
     AyarMilyem,
@@ -29,7 +32,10 @@ from tanimlar.models import (
     KurSaglayici,
     KurTipi,
     MetalKuru,
+    SatisKanali,
 )
+from urunler.models import Urun, UrunKanal
+from urunler.services import urun_kanal_ekle_guncelle
 
 
 def _require_ops_read(user) -> None:
@@ -56,6 +62,9 @@ def _require_ops_write(user) -> None:
 def _normalize_kaynak(kaynak: str) -> str:
     k = (kaynak or "").strip().lower().replace("_", "-")
     aliases = {
+        "satis-kanallari": "satis-kanallari",
+        "satiskanali": "satis-kanallari",
+        "sales-channels": "satis-kanallari",
         "fiyat-gruplari": "fiyat-gruplari",
         "fiyatgrubu": "fiyat-gruplari",
         "ayar-milyem": "ayar-milyem",
@@ -64,6 +73,7 @@ def _normalize_kaynak(kaynak: str) -> str:
         "metalkuru": "metal-kurlari",
         "doviz-kurlari": "doviz-kurlari",
         "dovizkuru": "doviz-kurlari",
+        "birimler": "birimler",
     }
     if k not in aliases:
         raise NotFound(detail=f"Tanım kaynağı bulunamadı: {kaynak}")
@@ -110,8 +120,28 @@ def _default_saglayici() -> KurSaglayici:
     if sag is None:
         sag = KurSaglayici.objects.order_by("pk").first()
     if sag is None:
-        raise ValidationError({"saglayici_id": "Sistemde tanımlı KurSaglayici yok."})
+        raise ValidationError({"saglayici_id": "Sistemde tanımlı kur sağlayıcı bulunamadı."})
     return sag
+
+
+def _present_satis_kanali(obj: SatisKanali) -> dict:
+    return {
+        "id": obj.pk,
+        "kod": obj.kod,
+        "ad": obj.ad,
+        "tip": obj.tip,
+        "fiyat_grubu_id": obj.fiyat_grubu_id,
+        "fiyat_grubu_ad": obj.fiyat_grubu.ad if obj.fiyat_grubu_id else "",
+        "varsayilan_marj_kurali_id": obj.varsayilan_marj_kurali_id,
+        "varsayilan_marj_kurali_ad": (
+            (obj.varsayilan_marj_kurali.ad or str(obj.varsayilan_marj_kurali))
+            if obj.varsayilan_marj_kurali_id
+            else ""
+        ),
+        "quote_ttl_saniye": obj.quote_ttl_saniye,
+        "sira": obj.sira,
+        "aktif": bool(obj.aktif),
+    }
 
 
 def _present_fiyat_grubu(obj: FiyatGrubu) -> dict:
@@ -179,9 +209,29 @@ def _refs_payload() -> dict:
         "saglayicilar": list(
             KurSaglayici.objects.order_by("kod").values("id", "kod", "ad", "aktif")
         ),
+        "fiyat_gruplari": list(
+            FiyatGrubu.objects.order_by("sira", "ad").values("id", "kod", "ad", "aktif")
+        ),
+        "marj_kurallari": [
+            {
+                "id": m.pk,
+                "ad": m.ad or str(m),
+                "kapsam": m.kapsam,
+                "marj_turu": m.marj_turu,
+                "deger": str(m.deger),
+                "aktif": bool(m.aktif),
+            }
+            for m in MarjKurali.objects.order_by("kapsam", "id")
+        ],
         "kur_tipleri": [c.value for c in KurTipi],
         "fiyat_kaynaklari": [c[0] for c in FiyatKaynagi.CHOICES_KATMAN],
         "para_birimleri": [c[0] for c in DovizKuru.PARA_BIRIMI],
+        "kanal_tipleri": [
+            {"kod": c[0], "ad": c[1]} for c in SatisKanali.TIP_CHOICES
+        ],
+        "birimler": [
+            {"kod": c[0], "ad": str(c[1])} for c in StokBirimi.CHOICES
+        ],
     }
 
 
@@ -194,26 +244,86 @@ class OpsDefinitionsListCreateView(APIView):
     def get(self, request, kaynak: str):
         _require_ops_read(request.user)
         norm = _normalize_kaynak(kaynak)
-        if norm == "fiyat-gruplari":
-            rows = [_present_fiyat_grubu(o) for o in FiyatGrubu.objects.order_by("sira", "ad")]
+        term = (request.query_params.get("q") or "").strip()
+        aktif_param = (request.query_params.get("aktif") or "").strip().lower()
+
+        if norm == "birimler":
+            rows = [
+                {"id": idx + 1, "kod": kod, "ad": str(ad), "aktif": True}
+                for idx, (kod, ad) in enumerate(StokBirimi.CHOICES)
+                if not term or term.lower() in kod.lower() or term.lower() in str(ad).lower()
+            ]
+            payload: dict[str, object] = {
+                "kaynak": norm,
+                "count": len(rows),
+                "page": 1,
+                "page_size": len(rows) or 20,
+                "results": rows,
+                "server_now": timezone.now().isoformat(),
+            }
+            if (request.query_params.get("include_refs") or "").strip() in ("1", "true"):
+                payload["refs"] = _refs_payload()
+            return Response(payload)
+
+        if norm == "satis-kanallari":
+            qs = SatisKanali.objects.select_related("fiyat_grubu", "varsayilan_marj_kurali").order_by("sira", "ad")
+            if term:
+                qs = qs.filter(Q(kod__icontains=term) | Q(ad__icontains=term) | Q(tip__icontains=term))
+            if aktif_param in ("true", "1", "false", "0"):
+                qs = qs.filter(aktif=aktif_param in ("true", "1"))
+            presenter = _present_satis_kanali
+        elif norm == "fiyat-gruplari":
+            qs = FiyatGrubu.objects.order_by("sira", "ad")
+            if term:
+                qs = qs.filter(Q(kod__icontains=term) | Q(ad__icontains=term))
+            if aktif_param in ("true", "1", "false", "0"):
+                qs = qs.filter(aktif=aktif_param in ("true", "1"))
+            presenter = _present_fiyat_grubu
         elif norm == "ayar-milyem":
-            rows = [
-                _present_ayar_milyem(o)
-                for o in AyarMilyem.objects.select_related("metal").order_by("metal_id", "milyem")
-            ]
+            qs = AyarMilyem.objects.select_related("metal").order_by("metal_id", "milyem")
+            if term:
+                qs = qs.filter(
+                    Q(ayar_kodu__icontains=term)
+                    | Q(metal__ad__icontains=term)
+                    | Q(metal__kod__icontains=term)
+                )
+            presenter = _present_ayar_milyem
         elif norm == "metal-kurlari":
-            rows = [
-                _present_metal_kuru(o)
-                for o in MetalKuru.objects.select_related("metal", "saglayici").order_by("-zaman", "-pk")[:200]
-            ]
+            qs = MetalKuru.objects.select_related("metal", "saglayici").order_by("-zaman", "-pk")
+            if term:
+                qs = qs.filter(
+                    Q(metal__ad__icontains=term)
+                    | Q(metal__kod__icontains=term)
+                    | Q(manuel_neden__icontains=term)
+                )
+            presenter = _present_metal_kuru
         else:
-            rows = [
-                _present_doviz_kuru(o)
-                for o in DovizKuru.objects.select_related("saglayici").order_by("-zaman", "-pk")[:200]
-            ]
-        payload: dict[str, object] = {
+            qs = DovizKuru.objects.select_related("saglayici").order_by("-zaman", "-pk")
+            if term:
+                qs = qs.filter(
+                    Q(para_birimi__icontains=term)
+                    | Q(manuel_neden__icontains=term)
+                )
+            presenter = _present_doviz_kuru
+
+        total_count = qs.count()
+        page_raw = request.query_params.get("page")
+        page_size_raw = request.query_params.get("page_size")
+        if page_raw or page_size_raw:
+            page = max(1, int(page_raw or 1))
+            page_size = max(1, min(100, int(page_size_raw or 20)))
+            start = (page - 1) * page_size
+            rows = [presenter(o) for o in qs[start : start + page_size]]
+        else:
+            page = 1
+            page_size = 200
+            rows = [presenter(o) for o in qs[:200]]
+
+        payload = {
             "kaynak": norm,
-            "count": len(rows),
+            "count": total_count,
+            "page": page,
+            "page_size": page_size,
             "results": rows,
             "server_now": timezone.now().isoformat(),
         }
@@ -225,11 +335,52 @@ class OpsDefinitionsListCreateView(APIView):
         _require_ops_write(request.user)
         enforce_csrf(request)
         norm = _normalize_kaynak(kaynak)
+        if norm == "birimler":
+            raise ValidationError({"detail": "Sistem birimleri sabittir, yeni kayıt eklenemez."})
         body = request.data if isinstance(request.data, dict) else {}
 
         try:
             with domain_atomic():
-                if norm == "fiyat-gruplari":
+                if norm == "satis-kanallari":
+                    kod = (body.get("kod") or "").strip().upper()[:30]
+                    ad = (body.get("ad") or "").strip()[:80]
+                    if not kod or not ad:
+                        raise ValidationError({"kod": "Kanal kodu ve adı zorunludur."})
+                    tip = (body.get("tip") or SatisKanali.TIP_KUYUMCU_PORTAL).strip()
+                    if tip not in dict(SatisKanali.TIP_CHOICES):
+                        raise ValidationError({"tip": "Geçersiz satış kanalı tipi."})
+                    fg_raw = body.get("fiyat_grubu_id")
+                    fiyat_grubu = None
+                    if fg_raw not in (None, "", 0, "0"):
+                        fg_id = _parse_int(fg_raw, field="fiyat_grubu_id")
+                        fiyat_grubu = FiyatGrubu.objects.filter(pk=fg_id).first()
+                        if fiyat_grubu is None:
+                            raise ValidationError({"fiyat_grubu_id": "Fiyat grubu bulunamadı."})
+                    mk_raw = body.get("varsayilan_marj_kurali_id")
+                    marj_kurali = None
+                    if mk_raw not in (None, "", 0, "0"):
+                        mk_id = _parse_int(mk_raw, field="varsayilan_marj_kurali_id")
+                        marj_kurali = MarjKurali.objects.filter(pk=mk_id).first()
+                        if marj_kurali is None:
+                            raise ValidationError({"varsayilan_marj_kurali_id": "Marj kuralı bulunamadı."})
+                    ttl_raw = body.get("quote_ttl_saniye")
+                    ttl = _parse_int(ttl_raw, field="quote_ttl_saniye") if ttl_raw not in (None, "") else None
+                    sira = _parse_int(body.get("sira", 0), field="sira")
+                    aktif = _parse_bool(body.get("aktif"), default=True)
+                    obj = SatisKanali(
+                        kod=kod,
+                        ad=ad,
+                        tip=tip,
+                        fiyat_grubu=fiyat_grubu,
+                        varsayilan_marj_kurali=marj_kurali,
+                        quote_ttl_saniye=ttl,
+                        sira=sira,
+                        aktif=aktif,
+                    )
+                    obj.full_clean()
+                    obj.save()
+                    presented = _present_satis_kanali(obj)
+                elif norm == "fiyat-gruplari":
                     kod = (body.get("kod") or "").strip()[:20]
                     ad = (body.get("ad") or "").strip()[:80]
                     if not kod or not ad:
@@ -336,7 +487,7 @@ class OpsDefinitionsListCreateView(APIView):
                 exc.message_dict if hasattr(exc, "message_dict") else exc.messages
             ) from exc
         except IntegrityError as exc:
-            raise ValidationError({"detail": f"Benzersizlik veya bütünlük hatası: {exc}"}) from exc
+            raise ValidationError({"detail": f"Bu kodla kayıt zaten mevcut veya bütünlük hatası: {exc}"}) from exc
 
         return Response(presented, status=status.HTTP_201_CREATED)
 
@@ -349,7 +500,10 @@ class OpsDefinitionsDetailView(APIView):
 
     def _get_object(self, kaynak: str, pk: int):
         norm = _normalize_kaynak(kaynak)
+        if norm == "birimler":
+            raise NotFound(detail="Sistem birimleri tekil olarak değiştirilemez.")
         model_map = {
+            "satis-kanallari": SatisKanali,
             "fiyat-gruplari": FiyatGrubu,
             "ayar-milyem": AyarMilyem,
             "metal-kurlari": MetalKuru,
@@ -357,7 +511,9 @@ class OpsDefinitionsDetailView(APIView):
         }
         model = model_map[norm]
         qs = model.objects
-        if norm == "ayar-milyem":
+        if norm == "satis-kanallari":
+            qs = qs.select_related("fiyat_grubu", "varsayilan_marj_kurali")
+        elif norm == "ayar-milyem":
             qs = qs.select_related("metal")
         elif norm == "metal-kurlari":
             qs = qs.select_related("metal", "saglayici")
@@ -369,6 +525,8 @@ class OpsDefinitionsDetailView(APIView):
         return norm, obj
 
     def _present(self, norm: str, obj) -> dict:
+        if norm == "satis-kanallari":
+            return _present_satis_kanali(obj)
         if norm == "fiyat-gruplari":
             return _present_fiyat_grubu(obj)
         if norm == "ayar-milyem":
@@ -390,7 +548,48 @@ class OpsDefinitionsDetailView(APIView):
 
         try:
             with domain_atomic():
-                if norm == "fiyat-gruplari":
+                if norm == "satis-kanallari":
+                    if "kod" in body and body.get("kod") is not None:
+                        obj.kod = str(body["kod"]).strip().upper()[:30]
+                    if "ad" in body and body.get("ad") is not None:
+                        obj.ad = str(body["ad"]).strip()[:80]
+                    if "tip" in body and body.get("tip") is not None:
+                        tip = str(body["tip"]).strip()
+                        if tip not in dict(SatisKanali.TIP_CHOICES):
+                            raise ValidationError({"tip": "Geçersiz satış kanalı tipi."})
+                        obj.tip = tip
+                    if "fiyat_grubu_id" in body:
+                        fg_raw = body.get("fiyat_grubu_id")
+                        if fg_raw in (None, "", 0, "0"):
+                            obj.fiyat_grubu = None
+                        else:
+                            fg_id = _parse_int(fg_raw, field="fiyat_grubu_id")
+                            fg = FiyatGrubu.objects.filter(pk=fg_id).first()
+                            if fg is None:
+                                raise ValidationError({"fiyat_grubu_id": "Fiyat grubu bulunamadı."})
+                            obj.fiyat_grubu = fg
+                    if "varsayilan_marj_kurali_id" in body:
+                        mk_raw = body.get("varsayilan_marj_kurali_id")
+                        if mk_raw in (None, "", 0, "0"):
+                            obj.varsayilan_marj_kurali = None
+                        else:
+                            mk_id = _parse_int(mk_raw, field="varsayilan_marj_kurali_id")
+                            mk = MarjKurali.objects.filter(pk=mk_id).first()
+                            if mk is None:
+                                raise ValidationError({"varsayilan_marj_kurali_id": "Marj kuralı bulunamadı."})
+                            obj.varsayilan_marj_kurali = mk
+                    if "quote_ttl_saniye" in body:
+                        raw_ttl = body.get("quote_ttl_saniye")
+                        obj.quote_ttl_saniye = (
+                            _parse_int(raw_ttl, field="quote_ttl_saniye")
+                            if raw_ttl not in (None, "")
+                            else None
+                        )
+                    if "sira" in body and body.get("sira") is not None:
+                        obj.sira = _parse_int(body["sira"], field="sira")
+                    if "aktif" in body and body.get("aktif") is not None:
+                        obj.aktif = _parse_bool(body["aktif"], default=obj.aktif)
+                elif norm == "fiyat-gruplari":
                     if "kod" in body and body.get("kod") is not None:
                         obj.kod = str(body["kod"]).strip()[:20]
                     if "ad" in body and body.get("ad") is not None:
@@ -471,7 +670,7 @@ class OpsDefinitionsDetailView(APIView):
                     success=True,
                     detail={"id": obj_id},
                 )
-        except ProtectedError as exc:
+        except ProtectedError:
             return Response(
                 {
                     "detail": "Bu tanım kaydı aktif kayıtlarda kullanıldığı için silinemez.",
@@ -480,3 +679,94 @@ class OpsDefinitionsDetailView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         return Response({"deleted": True, "id": pk, "kaynak": norm})
+
+
+class OpsSalesChannelProductsView(APIView):
+    """GET/POST /api/v1/ops/definitions/satis-kanallari/<int:pk>/products/."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def _get_kanal(self, pk: int) -> SatisKanali:
+        kanal = SatisKanali.objects.filter(pk=pk).first()
+        if kanal is None:
+            raise NotFound(detail="Satış kanalı bulunamadı.")
+        return kanal
+
+    def get(self, request, pk: int):
+        _require_ops_read(request.user)
+        kanal = self._get_kanal(pk)
+        term = (request.query_params.get("q") or "").strip()
+        only_assigned = (request.query_params.get("atanmis") or "").strip().lower()
+
+        existing = {
+            uk.urun_id: uk
+            for uk in UrunKanal.objects.filter(kanal=kanal)
+        }
+        qs = Urun.objects.select_related("kategori", "ayar").order_by("-pk")
+        if term:
+            qs = qs.filter(Q(ad__icontains=term) | Q(platform_kodu__icontains=term))
+        if only_assigned in ("true", "1"):
+            active_ids = [uid for uid, uk in existing.items() if uk.aktif]
+            qs = qs.filter(pk__in=active_ids)
+
+        results = []
+        for u in qs[:200]:
+            uk = existing.get(u.pk)
+            results.append(
+                {
+                    "urun_id": u.pk,
+                    "platform_kodu": u.platform_kodu or "",
+                    "ad": u.ad,
+                    "kategori_ad": u.kategori.ad if u.kategori_id else "",
+                    "ayar_kod": u.ayar.ayar_kodu if u.ayar_id else "",
+                    "onay_durumu": u.onay_durumu,
+                    "yayin_durumu": u.yayin_durumu,
+                    "atanmis": uk is not None,
+                    "aktif": bool(uk.aktif) if uk is not None else False,
+                }
+            )
+        return Response(
+            {
+                "kanal": _present_satis_kanali(kanal),
+                "count": len(results),
+                "results": results,
+                "server_now": timezone.now().isoformat(),
+            }
+        )
+
+    def post(self, request, pk: int):
+        _require_ops_write(request.user)
+        enforce_csrf(request)
+        kanal = self._get_kanal(pk)
+        body = request.data if isinstance(request.data, dict) else {}
+        aktif = _parse_bool(body.get("aktif"), default=True)
+
+        urun_ids: list[int] = []
+        if body.get("urun_ids") is not None and isinstance(body.get("urun_ids"), list):
+            for raw_id in body["urun_ids"]:
+                urun_ids.append(_parse_int(raw_id, field="urun_ids"))
+        elif body.get("urun_id") is not None:
+            urun_ids.append(_parse_int(body.get("urun_id"), field="urun_id"))
+        else:
+            raise ValidationError({"urun_id": "Ürün seçimi zorunludur."})
+
+        updated = []
+        try:
+            for uid in urun_ids:
+                urun = Urun.objects.filter(pk=uid).first()
+                if urun is None:
+                    raise ValidationError({"urun_id": f"Ürün bulunamadı: {uid}"})
+                uk = urun_kanal_ekle_guncelle(
+                    actor=request.user,
+                    urun=urun,
+                    kanal_id=kanal.pk,
+                    aktif=aktif,
+                )
+                updated.append({"urun_id": uk.urun_id, "kanal_id": uk.kanal_id, "aktif": bool(uk.aktif)})
+        except DjangoValidationError as exc:
+            raise ValidationError(
+                exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            ) from exc
+
+        return Response({"kanal_id": kanal.pk, "updated": updated})

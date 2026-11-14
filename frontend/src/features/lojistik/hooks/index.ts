@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lojistikService } from "../services";
+import { lojistikService, type LogisticsListParams } from "../services";
 import type {
   CreateReturnRequest,
   DispatchShipmentRequest,
@@ -11,9 +11,12 @@ import type {
 
 export const lojistikKeys = {
   all: ["lojistik"] as const,
-  opsShipments: () => [...lojistikKeys.all, "ops-shipments"] as const,
-  returns: () => [...lojistikKeys.all, "returns"] as const,
-  buyerShipments: () => [...lojistikKeys.all, "buyer-shipments"] as const,
+  opsShipments: (params?: LogisticsListParams) =>
+    [...lojistikKeys.all, "ops-shipments", params || {}] as const,
+  returns: (params?: LogisticsListParams) =>
+    [...lojistikKeys.all, "returns", params || {}] as const,
+  buyerShipments: (params?: LogisticsListParams) =>
+    [...lojistikKeys.all, "buyer-shipments", params || {}] as const,
   buyerShipmentPod: (id: number | string) =>
     [...lojistikKeys.all, "buyer-pod", String(id)] as const,
 };
@@ -33,6 +36,17 @@ export function useOpsShipmentsQuery(enabled = true) {
   });
 }
 
+export function useOpsShipmentsPageQuery(
+  params?: LogisticsListParams,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: lojistikKeys.opsShipments(params),
+    queryFn: () => lojistikService.getShipments(params),
+    enabled,
+  });
+}
+
 export function useBuyerShipmentsQuery(enabled = true) {
   return useQuery({
     queryKey: lojistikKeys.buyerShipments(),
@@ -40,6 +54,17 @@ export function useBuyerShipmentsQuery(enabled = true) {
       const page = await lojistikService.getBuyerShipments();
       return page.results ?? [];
     },
+    enabled,
+  });
+}
+
+export function useBuyerShipmentsPageQuery(
+  params?: LogisticsListParams,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: lojistikKeys.buyerShipments(params),
+    queryFn: () => lojistikService.getBuyerShipments(params),
     enabled,
   });
 }
@@ -62,6 +87,17 @@ export function useReturnsQuery(enabled = true) {
       const page = await lojistikService.getReturns();
       return page.results ?? [];
     },
+    enabled,
+  });
+}
+
+export function useReturnsPageQuery(
+  params?: LogisticsListParams,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: lojistikKeys.returns(params),
+    queryFn: () => lojistikService.getReturns(params),
     enabled,
   });
 }

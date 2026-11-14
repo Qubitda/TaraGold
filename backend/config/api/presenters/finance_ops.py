@@ -92,6 +92,10 @@ def present_return(req: ReturnRequest, *, actor=None) -> dict:
         {
             "id": ln.pk,
             "order_line_id": ln.order_line_id,
+            "varyant_sku": getattr(
+                getattr(getattr(ln, "order_line", None), "varyant", None), "sku", ""
+            )
+            or "",
             "miktar": str(ln.miktar),
             "birim": ln.birim,
         }
@@ -143,6 +147,9 @@ def present_return(req: ReturnRequest, *, actor=None) -> dict:
         else None,
     }
     if can_manage or can_mahsup:
+        order_obj = getattr(req, "order", None)
+        alici = getattr(order_obj, "alici_firma", None) if order_obj else None
+        data["alici_firma_ad"] = getattr(alici, "ad", "") if alici else ""
         data["stok_iade_yapildi"] = req.stok_iade_yapildi
         data["finans_mahsup_yapildi"] = req.finans_mahsup_yapildi
     assert_masked(data)

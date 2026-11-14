@@ -4,6 +4,7 @@ import type {
   OrgUnitPage,
   OrgUnit,
   OrgUnitCreateRequest,
+  OrgUnitUpdateRequest,
   ApprovalPage,
   Approval,
   ApprovalCreateRequest,
@@ -37,6 +38,19 @@ export const firmalarService = {
     return apiFetch<OrgUnit>("/org-units/", {
       method: "POST",
       body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  updateOrgUnit(id: number | string, data: OrgUnitUpdateRequest): Promise<OrgUnit> {
+    return apiFetch<OrgUnit>(`/org-units/${id}/`, {
+      method: "PATCH",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  deleteOrgUnit(id: number | string): Promise<void> {
+    return apiFetch<void>(`/org-units/${id}/`, {
+      method: "DELETE",
       idempotencyKey: newIdempotencyKey(),
     });
   },
@@ -120,6 +134,12 @@ export const firmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  removeOrgMember(orgId: number | string, memberId: number | string): Promise<void> {
+    return apiFetch<void>(`/org-units/${orgId}/members/${memberId}/`, {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   getInvites(): Promise<InvitePage> {
     return apiFetch<InvitePage>("/auth/invites/");
   },
@@ -131,3 +151,18 @@ export const firmalarService = {
     });
   },
 };
+
+export {
+  opsFirmalarService,
+  opsOrdersService,
+  feedService,
+  type OpsFirma,
+  type OpsFirmaPage,
+  type OpsKanalIzni,
+  type OpsAliciKanalErisimi,
+  type SalesChannelOption,
+  type OpsOrderRow,
+  type OpsOrderLineRow,
+  type OpsHazirlamaEmriRow,
+} from "./ops-firmalar";
+

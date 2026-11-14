@@ -14,9 +14,9 @@ export function BuyerNetPriceCard({ quote }: { quote: PriceQuote }) {
     <div className="rounded-[8px] border border-border bg-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-muted-foreground font-mono">Quote #{quote.id}</p>
+          <p className="text-xs text-muted-foreground font-medium">Anlık Fiyat Teklifi</p>
           <p className="text-sm font-semibold text-foreground">
-            {quote.urun || `Varyant #${quote.varyant_id}`}
+            {quote.urun || quote.varyant_sku || "Katalog Ürünü"}
           </p>
           <p className="font-mono text-[11px] text-muted-foreground">
             {quote.varyant_sku || "—"}

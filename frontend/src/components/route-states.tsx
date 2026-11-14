@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw, Layers } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 
 export function DomainLoading({ label }: { label: string }) {
   return (
@@ -62,68 +62,31 @@ export function DomainError({
 
 export interface DomainPlaceholderProps {
   title: string;
-  backendApp: string;
   description?: string;
   note?: string;
 }
 
 export function DomainPlaceholder({
   title,
-  backendApp,
   description,
   note,
 }: DomainPlaceholderProps) {
   return (
     <div className="flex flex-col gap-6">
-      {/* Sayfa Başlığı ve İkincil Bilgi */}
       <div className="flex flex-col gap-1 border-b border-border pb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {title}
-          </h1>
-          <span className="inline-flex items-center rounded-[4px] border border-border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-            backend: {backendApp}
-          </span>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          {description ||
-            `Django "${backendApp}" domain app ile birebir paralel Vite portal modülü.`}
+          {description || "Bu bölüm hazırlanıyor."}
         </p>
       </div>
 
-      {/* Domain Durum Kartı */}
-      <div className="rounded-[8px] border border-border bg-card p-6 space-y-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Layers className="h-4 w-4 text-muted-foreground" />
-          <span>Domain İskeleti Hazır</span>
+      {note ? (
+        <div className="rounded-[8px] border border-border bg-card p-6 text-xs text-muted-foreground">
+          {note}
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="space-y-1">
-            <p className="font-medium text-foreground">Mimari Eşleme</p>
-            <p className="text-muted-foreground font-mono">
-              src/features/{backendApp}/
-            </p>
-            <p className="text-muted-foreground">
-              components · types · services · hooks · schemas
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-medium text-foreground">Kör Havuz & Güvenlik</p>
-            <p className="text-muted-foreground">
-              Alıcı ekranında tedarikçi kimliği ve gizli maliyet gösterilmez.
-              Yazma işlemlerinde yetki backend otoritesindedir.
-            </p>
-          </div>
-        </div>
-
-        {note && (
-          <div className="rounded-[6px] bg-muted/60 p-3 text-xs text-muted-foreground border-l-2 border-primary">
-            {note}
-          </div>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 }

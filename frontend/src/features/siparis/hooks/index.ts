@@ -33,6 +33,14 @@ export function useOrdersQuery(filters?: Record<string, string>, enabled = true)
   });
 }
 
+export function useOrdersPageQuery(filters?: Record<string, string>, enabled = true) {
+  return useQuery({
+    queryKey: [...siparisKeys.orders(filters), "paged"] as const,
+    queryFn: () => siparisService.getOrders(filters),
+    enabled,
+  });
+}
+
 export function useOrderDetailQuery(id: number | string | undefined, enabled = true) {
   return useQuery({
     queryKey: siparisKeys.order(id ?? ""),

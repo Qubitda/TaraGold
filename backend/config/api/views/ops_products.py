@@ -20,14 +20,20 @@ from api.throttles import OpsRateThrottle
 from api.views.auth import _django_ve_to_drf
 from firmalar.role_permissions import P
 from firmalar.services.yetki_servisi import has_perm
-from urunler.models import Urun
+from tanimlar.models import SatisKanali
+from urunler.models import Urun, UrunKanal, Varyant
 from urunler.services import (
     onaya_gonder,
     onayla,
     pasife_al,
     reddet,
+    taslak_urun_guncelle,
     taslak_urun_olustur,
+    taslak_urun_sil,
+    urun_kanal_ekle_guncelle,
     varyant_ekle,
+    varyant_guncelle,
+    varyant_sil,
     yayina_al,
 )
 
@@ -50,8 +56,23 @@ def _require_ops_products(user) -> None:
 
 def _get_urun(pk: int) -> Urun:
     urun = (
-        Urun.objects.select_related("kategori", "ayar", "olusturan_firma")
-        .prefetch_related("varyantlar")
+        Urun.objects.select_related(
+            "kategori",
+            "ayar",
+            "olusturan_firma",
+            "koleksiyon",
+            "yas_grubu",
+            "zincir_tipi",
+            "kopca_tipi",
+        )
+        .prefetch_related(
+            "varyantlar__renk",
+            "varyantlar__beden",
+            "kanallar__kanal",
+            "teknikler",
+            "stiller",
+            "ozel_gunler",
+        )
         .filter(pk=pk)
         .first()
     )
@@ -69,7 +90,15 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
     def get(self, request):
         _require_ops_products(request.user)
         qs = (
-            Urun.objects.select_related("kategori", "ayar")
+            Urun.objects.select_related(
+                "kategori",
+                "ayar",
+                "koleksiyon",
+                "yas_grubu",
+                "zincir_tipi",
+                "kopca_tipi",
+            )
+            .prefetch_related("kanallar__kanal", "teknikler", "stiller", "ozel_gunler")
             .annotate(
                 varyant_count=Count(
                     "varyantlar", filter=Q(varyantlar__aktif=True)
@@ -82,14 +111,27 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
         yayin = (request.query_params.get("yayin_durumu") or "").strip()
         if yayin:
             qs = qs.filter(yayin_durumu=yayin)
+        kat_id = (request.query_params.get("kategori_id") or "").strip()
+        if kat_id.isdigit():
+            qs = qs.filter(kategori_id=int(kat_id))
+        one_cikan = (request.query_params.get("one_cikan") or "").strip().lower()
+        if one_cikan in ("true", "1"):
+            qs = qs.filter(kategori__one_cikan=True)
         term = (request.query_params.get("q") or "").strip()
         if term:
             qs = qs.filter(
                 Q(ad__icontains=term) | Q(platform_kodu__icontains=term)
             )
-        qs = apply_ordering(
-            qs, request, whitelist=("pk", "ad", "platform_kodu"), default="-pk"
-        )
+        raw_ord = (request.query_params.get("ordering") or "").strip()
+        if raw_ord == "vitrin":
+            qs = qs.order_by("-kategori__one_cikan", "kategori__sira", "-pk")
+        else:
+            qs = apply_ordering(
+                qs,
+                request,
+                whitelist=("pk", "ad", "platform_kodu", "kategori__sira", "kategori__one_cikan"),
+                default="-pk",
+            )
         return paginate_queryset(
             request,
             qs,
@@ -108,10 +150,11 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
             aid = int(body.get("ayar_id"))
         except (TypeError, ValueError) as exc:
             raise ValidationError(
-                detail={"kategori_id": "kategori_id ve ayar_id zorunlu tam sayı."}
+                detail={"kategori_id": "Kategori ve ayar seçimi zorunludur."}
             ) from exc
         try:
             sk = body.get("satis_kanali_id")
+            tg = body.get("termin_gun")
             urun = taslak_urun_olustur(
                 actor=request.user,
                 ad=body.get("ad") or "",
@@ -119,20 +162,33 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
                 ayar_id=aid,
                 aciklama=body.get("aciklama") or "",
                 fiyat_tipi=(body.get("fiyat_tipi") or "gram").strip() or "gram",
+                temin_tipi=(body.get("temin_tipi") or "hazir").strip() or "hazir",
+                termin_gun=int(tg) if tg not in (None, "") else None,
+                renk_ekseni=bool(body.get("renk_ekseni", False)),
+                olcu_tipi=(body.get("olcu_tipi") or "").strip(),
                 satis_kanali_id=int(sk) if sk not in (None, "") else None,
+                koleksiyon_id=body.get("koleksiyon_id"),
+                hedef_kitle=body.get("hedef_kitle") or "",
+                yas_grubu_id=body.get("yas_grubu_id"),
+                yuzey=body.get("yuzey") or "",
+                zincir_tipi_id=body.get("zincir_tipi_id"),
+                kopca_tipi_id=body.get("kopca_tipi_id"),
+                teknik_ids=body.get("teknik_ids"),
+                stil_ids=body.get("stil_ids"),
+                ozel_gun_ids=body.get("ozel_gun_ids"),
             )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True),
+            present_ops_product(_get_urun(urun.pk), user=request.user, include_variants=True),
             status=status.HTTP_201_CREATED,
         )
         return self.idempotency_commit(request, response)
 
 
-class OpsProductDetailView(APIView):
+class OpsProductDetailView(IdempotencyMixin, APIView):
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [OpsRateThrottle]
 
@@ -142,6 +198,60 @@ class OpsProductDetailView(APIView):
         return Response(
             present_ops_product(urun, user=request.user, include_variants=True)
         )
+
+    def patch(self, request, pk: int):
+        _require_ops_products(request.user)
+        enforce_csrf(request)
+        urun = _get_urun(pk)
+        body = request.data if isinstance(request.data, dict) else {}
+        kwargs: dict[str, object] = {}
+        for key in (
+            "ad",
+            "kategori_id",
+            "ayar_id",
+            "aciklama",
+            "fiyat_tipi",
+            "temin_tipi",
+            "termin_gun",
+            "renk_ekseni",
+            "olcu_tipi",
+            "koleksiyon_id",
+            "hedef_kitle",
+            "yas_grubu_id",
+            "yuzey",
+            "zincir_tipi_id",
+            "kopca_tipi_id",
+            "teknik_ids",
+            "stil_ids",
+            "ozel_gun_ids",
+        ):
+            if key in body:
+                kwargs[key] = body.get(key)
+        try:
+            urun = taslak_urun_guncelle(
+                actor=request.user,
+                urun=urun,
+                **kwargs,
+            )
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response(
+            present_ops_product(_get_urun(urun.pk), user=request.user, include_variants=True)
+        )
+
+    def delete(self, request, pk: int):
+        _require_ops_products(request.user)
+        enforce_csrf(request)
+        urun = _get_urun(pk)
+        try:
+            taslak_urun_sil(actor=request.user, urun=urun)
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response({"deleted": True, "id": pk})
 
 
 class OpsProductVariantCreateView(IdempotencyMixin, APIView):
@@ -157,13 +267,18 @@ class OpsProductVariantCreateView(IdempotencyMixin, APIView):
         urun = get_object_or_404(Urun, pk=pk)
         body = request.data if isinstance(request.data, dict) else {}
         renk_id = body.get("renk_id")
+        beden_id = body.get("beden_id")
         try:
             v = varyant_ekle(
                 actor=request.user,
                 urun=urun,
                 gram=body.get("gram"),
                 renk_id=int(renk_id) if renk_id not in (None, "") else None,
+                beden_id=int(beden_id) if beden_id not in (None, "") else None,
                 ek_bedel=body.get("ek_bedel"),
+                sabit_fiyat=body.get("sabit_fiyat"),
+                tedarikci_sku=str(body.get("tedarikci_sku") or ""),
+                benzersiz_parca=bool(body.get("benzersiz_parca", False)),
             )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc
@@ -173,6 +288,105 @@ class OpsProductVariantCreateView(IdempotencyMixin, APIView):
             present_ops_variant(v), status=status.HTTP_201_CREATED
         )
         return self.idempotency_commit(request, response)
+
+
+class OpsProductVariantDetailView(APIView):
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def patch(self, request, pk: int, vid: int):
+        _require_ops_products(request.user)
+        enforce_csrf(request)
+        v = get_object_or_404(Varyant.objects.select_related("urun"), pk=vid, urun_id=pk)
+        body = request.data if isinstance(request.data, dict) else {}
+        try:
+            v = varyant_guncelle(
+                actor=request.user,
+                varyant=v,
+                gram=body.get("gram") if "gram" in body else None,
+                renk_id=body.get("renk_id") if "renk_id" in body else None,
+                beden_id=body.get("beden_id") if "beden_id" in body else None,
+                ek_bedel=body.get("ek_bedel") if "ek_bedel" in body else None,
+                sabit_fiyat=body.get("sabit_fiyat") if "sabit_fiyat" in body else None,
+                tedarikci_sku=body.get("tedarikci_sku") if "tedarikci_sku" in body else None,
+                benzersiz_parca=body.get("benzersiz_parca") if "benzersiz_parca" in body else None,
+                aktif=body.get("aktif") if "aktif" in body else None,
+            )
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response(present_ops_variant(v))
+
+    def delete(self, request, pk: int, vid: int):
+        _require_ops_products(request.user)
+        enforce_csrf(request)
+        v = get_object_or_404(Varyant.objects.select_related("urun"), pk=vid, urun_id=pk)
+        try:
+            varyant_sil(actor=request.user, varyant=v)
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response({"deleted": True, "id": vid})
+
+
+class OpsProductChannelsView(APIView):
+    """GET/POST /api/v1/ops/products/<pk>/channels/."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def get(self, request, pk: int):
+        _require_ops_products(request.user)
+        urun = get_object_or_404(Urun, pk=pk)
+        existing = {uk.kanal_id: uk for uk in UrunKanal.objects.filter(urun=urun)}
+        kanallar = SatisKanali.objects.order_by("sira", "ad")
+        return Response(
+            {
+                "urun_id": urun.pk,
+                "results": [
+                    {
+                        "kanal_id": k.pk,
+                        "kod": k.kod,
+                        "ad": k.ad,
+                        "tip": k.tip,
+                        "atanmis": k.pk in existing,
+                        "aktif": existing[k.pk].aktif if k.pk in existing else False,
+                    }
+                    for k in kanallar
+                ],
+            }
+        )
+
+    def post(self, request, pk: int):
+        _require_ops_products(request.user)
+        enforce_csrf(request)
+        urun = get_object_or_404(Urun, pk=pk)
+        body = request.data if isinstance(request.data, dict) else {}
+        try:
+            kanal_id = int(body.get("kanal_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"kanal_id": "Satış kanalı seçimi zorunludur."}) from exc
+        try:
+            uk = urun_kanal_ekle_guncelle(
+                actor=request.user,
+                urun=urun,
+                kanal_id=kanal_id,
+                aktif=bool(body.get("aktif", True)),
+            )
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response(
+            {
+                "id": uk.pk,
+                "urun_id": uk.urun_id,
+                "kanal_id": uk.kanal_id,
+                "aktif": uk.aktif,
+            }
+        )
 
 
 class OpsProductSubmitView(IdempotencyMixin, APIView):

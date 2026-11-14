@@ -1,74 +1,75 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { firmalarService } from "../services";
-import { opsFirmalarService } from "../services/ops-firmalar";
+import {
+  Building2,
+  Check,
+  CheckSquare,
+  MapPin,
+  RefreshCw,
+  UserCog,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  ConfirmDialog,
+  EntityModal,
+  ListPage,
+  RelationSelect,
+  RowActions,
+  type RelationOption,
+} from "@/components/crud";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { authService, useAuth } from "@/features/auth";
 import {
+  addressSchema,
+  profilKeys,
+  profilService,
+  type AddressInput,
+  type FirmaAdresi,
+} from "@/features/profil";
+import { useActionToast } from "@/hooks/use-action-toast";
+import type { MeResponse } from "@/lib/api/types";
+import { formatDateTime, formatMoney } from "@/lib/format";
+import {
+  firmalarKeys,
   useAddressesQuery,
   useApprovalsQuery,
   useInvitesQuery,
   useMeDashboardQuery,
   useMeQuery,
-  useOrgMembersQuery,
-  useOrgUnitsQuery,
 } from "../hooks";
-import {
-  orgUnitSchema,
-  inviteSchema,
-  memberSchema,
-  type OrgUnitInput,
-  type InviteInput,
-  type MemberInput,
-} from "../schemas";
-import type { OrgMember, OrgUnit } from "../types";
-import type { MeResponse } from "@/lib/api/types";
-import { formatMoney, formatDateTime } from "@/lib/format";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Building2,
-  CheckSquare,
-  Users,
-  Plus,
-  RefreshCw,
-  AlertCircle,
-  Check,
-  X,
-  Mail,
-  Send,
-  CheckCircle2,
-  Search,
-  Eye,
-  UserPlus,
-  UserCog,
-} from "lucide-react";
-import { useActionToast } from "@/hooks/use-action-toast";
+import { inviteSchema, type InviteInput } from "../schemas";
+import { firmalarService } from "../services";
+import { opsFirmalarService } from "../services/ops-firmalar";
 
-const PAGE_SIZE = 10;
+type TabId = "users" | "addresses" | "invites" | "approvals";
 
-type TabId = "units" | "approvals" | "invites" | "users";
-type StatusFilter = "all" | "active" | "passive";
+const ROLE_OPTIONS = [
+  { value: "ALICI_SATINALMA", label: "Alıcı Satınalma" },
+  { value: "ALICI_FINANS", label: "Alıcı Finans" },
+  { value: "ALICI_YONETICI", label: "Alıcı Yönetici" },
+  { value: "TEDARIKCI_SATIS", label: "Tedarikçi Satış" },
+  { value: "TEDARIKCI_ATOLYE", label: "Tedarikçi Atölye" },
+  { value: "TEDARIKCI_YONETICI", label: "Tedarikçi Yönetici" },
+  { value: "PLATFORM_YONETICI", label: "Platform Yönetici" },
+  { value: "PLATFORM_OPS", label: "Platform Operasyon" },
+  { value: "PLATFORM_FINANS", label: "Platform Finans" },
+];
 
 function firmTypeLabel(firma: MeResponse["firma"]): string {
   if (!firma) return "—";
@@ -83,50 +84,82 @@ export function FirmalarOrgView() {
   const actionToast = useActionToast();
   const qc = useQueryClient();
   const { refresh: refreshAuth } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>("units");
-  const [firmaUsersFilterId, setFirmaUsersFilterId] = useState("");
+
+  const [activeTab, setActiveTab] = useState<TabId>("users");
+  const [firmaUsersFilterId, setFirmaUsersFilterId] = useState<number | string | null>(null);
+  const [firmaUsersFilterLabel, setFirmaUsersFilterLabel] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [addressSearch, setAddressSearch] = useState("");
 
   const meQ = useMeQuery();
   const dashQ = useMeDashboardQuery();
-  const unitsQ = useOrgUnitsQuery();
   const approvalsQ = useApprovalsQuery();
   const invitesQ = useInvitesQuery();
   const addressesQ = useAddressesQuery();
 
   const me = meQ.data ?? null;
   const dashboard = dashQ.data ?? null;
-  const units = unitsQ.data ?? [];
   const approvals = approvalsQ.data ?? [];
   const invites = invitesQ.data ?? [];
   const addresses = addressesQ.data ?? [];
-  const loading = meQ.isLoading || unitsQ.isLoading;
-  const error =
-    meQ.isError && unitsQ.isError
-      ? meQ.error instanceof Error
-        ? meQ.error.message
-        : "Firma verileri alınamadı."
-      : null;
 
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  // Address modal state
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<FirmaAdresi | null>(null);
+  const [deletingAddress, setDeletingAddress] = useState<FirmaAdresi | null>(null);
+  const [addressFormError, setAddressFormError] = useState<string | null>(null);
 
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [pageIndex, setPageIndex] = useState(0);
-
-  const [createUnitOpen, setCreateUnitOpen] = useState(false);
+  // Invite modal
   const [createInviteOpen, setCreateInviteOpen] = useState(false);
-  const [detailUnit, setDetailUnit] = useState<OrgUnit | null>(null);
-  const [addMemberOpen, setAddMemberOpen] = useState(false);
-
-  const membersQ = useOrgMembersQuery(detailUnit?.id ?? null, Boolean(detailUnit));
-  const members: OrgMember[] = membersQ.data ?? [];
-  const membersLoading = membersQ.isLoading;
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const usersQ = useQuery({
-    queryKey: ["firma-kullanicilar", firmaUsersFilterId],
-    queryFn: () => opsFirmalarService.listKullanicilar(firmaUsersFilterId || undefined),
+    queryKey: ["firma-kullanicilar", firmaUsersFilterId, userSearch],
+    queryFn: () =>
+      opsFirmalarService.listKullanicilar({
+        ...(firmaUsersFilterId ? { firma_id: firmaUsersFilterId } : {}),
+        ...(userSearch.trim() ? { q: userSearch.trim() } : {}),
+      }),
   });
+
+  const {
+    register: registerAddress,
+    handleSubmit: handleAddressSubmit,
+    reset: resetAddress,
+    formState: { errors: addressErrors, isDirty: isAddressDirty, isSubmitting: isAddressSubmitting },
+  } = useForm<AddressInput>({
+    resolver: zodResolver(addressSchema),
+    defaultValues: {
+      tip: "TESLIMAT",
+      il: "",
+      ilce: "",
+      adres: "",
+      varsayilan: true,
+    },
+  });
+
+  const {
+    register: registerInvite,
+    handleSubmit: handleInviteSubmit,
+    reset: resetInvite,
+    setValue: setInviteValue,
+    watch: watchInvite,
+    formState: { errors: inviteErrors, isDirty: isInviteDirty, isSubmitting: isInviteSubmitting },
+  } = useForm<InviteInput>({
+    resolver: zodResolver(inviteSchema),
+    defaultValues: { email: "", rol: "ALICI_SATINALMA", firma_id: null },
+  });
+
+  const watchedInviteFirmaId = watchInvite("firma_id");
+
+  const loadFirmaOptions = useCallback(async (qText: string): Promise<RelationOption[]> => {
+    const res = await opsFirmalarService.list(qText ? { q: qText } : undefined);
+    return (res.results ?? []).map((f) => ({
+      value: f.id,
+      label: f.ad,
+      subtitle: f.firma_kodu,
+    }));
+  }, []);
 
   const updateUserM = useMutation({
     mutationFn: (vars: { userId: number; rol?: string; aktif?: boolean }) =>
@@ -136,11 +169,9 @@ export function FirmalarOrgView() {
       }),
     onSuccess: () => {
       actionToast.success("Kullanıcı güncellendi");
-      qc.invalidateQueries({ queryKey: ["firma-kullanicilar"] });
+      void qc.invalidateQueries({ queryKey: ["firma-kullanicilar"] });
     },
-    onError: (err) => {
-      actionToast.error("Kullanıcı güncellenemedi", err);
-    },
+    onError: (err: Error) => actionToast.error("Kullanıcı güncellenemedi", err.message),
   });
 
   const actAsUserM = useMutation({
@@ -148,169 +179,136 @@ export function FirmalarOrgView() {
     onSuccess: async (res) => {
       await refreshAuth();
       await qc.invalidateQueries();
-      actionToast.success(
-        "Act-As başlatıldı",
-        `${res.target_username} (#${res.target_id})`
-      );
+      actionToast.success("Kullanıcı oturumu başlatıldı", res.target_username);
     },
-    onError: (err) => {
-      actionToast.error("Act-As başlatılamadı", err);
-    },
+    onError: (err: Error) => actionToast.error("İşlem başlatılamadı", err.message),
   });
 
   const fetchData = async () => {
     await Promise.all([
       meQ.refetch(),
       dashQ.refetch(),
-      unitsQ.refetch(),
       approvalsQ.refetch(),
       invitesQ.refetch(),
       addressesQ.refetch(),
       usersQ.refetch(),
-      ...(detailUnit ? [membersQ.refetch()] : []),
     ]);
   };
-
-  const displayError = actionError || error;
-
-  const {
-    register: registerUnit,
-    handleSubmit: handleUnitSubmit,
-    reset: resetUnit,
-    formState: { errors: unitErrors, isSubmitting: isUnitSubmitting },
-  } = useForm<OrgUnitInput>({
-    resolver: zodResolver(orgUnitSchema),
-    defaultValues: { kod: "", ad: "" },
-  });
-
-  const {
-    register: registerInvite,
-    handleSubmit: handleInviteSubmit,
-    reset: resetInvite,
-    formState: { errors: inviteErrors, isSubmitting: isInviteSubmitting },
-  } = useForm<InviteInput>({
-    resolver: zodResolver(inviteSchema),
-    defaultValues: { email: "", rol: "ALICI_SATINALMA" },
-  });
-
-  const {
-    register: registerMember,
-    handleSubmit: handleMemberSubmit,
-    reset: resetMember,
-    formState: { errors: memberErrors, isSubmitting: isMemberSubmitting },
-  } = useForm<MemberInput>({
-    resolver: zodResolver(memberSchema),
-    defaultValues: { kullanici_id: 0 },
-  });
 
   const pendingApprovals = useMemo(
     () => approvals.filter((a) => a.durum === "BEKLEMEDE").length,
     [approvals]
   );
-  const activeUnits = useMemo(
-    () => units.filter((u) => u.aktif !== false).length,
-    [units]
-  );
-  const passiveUnits = useMemo(
-    () => units.filter((u) => u.aktif === false).length,
-    [units]
-  );
 
-  const filteredUnits = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return units.filter((u) => {
-      if (statusFilter === "active" && u.aktif === false) return false;
-      if (statusFilter === "passive" && u.aktif !== false) return false;
-      if (!q) return true;
-      return `${u.kod} ${u.ad} ${u.id}`.toLowerCase().includes(q);
-    });
-  }, [units, query, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUnits.length / PAGE_SIZE));
-  const safePage = Math.min(pageIndex, totalPages - 1);
-  const pagedUnits = filteredUnits.slice(
-    safePage * PAGE_SIZE,
-    safePage * PAGE_SIZE + PAGE_SIZE
-  );
+  const filteredAddresses = useMemo(() => {
+    const term = addressSearch.trim().toLowerCase();
+    if (!term) return addresses;
+    return addresses.filter((a) =>
+      `${a.tip} ${a.il} ${a.ilce ?? ""} ${a.adres}`.toLowerCase().includes(term)
+    );
+  }, [addresses, addressSearch]);
 
   const primaryCity =
     addresses.find((a) => a.varsayilan)?.il || addresses[0]?.il || null;
 
-  const onCreateUnitSubmit = async (formData: OrgUnitInput) => {
-    setActionError(null);
+  const openCreateAddressModal = () => {
+    setEditingAddress(null);
+    setAddressFormError(null);
+    resetAddress({
+      tip: "TESLIMAT",
+      il: "",
+      ilce: "",
+      adres: "",
+      varsayilan: true,
+    });
+    setAddressModalOpen(true);
+  };
+
+  const openEditAddressModal = (addr: FirmaAdresi) => {
+    setEditingAddress(addr);
+    setAddressFormError(null);
+    resetAddress({
+      tip: addr.tip === "FATURA" ? "FATURA" : "TESLIMAT",
+      il: addr.il || "",
+      ilce: addr.ilce || "",
+      adres: addr.adres || "",
+      varsayilan: Boolean(addr.varsayilan),
+    });
+    setAddressModalOpen(true);
+  };
+
+  const onSaveAddressSubmit = async (formData: AddressInput) => {
+    setAddressFormError(null);
     try {
-      await firmalarService.createOrgUnit({
-        kod: formData.kod,
-        ad: formData.ad,
-      });
-      setCreateUnitOpen(false);
-      resetUnit();
-      setSuccessMsg("Organizasyon birimi oluşturuldu.");
-      actionToast.success("Birim oluşturuldu");
-      await fetchData();
+      if (editingAddress) {
+        await profilService.updateAddress(editingAddress.id, {
+          tip: formData.tip,
+          il: formData.il,
+          ilce: formData.ilce,
+          adres: formData.adres,
+          varsayilan: formData.varsayilan,
+        });
+        actionToast.success("Firma adresi güncellendi");
+      } else {
+        await profilService.createAddress({
+          tip: formData.tip,
+          il: formData.il,
+          ilce: formData.ilce,
+          adres: formData.adres,
+          varsayilan: formData.varsayilan,
+        });
+        actionToast.success("Firma adresi eklendi");
+      }
+      setAddressModalOpen(false);
+      setEditingAddress(null);
+      resetAddress();
+      await qc.invalidateQueries({ queryKey: firmalarKeys.all });
+      await qc.invalidateQueries({ queryKey: profilKeys.all });
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Birim oluşturulamadı.");
-      actionToast.error("Birim oluşturulamadı", err);
+      const msg = err instanceof Error ? err.message : "Adres kaydedilemedi.";
+      setAddressFormError(msg);
+      actionToast.error("Adres kaydedilemedi", msg);
+    }
+  };
+
+  const onDeleteAddressConfirm = async () => {
+    if (!deletingAddress) return;
+    try {
+      await profilService.deleteAddress(deletingAddress.id);
+      setDeletingAddress(null);
+      actionToast.success("Firma adresi silindi");
+      await qc.invalidateQueries({ queryKey: firmalarKeys.all });
+      await qc.invalidateQueries({ queryKey: profilKeys.all });
+    } catch (err) {
+      actionToast.error("Adres silinemedi", err);
     }
   };
 
   const onCreateInviteSubmit = async (formData: InviteInput) => {
-    setActionError(null);
+    setInviteError(null);
     try {
       await firmalarService.createInvite({
         email: formData.email,
         rol: formData.rol,
+        ...(formData.firma_id ? { firma_id: formData.firma_id } : {}),
       });
       setCreateInviteOpen(false);
       resetInvite();
-      setSuccessMsg(`${formData.email} adresine davet gönderildi.`);
       actionToast.success("Davet gönderildi", formData.email);
-      await fetchData();
+      await invitesQ.refetch();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Davet gönderilemedi.");
-      actionToast.error("Davet gönderilemedi", err);
-    }
-  };
-
-  const openUnitDetail = async (unit: OrgUnit) => {
-    setDetailUnit(unit);
-    setActionError(null);
-    try {
-      const detail = await firmalarService.getOrgUnit(unit.id);
-      setDetailUnit(detail);
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Birim detayı alınamadı."
-      );
-    }
-  };
-
-  const onAddMemberSubmit = async (formData: MemberInput) => {
-    if (!detailUnit) return;
-    setActionError(null);
-    try {
-      await firmalarService.addOrgMember(detailUnit.id, {
-        kullanici_id: Number(formData.kullanici_id),
-      });
-      setAddMemberOpen(false);
-      resetMember();
-      setSuccessMsg("Üye birime eklendi.");
-      actionToast.success("Üye eklendi");
-      await membersQ.refetch();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Üye eklenemedi.");
-      actionToast.error("Üye eklenemedi", err);
+      const msg = err instanceof Error ? err.message : "Davet gönderilemedi.";
+      setInviteError(msg);
+      actionToast.error("Davet gönderilemedi", msg);
     }
   };
 
   const handleApprove = async (id: number) => {
     try {
       await firmalarService.approveApproval(id);
-      setSuccessMsg("Onay talebi onaylandı.");
-      actionToast.success("Onaylandı");
+      actionToast.success("Onay talebi onaylandı");
       await fetchData();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Onaylama başarısız.");
       actionToast.error("Onaylama başarısız", err);
     }
   };
@@ -318,11 +316,9 @@ export function FirmalarOrgView() {
   const handleReject = async (id: number) => {
     try {
       await firmalarService.rejectApproval(id);
-      setSuccessMsg("Onay talebi reddedildi.");
-      actionToast.success("Reddedildi");
+      actionToast.success("Onay talebi reddedildi");
       await fetchData();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Reddetme başarısız.");
       actionToast.error("Reddetme başarısız", err);
     }
   };
@@ -330,11 +326,9 @@ export function FirmalarOrgView() {
   const handleSubmitApproval = async (id: number) => {
     try {
       await firmalarService.submitApproval(id);
-      setSuccessMsg("Onay talebi gönderildi.");
       actionToast.success("Onay talebi gönderildi");
       await fetchData();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Gönderim başarısız.");
       actionToast.error("Gönderim başarısız", err);
     }
   };
@@ -343,12 +337,11 @@ export function FirmalarOrgView() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Firmalar
-          </h1>
-          <p className="text-xs text-muted-foreground max-w-[56ch] leading-relaxed">
-            Tenant firma özeti, organizasyon birimleri, onaylar ve ekip davetleri.
-            Çapraz firma listesi API’de yoktur; görünür firma oturum firmanızdır.
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            Ekip, Adresler ve Kullanıcılar
+          </h2>
+          <p className="text-xs text-muted-foreground max-w-[60ch] leading-relaxed">
+            Aktif firmanızın kullanıcı rollerini, teslimat/fatura adreslerini, onay taleplerini ve ekip davetlerini yönetin.
           </p>
         </div>
         <Button
@@ -356,43 +349,39 @@ export function FirmalarOrgView() {
           size="sm"
           className="gap-1.5 self-start"
           onClick={() => void fetchData()}
-          disabled={loading}
+          disabled={meQ.isLoading || usersQ.isLoading}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${meQ.isLoading || usersQ.isLoading ? "animate-spin" : ""}`}
+          />
           Yenile
         </Button>
       </div>
 
+      {/* Özet Kartlar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Birim (toplam)" value={String(units.length)} />
-        <Stat label="Aktif birim" value={String(activeUnits)} />
-        <Stat label="Pasif birim" value={String(passiveUnits)} />
-        <Stat label="Bekleyen onay" value={String(pendingApprovals)} />
+        <Stat label="Kullanıcılar" value={String((usersQ.data ?? []).length)} />
+        <Stat label="Adresler" value={String(addresses.length)} />
+        <Stat label="Davetler" value={String(invites.length)} />
+        <Stat label="Bekleyen Onay" value={String(pendingApprovals)} />
       </div>
 
-      {/* Tenant firma özeti — tek satırlık “firma listesi” */}
+      {/* Oturum Firması Özeti */}
       <div className="rounded-[8px] border border-border bg-card overflow-hidden">
         <div className="border-b border-border px-4 py-3 flex items-center gap-2">
           <Building2 className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Oturum Firması</h2>
+          <h3 className="text-sm font-semibold text-foreground">Aktif Çalışma Firması</h3>
         </div>
-        {loading && !me ? (
-          <div className="p-6 text-xs text-muted-foreground flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            Firma bilgisi yükleniyor…
-          </div>
-        ) : !me?.firma ? (
-          <div className="p-6 text-xs text-muted-foreground">
-            Firma bilgisi bulunamadı.
-          </div>
+        {!me?.firma ? (
+          <div className="p-6 text-xs text-muted-foreground">Firma bilgisi bulunamadı.</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Firma adı</TableHead>
-                <TableHead>Firma kodu</TableHead>
-                <TableHead>Tür</TableHead>
-                <TableHead>Yetkili</TableHead>
+                <TableHead>Firma Adı</TableHead>
+                <TableHead>Firma Kodu</TableHead>
+                <TableHead>Firma Türü</TableHead>
+                <TableHead>Aktif Kullanıcı</TableHead>
                 <TableHead>Şehir</TableHead>
                 <TableHead>Durum</TableHead>
               </TableRow>
@@ -401,77 +390,37 @@ export function FirmalarOrgView() {
               <TableRow>
                 <TableCell className="font-medium">{me.firma.ad}</TableCell>
                 <TableCell className="font-mono text-xs">
-                  {dashboard?.firma_kodu || `ID-${me.firma.id}`}
+                  {dashboard?.firma_kodu || "—"}
                 </TableCell>
                 <TableCell className="text-xs">{firmTypeLabel(me.firma)}</TableCell>
                 <TableCell className="text-xs font-mono">{me.username}</TableCell>
                 <TableCell className="text-xs">{primaryCity || "—"}</TableCell>
                 <TableCell>
-                  <Badge
-                    variant={me.firma.aktif ? "success" : "secondary"}
-                    className="font-mono text-[10px]"
-                  >
-                    {me.firma.aktif ? "AKTİF" : "PASİF"}
+                  <Badge variant={me.firma.aktif ? "success" : "secondary"} className="text-[10px]">
+                    {me.firma.aktif ? "Aktif" : "Pasif"}
                   </Badge>
                 </TableCell>
               </TableRow>
             </TableBody>
           </Table>
         )}
-        <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-          Vergi no / telefon / e-posta alanları bu uçta dönmüyor; profil ve adres
-          bilgileri `/profil` ekranındadır.
-        </div>
       </div>
 
-      {successMsg && (
-        <div className="flex items-center gap-2 rounded-[6px] border border-border bg-muted/60 p-3 text-xs text-foreground font-medium">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{successMsg}</span>
-          <button
-            type="button"
-            className="ml-auto text-muted-foreground hover:text-foreground"
-            onClick={() => setSuccessMsg(null)}
-          >
-            Kapat
-          </button>
-        </div>
-      )}
-
-      {displayError && (
-        <div
-          className="flex items-center justify-between rounded-[8px] border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive"
-          role="alert"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{displayError}</span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchData()}
-            className="h-8 border-destructive/30"
-          >
-            Yeniden Dene
-          </Button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1 w-fit">
+      {/* Alt Sekmeler */}
+      <div className="flex flex-wrap items-center gap-1 rounded-[8px] border border-border bg-muted/40 p-1 w-fit">
         {(
           [
-            ["units", "Birimler", units.length, Building2],
-            ["approvals", "Onaylar", approvals.length, CheckSquare],
-            ["invites", "Davetler", invites.length, Users],
             ["users", "Kullanıcılar & Roller", (usersQ.data ?? []).length, UserCog],
+            ["addresses", "Adresler", addresses.length, MapPin],
+            ["invites", "Davetler", invites.length, Users],
+            ["approvals", "Onay Talepleri", approvals.length, CheckSquare],
           ] as const
         ).map(([id, label, count, Icon]) => (
           <button
             key={id}
             type="button"
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex items-center gap-2 rounded-[6px] px-3 py-1.5 text-xs font-medium transition-colors ${
               activeTab === id
                 ? "bg-card text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -485,645 +434,477 @@ export function FirmalarOrgView() {
         ))}
       </div>
 
-      {loading && units.length === 0 && approvals.length === 0 ? (
-        <div className="flex h-48 items-center justify-center gap-2 text-xs text-muted-foreground">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          Organizasyon verileri alınıyor…
-        </div>
-      ) : activeTab === "units" ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPageIndex(0);
-                  }}
-                  placeholder="Kod veya ad ara…"
-                  className="pl-8 h-9"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as StatusFilter);
-                  setPageIndex(0);
-                }}
-                className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-              >
-                <option value="all">Tüm durumlar</option>
-                <option value="active">Aktif</option>
-                <option value="passive">Pasif</option>
-              </select>
-            </div>
-            <Button size="sm" className="gap-1.5" onClick={() => setCreateUnitOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Yeni birim
-            </Button>
-          </div>
-
-          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-            {filteredUnits.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                Organizasyon birimi bulunamadı.
-              </div>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Kod</TableHead>
-                      <TableHead>Ad</TableHead>
-                      <TableHead>Üst birim</TableHead>
-                      <TableHead>Firma</TableHead>
-                      <TableHead>Durum</TableHead>
-                      <TableHead className="text-right">İşlem</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagedUnits.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-mono text-xs font-semibold">
-                          {u.kod}
-                        </TableCell>
-                        <TableCell className="font-medium">{u.ad}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {u.parent_id ? `#${u.parent_id}` : "Kök"}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {u.firma_id != null ? `#${u.firma_id}` : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={u.aktif === false ? "secondary" : "success"}
-                            className="font-mono text-[10px]"
-                          >
-                            {u.aktif === false ? "PASİF" : "AKTİF"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1.5 text-xs"
-                            onClick={() => void openUnitDetail(u)}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            Detay
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
-                  <span>
-                    {filteredUnits.length} kayıt · sayfa {safePage + 1}/{totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      disabled={safePage <= 0}
-                      onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+      {/* SEKME 1: FİRMA ADRESLERİ */}
+      {activeTab === "addresses" ? (
+        <ListPage
+          title="Firma Adresleri"
+          description="Firmanızın teslimat ve fatura adreslerini ekleyin, düzenleyin veya silin."
+          createLabel="Yeni Adres Ekle"
+          onCreate={openCreateAddressModal}
+          searchValue={addressSearch}
+          onSearchChange={setAddressSearch}
+          searchPlaceholder="İl, ilçe veya açık adres ara…"
+          loading={addressesQ.isLoading}
+          error={addressesQ.isError ? "Adres listesi alınamadı." : null}
+          onRetry={() => void addressesQ.refetch()}
+          isEmpty={!addressesQ.isLoading && filteredAddresses.length === 0}
+          emptyTitle="Kayıtlı adres bulunamadı"
+          emptyDescription="Teslimat veya fatura için yeni bir firma adresi ekleyebilirsiniz."
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tip</TableHead>
+                <TableHead>İl / İlçe</TableHead>
+                <TableHead>Açık Adres</TableHead>
+                <TableHead>Varsayılan</TableHead>
+                <TableHead className="text-right">İşlemler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAddresses.map((addr) => (
+                <TableRow key={addr.id}>
+                  <TableCell>
+                    <Badge
+                      variant={addr.tip === "TESLIMAT" ? "default" : "secondary"}
+                      className="font-mono text-[10px]"
                     >
-                      Önceki
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      disabled={safePage >= totalPages - 1}
-                      onClick={() =>
-                        setPageIndex((p) => Math.min(totalPages - 1, p + 1))
-                      }
-                    >
-                      Sonraki
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      ) : activeTab === "approvals" ? (
-        <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-          {approvals.length === 0 ? (
-            <div className="p-8 text-center text-xs text-muted-foreground">
-              Onay talebi bulunamadı.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Sipariş</TableHead>
-                  <TableHead className="text-right">Tutar</TableHead>
-                  <TableHead>Gerekçe</TableHead>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead>Durum</TableHead>
-                  <TableHead className="text-right">İşlemler</TableHead>
+                      {addr.tip}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs font-medium">
+                    {addr.il}
+                    {addr.ilce ? ` / ${addr.ilce}` : ""}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[280px] truncate">
+                    {addr.adres}
+                  </TableCell>
+                  <TableCell>
+                    {addr.varsayilan ? (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        VARSAYILAN
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RowActions
+                      itemLabel={`${addr.il} adresi`}
+                      onEdit={() => openEditAddressModal(addr as FirmaAdresi)}
+                      onDelete={() => setDeletingAddress(addr as FirmaAdresi)}
+                    />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {approvals.map((a) => {
-                  const actions = a.allowed_actions || [];
-                  return (
-                    <TableRow key={a.id}>
-                      <TableCell className="font-mono text-xs">#{a.id}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {a.order_id != null ? `#${a.order_id}` : "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums font-semibold">
-                        {formatMoney(a.tutar, a.para_birimi || "TRY")}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                        {a.gerekce || "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {a.olusturma_tarihi
-                          ? formatDateTime(a.olusturma_tarihi)
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            a.durum === "ONAYLANDI"
-                              ? "success"
-                              : a.durum === "REDDEDILDI"
-                                ? "destructive"
-                                : "warning"
-                          }
-                          className="font-mono text-[10px]"
-                        >
-                          {a.durum}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1.5">
-                          {actions.includes("submit") && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-xs"
-                              onClick={() => void handleSubmitApproval(a.id)}
-                            >
-                              Gönder
-                            </Button>
-                          )}
-                          {actions.includes("approve") && (
-                            <Button
-                              size="sm"
-                              className="h-8 text-xs gap-1"
-                              onClick={() => void handleApprove(a.id)}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              Onayla
-                            </Button>
-                          )}
-                          {actions.includes("reject") && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-8 text-xs gap-1"
-                              onClick={() => void handleReject(a.id)}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                              Reddet
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      ) : activeTab === "invites" ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setCreateInviteOpen(true)}
-            >
-              <Mail className="h-4 w-4" />
-              Davet gönder
-            </Button>
-          </div>
-          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-            {invites.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                Davet kaydı bulunamadı.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>E-posta</TableHead>
-                    <TableHead>Rol</TableHead>
-                    <TableHead>Firma</TableHead>
-                    <TableHead>Durum</TableHead>
-                    <TableHead>Son geçerlilik</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invites.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-medium">{inv.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono text-[10px]">
-                          {inv.rol}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {inv.firma_id != null ? `#${inv.firma_id}` : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={inv.expired ? "destructive" : "secondary"}
-                          className="font-mono text-[10px]"
-                        >
-                          {inv.expired
-                            ? "SURESI_DOLDU"
-                            : inv.durum || "BEKLEMEDE"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {inv.expires_at ? formatDateTime(inv.expires_at) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {me?.capabilities?.can_view_ops && (
-            <div className="flex items-end gap-2 max-w-xs">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor="firma-users-filter" className="text-xs">
-                  Firma ID (Opsiyonel)
-                </Label>
-                <Input
-                  id="firma-users-filter"
-                  value={firmaUsersFilterId}
-                  onChange={(e) => setFirmaUsersFilterId(e.target.value)}
-                  placeholder="Örn: 1"
-                  className="h-9 font-mono text-xs"
-                />
-              </div>
-            </div>
-          )}
-          <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-            {usersQ.isLoading ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                Kullanıcılar yükleniyor…
-              </div>
-            ) : usersQ.isError ? (
-              <div className="p-6 text-xs text-destructive">
-                {usersQ.error instanceof Error
-                  ? usersQ.error.message
-                  : "Kullanıcı listesi alınamadı."}
-              </div>
-            ) : (usersQ.data ?? []).length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                Firma kullanıcısı bulunamadı.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Kullanıcı ID</TableHead>
-                    <TableHead>Kullanıcı Adı</TableHead>
-                    <TableHead>Rol</TableHead>
-                    <TableHead>Durum</TableHead>
-                    <TableHead className="text-right">İşlem</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(usersQ.data ?? []).map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-mono text-xs">
-                        #{u.kullanici_id}
-                      </TableCell>
-                      <TableCell className="font-medium font-mono text-xs">
-                        {u.username}
-                      </TableCell>
-                      <TableCell>
-                        <select
-                          aria-label={`${u.username} rolü`}
-                          value={u.rol}
-                          disabled={updateUserM.isPending}
-                          onChange={(e) =>
-                            updateUserM.mutate({
-                              userId: u.kullanici_id,
-                              rol: e.target.value,
-                            })
-                          }
-                          className="h-8 rounded-[6px] border border-border bg-background px-2 font-mono text-xs"
-                        >
-                          <option value="ALICI_SATINALMA">ALICI_SATINALMA</option>
-                          <option value="ALICI_FINANS">ALICI_FINANS</option>
-                          <option value="ALICI_YONETICI">ALICI_YONETICI</option>
-                          <option value="TEDARIKCI_SATIS">TEDARIKCI_SATIS</option>
-                          <option value="TEDARIKCI_ATOLYE">TEDARIKCI_ATOLYE</option>
-                          <option value="TEDARIKCI_YONETICI">TEDARIKCI_YONETICI</option>
-                          <option value="PLATFORM_YONETICI">PLATFORM_YONETICI</option>
-                          <option value="PLATFORM_OPS">PLATFORM_OPS</option>
-                          <option value="PLATFORM_FINANS">PLATFORM_FINANS</option>
-                        </select>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={u.aktif ? "success" : "secondary"}
-                          className="font-mono text-[10px]"
-                        >
-                          {u.aktif ? "AKTİF" : "PASİF"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-xs"
-                          disabled={updateUserM.isPending}
-                          onClick={() =>
-                            updateUserM.mutate({
-                              userId: u.kullanici_id,
-                              aktif: !u.aktif,
-                            })
-                          }
-                        >
-                          {u.aktif ? "Pasif Yap" : "Aktif Yap"}
-                        </Button>
-                        {me?.capabilities?.can_act_as && (
+              ))}
+            </TableBody>
+          </Table>
+        </ListPage>
+      ) : null}
+
+      {/* SEKME 2: ONAY TALEPLERİ */}
+      {activeTab === "approvals" ? (
+        <ListPage
+          title="İç Onay Talepleri"
+          description="Limit veya yönetici onayı gerektiren satınalma taleplerini inceleyin ve karara bağlayın."
+          loading={approvalsQ.isLoading}
+          error={approvalsQ.isError ? "Onay talepleri alınamadı." : null}
+          onRetry={() => void approvalsQ.refetch()}
+          isEmpty={!approvalsQ.isLoading && approvals.length === 0}
+          emptyTitle="Onay talebi bulunamadı"
+          emptyDescription="Şu an bekleyen veya geçmiş bir onay talebi yok."
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tarih</TableHead>
+                <TableHead className="text-right">Tutar</TableHead>
+                <TableHead>Gerekçe</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead className="text-right">İşlemler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {approvals.map((a) => {
+                const actions = a.allowed_actions || [];
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {a.olusturma_tarihi ? formatDateTime(a.olusturma_tarihi) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums font-semibold">
+                      {formatMoney(a.tutar, a.para_birimi || "TRY")}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[260px] truncate">
+                      {a.gerekce || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          a.durum === "ONAYLANDI"
+                            ? "success"
+                            : a.durum === "REDDEDILDI"
+                              ? "destructive"
+                              : "warning"
+                        }
+                        className="text-[10px]"
+                      >
+                        {a.durum}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1.5">
+                        {actions.includes("submit") ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => void handleSubmitApproval(a.id)}
+                          >
+                            Onaya Gönder
+                          </Button>
+                        ) : null}
+                        {actions.includes("approve") ? (
                           <Button
                             size="sm"
-                            variant="ghost"
-                            className="h-8 text-xs"
-                            disabled={actAsUserM.isPending}
-                            onClick={() => actAsUserM.mutate(u.kullanici_id)}
+                            className="h-8 text-xs gap-1"
+                            onClick={() => void handleApprove(a.id)}
                           >
-                            Act-As
+                            <Check className="h-3.5 w-3.5" />
+                            Onayla
                           </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                        ) : null}
+                        {actions.includes("reject") ? (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="h-8 text-xs gap-1"
+                            onClick={() => void handleReject(a.id)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            Reddet
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ListPage>
+      ) : null}
+
+      {/* SEKME 3: EKİP DAVETLERİ */}
+      {activeTab === "invites" ? (
+        <ListPage
+          title="Ekip Davetleri"
+          description="Firmaya yeni kullanıcı davetleri gönderin ve bekleyen davetlerin geçerlilik süresini izleyin."
+          createLabel="Yeni Davet Gönder"
+          onCreate={() => {
+            setInviteError(null);
+            resetInvite({ email: "", rol: "ALICI_SATINALMA", firma_id: null });
+            setCreateInviteOpen(true);
+          }}
+          loading={invitesQ.isLoading}
+          error={invitesQ.isError ? "Davet listesi alınamadı." : null}
+          onRetry={() => void invitesQ.refetch()}
+          isEmpty={!invitesQ.isLoading && invites.length === 0}
+          emptyTitle="Bekleyen davet bulunmuyor"
+          emptyDescription="Ekibinize katmak istediğiniz kullanıcıların e-posta adresine davet gönderebilirsiniz."
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>E-posta Adresi</TableHead>
+                <TableHead>Atanan Rol</TableHead>
+                <TableHead>Firma</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead>Son Geçerlilik</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invites.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="font-medium">{inv.email}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px]">
+                      {ROLE_OPTIONS.find((r) => r.value === inv.rol)?.label || inv.rol}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {inv.firma_ad || me?.firma?.ad || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={inv.expired ? "destructive" : "warning"}
+                      className="text-[10px]"
+                    >
+                      {inv.expired ? "Süresi Doldu" : "Kabul Bekliyor"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {inv.expires_at ? formatDateTime(inv.expires_at) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ListPage>
+      ) : null}
+
+      {/* SEKME 4: KULLANICILAR & ROLLER */}
+      {activeTab === "users" ? (
+        <ListPage
+          title="Kullanıcılar ve Yetki Rolleri"
+          description="Kullanıcıların erişim rollerini değiştirin veya hesapları aktif/pasif duruma getirin."
+          searchValue={userSearch}
+          onSearchChange={setUserSearch}
+          searchPlaceholder="Kullanıcı adı, ad soyad veya e-posta ara…"
+          filters={
+            me?.capabilities?.can_view_ops ? (
+              <div className="w-64">
+                <RelationSelect
+                  value={firmaUsersFilterId}
+                  selectedLabel={firmaUsersFilterLabel}
+                  onChange={(val, opt) => {
+                    setFirmaUsersFilterId(val);
+                    setFirmaUsersFilterLabel(opt?.label ?? "");
+                  }}
+                  loadOptions={loadFirmaOptions}
+                  placeholder="Tüm firmalar (Filtrele)…"
+                  clearable
+                />
+              </div>
+            ) : undefined
+          }
+          loading={usersQ.isLoading}
+          error={usersQ.isError ? "Kullanıcı listesi alınamadı." : null}
+          onRetry={() => void usersQ.refetch()}
+          isEmpty={!usersQ.isLoading && (usersQ.data ?? []).length === 0}
+          emptyTitle="Kullanıcı bulunamadı"
+          emptyDescription="Seçilen arama veya firma filtresine uygun kullanıcı yok."
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ad Soyad / Kullanıcı Adı</TableHead>
+                <TableHead>Firma</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead className="text-right">İşlemler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(usersQ.data ?? []).map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    <div className="font-medium text-foreground">
+                      {u.ad_soyad || u.username}
+                    </div>
+                    <div className="text-[11px] font-mono text-muted-foreground">
+                      @{u.username}
+                      {u.email ? ` · ${u.email}` : ""}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {u.firma_ad || me?.firma?.ad || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      aria-label={`${u.username} rolü`}
+                      value={u.rol}
+                      disabled={updateUserM.isPending}
+                      onChange={(e) =>
+                        updateUserM.mutate({
+                          userId: u.kullanici_id,
+                          rol: e.target.value,
+                        })
+                      }
+                      className="h-8 rounded-[6px] border border-border bg-background px-2 text-xs"
+                    >
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={u.aktif ? "success" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {u.aktif ? "Aktif" : "Pasif"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RowActions
+                      itemLabel={u.ad_soyad || u.username}
+                      isActive={u.aktif}
+                      onToggleActive={() =>
+                        updateUserM
+                          .mutateAsync({ userId: u.kullanici_id, aktif: !u.aktif })
+                          .then(() => undefined)
+                      }
+                      extraActions={
+                        me?.capabilities?.can_act_as
+                          ? [
+                              {
+                                label: "Bu Kullanıcı Adına İşlem Yap",
+                                icon: <UserCog className="h-3.5 w-3.5" />,
+                                onClick: () =>
+                                  actAsUserM
+                                    .mutateAsync(u.kullanici_id)
+                                    .then(() => undefined),
+                              },
+                            ]
+                          : []
+                      }
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ListPage>
+      ) : null}
+
+      {/* MODAL: FİRMA ADRESİ EKLE / DÜZENLE */}
+      <EntityModal
+        open={addressModalOpen}
+        onOpenChange={(open) => {
+          setAddressModalOpen(open);
+          if (!open) setEditingAddress(null);
+        }}
+        title={editingAddress ? "Firma Adresini Düzenle" : "Yeni Firma Adresi"}
+        description="Teslimat veya fatura adresi bilgilerini girin."
+        size="sm"
+        error={addressFormError}
+        isDirty={isAddressDirty}
+        isSubmitting={isAddressSubmitting}
+        submitLabel="Kaydet"
+        onSubmit={handleAddressSubmit(onSaveAddressSubmit)}
+      >
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="addr-tip" className="text-xs">Adres Türü *</Label>
+            <select
+              id="addr-tip"
+              className="h-9 w-full rounded-[6px] border border-border bg-background px-3 text-xs"
+              disabled={isAddressSubmitting}
+              {...registerAddress("tip")}
+            >
+              <option value="TESLIMAT">Teslimat Adresi</option>
+              <option value="FATURA">Fatura Adresi</option>
+            </select>
+            {addressErrors.tip ? (
+              <span className="text-[11px] text-destructive">{addressErrors.tip.message}</span>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="addr-il" className="text-xs">İl *</Label>
+              <Input id="addr-il" disabled={isAddressSubmitting} {...registerAddress("il")} />
+              {addressErrors.il ? (
+                <span className="text-[11px] text-destructive">{addressErrors.il.message}</span>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="addr-ilce" className="text-xs">İlçe</Label>
+              <Input id="addr-ilce" disabled={isAddressSubmitting} {...registerAddress("ilce")} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="addr-adres" className="text-xs">Açık Adres *</Label>
+            <Input id="addr-adres" disabled={isAddressSubmitting} {...registerAddress("adres")} />
+            {addressErrors.adres ? (
+              <span className="text-[11px] text-destructive">{addressErrors.adres.message}</span>
+            ) : null}
+          </div>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded-[4px] border-border"
+              disabled={isAddressSubmitting}
+              {...registerAddress("varsayilan")}
+            />
+            Varsayılan adres
+          </label>
+        </div>
+      </EntityModal>
+
+      {/* MODAL: EKİP DAVETİ GÖNDER */}
+      <EntityModal
+        open={createInviteOpen}
+        onOpenChange={setCreateInviteOpen}
+        title="Ekip Daveti Gönder"
+        description="Davet edilen e-posta adresine kayıt bağlantısı gönderilir."
+        error={inviteError}
+        isDirty={isInviteDirty}
+        isSubmitting={isInviteSubmitting}
+        submitLabel="Davet Gönder"
+        onSubmit={handleInviteSubmit(onCreateInviteSubmit)}
+      >
+        <div className="space-y-3">
+          {me?.capabilities?.can_view_ops ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Firma (Boş bırakılırsa aktif firmanız)</Label>
+              <RelationSelect
+                value={watchedInviteFirmaId ?? null}
+                onChange={(val) =>
+                  setInviteValue("firma_id", val ? Number(val) : null, { shouldDirty: true })
+                }
+                loadOptions={loadFirmaOptions}
+                placeholder="Aktif firma veya başka firma seçin…"
+                clearable
+              />
+            </div>
+          ) : null}
+          <div className="space-y-1.5">
+            <Label htmlFor="inv-email" className="text-xs">E-posta Adresi *</Label>
+            <Input
+              id="inv-email"
+              type="email"
+              placeholder="personel@firma.com"
+              disabled={isInviteSubmitting}
+              {...registerInvite("email")}
+            />
+            {inviteErrors.email ? (
+              <span className="text-[11px] text-destructive">
+                {inviteErrors.email.message}
+              </span>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="inv-role" className="text-xs">Atanacak Rol *</Label>
+            <select
+              id="inv-role"
+              className="h-9 w-full rounded-[6px] border border-border bg-background px-3 text-xs"
+              disabled={isInviteSubmitting}
+              {...registerInvite("rol")}
+            >
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
+      </EntityModal>
 
-      {/* Create unit */}
-      <Dialog open={createUnitOpen} onOpenChange={setCreateUnitOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Yeni organizasyon birimi</DialogTitle>
-            <DialogDescription>
-              `POST /org-units/` — kod zorunlu.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={handleUnitSubmit(onCreateUnitSubmit)}
-            className="flex flex-col gap-4 pt-2"
-          >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="unit-kod">Birim kodu</Label>
-              <Input id="unit-kod" disabled={isUnitSubmitting} {...registerUnit("kod")} />
-              {unitErrors.kod && (
-                <span className="text-[11px] text-destructive">
-                  {unitErrors.kod.message}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="unit-ad">Birim adı</Label>
-              <Input id="unit-ad" disabled={isUnitSubmitting} {...registerUnit("ad")} />
-              {unitErrors.ad && (
-                <span className="text-[11px] text-destructive">
-                  {unitErrors.ad.message}
-                </span>
-              )}
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateUnitOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button type="submit" size="sm" disabled={isUnitSubmitting}>
-                {isUnitSubmitting ? "Kaydediliyor…" : "Kaydet"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Invite */}
-      <Dialog open={createInviteOpen} onOpenChange={setCreateInviteOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Ekip daveti</DialogTitle>
-            <DialogDescription>
-              `POST /auth/invites/create/` — email + rol.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={handleInviteSubmit(onCreateInviteSubmit)}
-            className="flex flex-col gap-4 pt-2"
-          >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="inv-email">E-posta</Label>
-              <Input
-                id="inv-email"
-                type="email"
-                disabled={isInviteSubmitting}
-                {...registerInvite("email")}
-              />
-              {inviteErrors.email && (
-                <span className="text-[11px] text-destructive">
-                  {inviteErrors.email.message}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="inv-role">Rol</Label>
-              <select
-                id="inv-role"
-                className="h-9 w-full rounded-[6px] border border-border bg-background px-3 text-xs"
-                disabled={isInviteSubmitting}
-                {...registerInvite("rol")}
-              >
-                <option value="ALICI_SATINALMA">ALICI_SATINALMA</option>
-                <option value="ALICI_FINANS">ALICI_FINANS</option>
-                <option value="ALICI_YONETICI">ALICI_YONETICI</option>
-                <option value="TEDARIKCI_SATIS">TEDARIKCI_SATIS</option>
-                <option value="TEDARIKCI_ATOLYE">TEDARIKCI_ATOLYE</option>
-                <option value="TEDARIKCI_YONETICI">TEDARIKCI_YONETICI</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateInviteOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isInviteSubmitting}
-                className="gap-1.5"
-              >
-                <Send className="h-3.5 w-3.5" />
-                {isInviteSubmitting ? "Gönderiliyor…" : "Gönder"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Unit detail + members */}
-      <Dialog
-        open={Boolean(detailUnit)}
+      <ConfirmDialog
+        open={Boolean(deletingAddress)}
         onOpenChange={(open) => {
-          if (!open) {
-            setDetailUnit(null);
-            setAddMemberOpen(false);
-          }
+          if (!open) setDeletingAddress(null);
         }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Birim detayı</DialogTitle>
-            <DialogDescription>
-              `GET /org-units/{"{id}"}/` ve üyeler.
-            </DialogDescription>
-          </DialogHeader>
-          {detailUnit && (
-            <div className="flex flex-col gap-4 pt-1">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <Detail label="ID" value={`#${detailUnit.id}`} />
-                <Detail label="Kod" value={detailUnit.kod} mono />
-                <Detail label="Ad" value={detailUnit.ad} />
-                <Detail
-                  label="Durum"
-                  value={detailUnit.aktif === false ? "PASİF" : "AKTİF"}
-                />
-                <Detail
-                  label="Üst birim"
-                  value={detailUnit.parent_id != null ? `#${detailUnit.parent_id}` : "Kök"}
-                />
-                <Detail
-                  label="Firma"
-                  value={
-                    detailUnit.firma_id != null ? `#${detailUnit.firma_id}` : "—"
-                  }
-                  mono
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-foreground">Üyeler</h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={() => setAddMemberOpen(true)}
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Üye ekle
-                </Button>
-              </div>
-
-              {membersLoading ? (
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  Üyeler yükleniyor…
-                </div>
-              ) : members.length === 0 ? (
-                <div className="text-xs text-muted-foreground">Üye bulunamadı.</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Üyelik</TableHead>
-                      <TableHead>Kullanıcı</TableHead>
-                      <TableHead>Tarih</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="font-mono text-xs">#{m.id}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          #{m.kullanici_id}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {m.olusturma_tarihi
-                            ? formatDateTime(m.olusturma_tarihi)
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-
-              {addMemberOpen && (
-                <form
-                  onSubmit={handleMemberSubmit(onAddMemberSubmit)}
-                  className="flex flex-col gap-3 border-t border-border pt-3"
-                >
-                  <Label htmlFor="member-uid">Kullanıcı id</Label>
-                  <Input
-                    id="member-uid"
-                    type="number"
-                    className="font-mono"
-                    disabled={isMemberSubmitting}
-                    {...registerMember("kullanici_id", { valueAsNumber: true })}
-                  />
-                  {memberErrors.kullanici_id && (
-                    <span className="text-[11px] text-destructive">
-                      {memberErrors.kullanici_id.message}
-                    </span>
-                  )}
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAddMemberOpen(false)}
-                    >
-                      İptal
-                    </Button>
-                    <Button type="submit" size="sm" disabled={isMemberSubmitting}>
-                      {isMemberSubmitting ? "Ekleniyor…" : "Ekle"}
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        title="Adresi Sil"
+        description={`${deletingAddress?.il || "Bu"} adresi kalıcı olarak silinecek.`}
+        confirmLabel="Evet, Sil"
+        variant="destructive"
+        onConfirm={onDeleteAddressConfirm}
+      />
     </div>
   );
 }
@@ -1133,25 +914,6 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-[8px] border border-border bg-card p-4 space-y-1">
       <div className="text-[11px] text-muted-foreground">{label}</div>
       <div className="text-xl font-semibold font-mono tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-[6px] border border-border px-2.5 py-2">
-      <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className={`text-xs text-foreground ${mono ? "font-mono" : "font-medium"}`}>
-        {value}
-      </div>
     </div>
   );
 }

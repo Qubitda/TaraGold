@@ -42,22 +42,36 @@ def _require_firma_user_admin(user) -> None:
         pass
 
 
+from django.db.models import Q
+
+
 class FirmaKullaniciListView(APIView):
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [BuyerRateThrottle]
 
     def get(self, request):
         _require_firma_user_admin(request.user)
+        is_ops = can_view_all_tenants(request.user)
         firma_id = getattr(request.user, "firma_id", None)
-        if can_view_all_tenants(request.user):
+        rows = FirmaUyelik.objects.select_related("kullanici", "firma")
+        if is_ops:
             raw = request.query_params.get("firma_id")
             if raw:
-                firma_id = int(raw)
-        if not firma_id:
-            raise ValidationError({"firma_id": "Zorunlu."})
-        rows = FirmaUyelik.objects.filter(firma_id=firma_id).select_related(
-            "kullanici"
-        )
+                rows = rows.filter(firma_id=int(raw))
+        else:
+            if not firma_id:
+                raise ValidationError({"firma_id": "Zorunlu."})
+            rows = rows.filter(firma_id=firma_id)
+        term = (request.query_params.get("q") or "").strip()
+        if term:
+            rows = rows.filter(
+                Q(kullanici__username__icontains=term)
+                | Q(kullanici__email__icontains=term)
+                | Q(kullanici__first_name__icontains=term)
+                | Q(kullanici__last_name__icontains=term)
+                | Q(firma__ad__icontains=term)
+            )
+        rows = rows.order_by("kullanici__username", "pk")
         return Response([present_uyelik(u) for u in rows])
 
 

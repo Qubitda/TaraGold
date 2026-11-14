@@ -59,7 +59,10 @@ export interface OrgUnit {
   kod: string;
   ad: string;
   firma_id?: number;
+  firma_ad?: string;
   parent_id?: number | null;
+  parent_kod?: string | null;
+  parent_ad?: string | null;
   aktif?: boolean;
   server_now?: string;
   allowed_actions?: string[];
@@ -78,6 +81,13 @@ export interface OrgUnitCreateRequest {
   kod: string;
   ad?: string;
   parent_id?: number | null;
+}
+
+export interface OrgUnitUpdateRequest {
+  kod?: string;
+  ad?: string;
+  parent_id?: number | null;
+  aktif?: boolean;
 }
 
 export interface Approval {
@@ -114,6 +124,8 @@ export interface OrgMember {
   id: number;
   org_birimi_id: number;
   kullanici_id: number;
+  kullanici_username?: string;
+  kullanici_ad_soyad?: string;
   olusturma_tarihi?: string | null;
   allowed_actions?: string[];
   server_now?: string;
@@ -137,6 +149,7 @@ export interface InviteItem {
   email: string;
   rol: string;
   firma_id?: number;
+  firma_ad?: string;
   expires_at?: string;
   expired?: boolean;
   durum?: string;

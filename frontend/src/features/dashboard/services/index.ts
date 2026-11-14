@@ -211,15 +211,16 @@ export const dashboardService = {
       );
     }
 
-    // Raporlar: capability yok; 403 olursa sessizce hata kaydı
+    // Raporlar: platform ops için buyer-behavior alici_firma_id gerektirdiğinden yalnızca ticari özet çağrılır
     tasks.push(
       (async () => {
-        const r = await Promise.allSettled([
+        const calls: [Promise<Awaited<ReturnType<typeof raporlarService.getCommercialOrders>>>, Promise<Awaited<ReturnType<typeof raporlarService.getBuyerBehavior>>> | Promise<null>] = [
           raporlarService.getCommercialOrders(reportParams),
-          raporlarService.getBuyerBehavior(reportParams),
-        ]);
+          c.can_view_ops ? Promise.resolve(null) : raporlarService.getBuyerBehavior(reportParams),
+        ];
+        const r = await Promise.allSettled(calls);
         if (r[0].status === "fulfilled") snap.commercialReport = r[0].value;
-        if (r[1].status === "fulfilled") snap.behaviorReport = r[1].value;
+        if (r[1].status === "fulfilled" && r[1].value) snap.behaviorReport = r[1].value;
         if (r[0].status === "rejected" && r[1].status === "rejected") {
           snap.errors.reports = errMsg(
             (r[0] as PromiseRejectedResult).reason

@@ -72,6 +72,15 @@ def detay(*, urun_id: int) -> dict:
         "kategori": getattr(u.kategori, "ad", "") or "",
         "ayar": getattr(u.ayar, "ayar_kodu", "") or "",
         "fiyat_tipi": u.fiyat_tipi,
+        "koleksiyon": getattr(getattr(u, "koleksiyon", None), "ad", "") or "",
+        "hedef_kitle": u.get_hedef_kitle_display() if u.hedef_kitle else "",
+        "yas_grubu": getattr(getattr(u, "yas_grubu", None), "ad", "") or "",
+        "yuzey": u.get_yuzey_display() if u.yuzey else "",
+        "zincir_tipi": getattr(getattr(u, "zincir_tipi", None), "ad", "") or "",
+        "kopca_tipi": getattr(getattr(u, "kopca_tipi", None), "ad", "") or "",
+        "teknikler": list(u.teknikler.values_list("ad", flat=True)),
+        "stiller": list(u.stiller.values_list("ad", flat=True)),
+        "ozel_gunler": list(u.ozel_gunler.values_list("ad", flat=True)),
         "varyantlar": varyantlar,
     }
     assert_masked(data)

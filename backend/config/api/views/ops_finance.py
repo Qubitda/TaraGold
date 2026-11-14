@@ -4,6 +4,7 @@ from django.core.exceptions import (
     PermissionDenied as DjangoPermissionDenied,
     ValidationError as DjangoValidationError,
 )
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -54,8 +55,19 @@ class OpsFinanceCariListView(APIView):
             ops_finans_servisi.require_ops_finance(request.user)
         except DjangoPermissionDenied as exc:
             _map_perm(exc)
+        qs = CariHesap.objects.select_related("firma", "karsi_firma").all()
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(firma__ad__icontains=q)
+                | Q(karsi_firma__ad__icontains=q)
+                | Q(para_birimi__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(firma_id=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
-            CariHesap.objects.all(),
+            qs,
             request,
             whitelist=("guncelleme_tarihi", "pk"),
             default="-guncelleme_tarihi",
@@ -66,6 +78,44 @@ class OpsFinanceCariListView(APIView):
             present=ops_finans_servisi.present_cari_ops,
             extra={"ops": True},
         )
+
+
+class OpsFinanceCariDetailView(APIView):
+    """GET / PATCH /api/v1/ops/finance/cari/<pk>/ — kredi limiti güncelleme."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def get(self, request, pk: int):
+        try:
+            ops_finans_servisi.require_ops_finance(request.user)
+        except DjangoPermissionDenied as exc:
+            _map_perm(exc)
+        hesap = get_object_or_404(
+            CariHesap.objects.select_related("firma", "karsi_firma"), pk=pk
+        )
+        return Response(ops_finans_servisi.present_cari_ops(hesap))
+
+    def patch(self, request, pk: int):
+        try:
+            ops_finans_servisi.require_ops_finance(request.user)
+        except DjangoPermissionDenied as exc:
+            _map_perm(exc)
+        enforce_csrf(request)
+        data = request.data if isinstance(request.data, dict) else {}
+        if "kredi_limiti" not in data:
+            raise ValidationError({"kredi_limiti": "Kredi limiti zorunludur."})
+        try:
+            hesap = ops_finans_servisi.guncelle_kredi_limiti(
+                actor=request.user,
+                cari_id=pk,
+                kredi_limiti=data.get("kredi_limiti"),
+            )
+        except (DjangoValidationError, DjangoPermissionDenied) as exc:
+            if isinstance(exc, DjangoValidationError):
+                raise _django_ve_to_drf(exc) from exc
+            _map_perm(exc)
+        return Response(ops_finans_servisi.present_cari_ops(hesap))
 
 
 class OpsFinanceLedgerListView(APIView):
@@ -80,8 +130,21 @@ class OpsFinanceLedgerListView(APIView):
             ops_finans_servisi.require_ops_finance(request.user)
         except DjangoPermissionDenied as exc:
             _map_perm(exc)
+        qs = LedgerEntry.objects.select_related("firma", "karsi_firma").all()
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(firma__ad__icontains=q)
+                | Q(karsi_firma__ad__icontains=q)
+                | Q(hareket_tipi__icontains=q)
+                | Q(referans_tip__icontains=q)
+                | Q(referans_id__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
-            LedgerEntry.objects.all(),
+            qs,
             request,
             whitelist=("olusturma_tarihi", "pk"),
             default="-olusturma_tarihi",
@@ -106,8 +169,19 @@ class OpsFinancePaymentListView(APIView):
             ops_finans_servisi.require_ops_finance(request.user)
         except DjangoPermissionDenied as exc:
             _map_perm(exc)
+        qs = PaymentIntent.objects.select_related("alici_firma").all()
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(alici_firma__ad__icontains=q)
+                | Q(durum__icontains=q)
+                | Q(para_birimi__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(order_id=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
-            PaymentIntent.objects.all(),
+            qs,
             request,
             whitelist=("olusturma_tarihi", "pk"),
             default="-olusturma_tarihi",
@@ -171,6 +245,12 @@ class OpsFinanceHakEdisListView(APIView):
                 qs = qs.filter(order_id=int(order_id))
             except (TypeError, ValueError) as exc:
                 raise ValidationError({"order_id": "Geçersiz."}) from exc
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = Q(tedarikci_firma__ad__icontains=q) | Q(aciklama__icontains=q)
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(order_id=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
             qs,
             request,

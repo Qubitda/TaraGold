@@ -17,6 +17,7 @@ def present_inspection(insp: QualityInspection, *, can_manage: bool = False) -> 
         {
             "id": m.pk,
             "order_line_id": m.order_line_id,
+            "varyant_sku": getattr(getattr(getattr(m, "order_line", None), "varyant", None), "sku", "") or "",
             "birim": m.birim,
             "beklenen": str(m.beklenen),
             "olculen": str(m.olculen),
@@ -37,9 +38,12 @@ def present_inspection(insp: QualityInspection, *, can_manage: bool = False) -> 
             actions.extend(["start", "cancel"])
         elif insp.durum == QualityInspection.Durum.OLCUMDE:
             actions.extend(["add_measurement", "pass", "fail", "cancel"])
+    order_obj = getattr(insp, "order", None)
+    alici_firma = getattr(order_obj, "alici_firma", None) if order_obj else None
     data = {
         "id": insp.pk,
         "order_id": insp.order_id,
+        "alici_firma_ad": getattr(alici_firma, "ad", "") if alici_firma else "",
         "order_line_id": insp.order_line_id,
         "durum": insp.durum,
         "shipment_blok": insp.shipment_blok,
@@ -77,6 +81,9 @@ def present_measurement(m: QualityMeasurement) -> dict:
 
 def present_ops_shipment(ship: Shipment, *, can_manage: bool = False) -> dict:
     data = _raw_ship(ship)
+    order_obj = getattr(ship, "order", None)
+    alici_firma = getattr(order_obj, "alici_firma", None) if order_obj else None
+    data["alici_firma_ad"] = getattr(alici_firma, "ad", "") if alici_firma else ""
     actions: list[str] = []
     if can_manage:
         if ship.durum == Shipment.Durum.TASLAK:

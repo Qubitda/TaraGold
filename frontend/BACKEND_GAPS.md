@@ -82,50 +82,45 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 # FAZ 4 — Finans / Stok / Lojistik / Kalite
 
-## GAP-F4-01 — Sevkiyat taşıyıcı alanı
+## GAP-F4-01 — Sevkiyat taşıyıcı alanı — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Dispatch’te taşıyıcı firma (`tasiyici`) + OpsShipment yanıtında gösterme |
-| **Önerilen** | `TakipNoRequest` / `OpsShipment`’e `tasiyici?: string` |
-| **Mevcut** | `POST .../dispatch/` yalnız `TakipNoRequest.takip_no` |
-| **Ekran** | Lojistik sevk modalı |
+| **Uygulama** | `TakipNoRequest` & `OpsShipment` üzerinde `tasiyici?: string | null` |
+| **Ekran** | Lojistik sevk modalı ve sevkiyat tablosu |
 
-## GAP-F4-02 — QC ölçüm: ayar + gram ayrı alan
+## GAP-F4-02 — QC ölçüm: ayar + gram ayrı alan — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Ölçülen ayar ve gram ayrı Decimal alanlar |
-| **Önerilen** | `OpsMeasurementRequest`: `olculen_ayar`, `olculen_gram` (string) **veya** yapılandırılmış `olculen` |
-| **Mevcut** | `{ order_line_id, olculen, override_gerekce? }` — tek string |
-| **Ekran** | Kalite ölçüm modalı (FE `olculen`’e `ayar=…;gram=…` yazar)
+| **Uygulama** | `OpsMeasurementRequest` & `InspectionMeasurementItem`: `olculen_ayar`, `olculen_gram` (Decimal string) |
+| **Ekran** | `QualityInspectionsView` ölçüm modalı ve ölçüm tablosu |
 
-## GAP-F4-03 — Depo listesi (warehouse picker)
+## GAP-F4-03 — Depo listesi (warehouse picker) — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
 | **İhtiyaç** | Stok düzeltmede depo seçimi (id ezberletmeden) |
-| **Önerilen** | `GET /api/v1/supplier/warehouses/` → `{ id, ad, kod }` |
-| **Mevcut** | Adjust body’de ham `warehouse_id` |
-| **Ekran** | Stok düzeltme formu |
+| **Uygulama** | `GET /api/v1/supplier/warehouses/` → `{ id, ad, kod }` |
+| **Ekran** | `StockManagementView` depo seçici & stok tablosu |
 
-## GAP-F4-04 — İade sebep / mahsup tutarı yüzeyi
-
-| | |
-|--|--|
-| **İhtiyaç** | BuyerReturn’de `sebep`, `mahsup_tutari` (string Decimal) |
-| **Önerilen** | OpenAPI `BuyerReturn` genişletmesi |
-| **Mevcut** | `id`, `durum`, `order_id?`, `allowed_actions?`, `server_now?` |
-| **Ekran** | Lojistik iade tablosu |
-
-## GAP-F4-05 — Alıcı sevkiyat / POD self-service
+## GAP-F4-04 — İade sebep / mahsup tutarı yüzeyi — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
-| **İhtiyaç** | Alıcı kendi `/shipments/` listesinde takip + POD onayı |
-| **Önerilen** | Mevcut `GET /shipments/` yeterli; POD alıcı path’i netleştir |
-| **Mevcut** | POD yalnız `POST /ops/shipments/{id}/pod/` |
-| **Ekran** | Alıcı sipariş/lojistik (ops ekranı ayrı)
+| **İhtiyaç** | BuyerReturn’de `iade_sebebi`, `mahsup_tutari` (string Decimal) |
+| **Uygulama** | `BuyerReturn` yanıtı `iade_sebebi` ve `mahsup_tutari` alanlarını içerir; `POST /returns/{id}/mahsup/` desteklenir |
+| **Ekran** | Lojistik iade tablosu ve detay modalı |
+
+## GAP-F4-05 — Alıcı sevkiyat / POD self-service — **UYGULANDI** (2026-11-13)
+
+| | |
+|--|--|
+| **İhtiyaç** | Alıcı kendi `/shipments/` listesinde takip + POD görüntüleme/indirme |
+| **Uygulama** | `GET/POST /api/v1/shipments/{id}/pod/` |
+| **Ekran** | Alıcı lojistik sevkiyat detayı & POD modalı |
 
 ---
 

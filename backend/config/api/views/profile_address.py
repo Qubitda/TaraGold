@@ -38,6 +38,7 @@ def present_profile(user) -> dict:
         "email": user.email or "",
         "first_name": user.first_name or "",
         "last_name": user.last_name or "",
+        "profil_foto": getattr(user, "profil_foto", "") or "",
         "rol": getattr(user, "rol", "") or "",
         "email_verified": is_email_verified(user),
         "firma": present_firma_masked(getattr(user, "firma", None)),
@@ -80,6 +81,7 @@ class MeProfileView(APIView):
                 actor=request.user,
                 first_name=data["first_name"] if "first_name" in data else None,
                 last_name=data["last_name"] if "last_name" in data else None,
+                profil_foto=data["profil_foto"] if "profil_foto" in data else None,
             )
         except (DjangoPermissionDenied, DjangoValidationError) as exc:
             raise_drf(exc)

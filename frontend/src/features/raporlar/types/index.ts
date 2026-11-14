@@ -26,6 +26,10 @@ export interface BuyerBehaviorReport {
 export interface AnomalyOrderResult {
   id?: number;
   alici_firma_id?: number;
+  alici_firma_ad?: string;
+  ciro_vergisiz?: string;
+  esik_ciro?: string;
+  anomali?: boolean;
   ciro?: string;
   olusturma_tarihi?: string;
   durum?: string;

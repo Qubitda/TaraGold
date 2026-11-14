@@ -97,39 +97,57 @@ export function useOpsFinanceQuery(enabled = false) {
   });
 }
 
-export function useOpsFinanceCariQuery(enabled = false) {
+export function useOpsFinanceCariQuery(
+  enabled = false,
+  params?: { q?: string; page?: number; page_size?: number }
+) {
   return useQuery({
-    queryKey: finansKeys.opsCari(),
-    queryFn: async () => unwrapResults(await finansService.getOpsFinanceCari()),
+    queryKey: [...finansKeys.opsCari(), params ?? {}] as const,
+    queryFn: () => finansService.getOpsFinanceCari(params),
     enabled,
   });
 }
 
-export function useOpsFinanceLedgerQuery(enabled = false) {
+export function useUpdateOpsCariLimitMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, kredi_limiti }: { id: number; kredi_limiti: string }) =>
+      finansService.updateOpsCariLimit(id, kredi_limiti),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: finansKeys.all });
+    },
+  });
+}
+
+export function useOpsFinanceLedgerQuery(
+  enabled = false,
+  params?: { q?: string; page?: number; page_size?: number }
+) {
   return useQuery({
-    queryKey: finansKeys.opsLedger(),
-    queryFn: async () =>
-      unwrapResults(await finansService.getOpsFinanceLedger()),
+    queryKey: [...finansKeys.opsLedger(), params ?? {}] as const,
+    queryFn: () => finansService.getOpsFinanceLedger(params),
     enabled,
   });
 }
 
-export function useOpsFinancePaymentsQuery(enabled = false) {
+export function useOpsFinancePaymentsQuery(
+  enabled = false,
+  params?: { q?: string; page?: number; page_size?: number }
+) {
   return useQuery({
-    queryKey: finansKeys.opsPayments(),
-    queryFn: async () =>
-      unwrapResults(await finansService.getOpsFinancePayments()),
+    queryKey: [...finansKeys.opsPayments(), params ?? {}] as const,
+    queryFn: () => finansService.getOpsFinancePayments(params),
     enabled,
   });
 }
 
-export function useOpsFinanceHakEdisQuery(enabled = false, durum = "") {
+export function useOpsFinanceHakEdisQuery(
+  enabled = false,
+  params?: { durum?: string; q?: string; page?: number; page_size?: number }
+) {
   return useQuery({
-    queryKey: finansKeys.opsHakEdis(durum),
-    queryFn: async () =>
-      unwrapResults(
-        await finansService.getOpsFinanceHakEdis(durum ? { durum } : undefined)
-      ),
+    queryKey: [...finansKeys.opsHakEdis(params?.durum ?? ""), params ?? {}] as const,
+    queryFn: () => finansService.getOpsFinanceHakEdis(params),
     enabled,
   });
 }

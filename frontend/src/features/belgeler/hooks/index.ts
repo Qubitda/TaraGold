@@ -7,8 +7,8 @@ import type { BelgeAyarlari, PodAttachRequest } from "../types";
 
 export const belgelerKeys = {
   all: ["belgeler"] as const,
-  list: (capKey: string, tip?: string, orderId?: string) =>
-    [...belgelerKeys.all, "list", capKey, tip || "all", orderId || ""] as const,
+  list: (capKey: string, tip?: string, orderId?: string, q?: string) =>
+    [...belgelerKeys.all, "list", capKey, tip || "all", orderId || "", q || ""] as const,
   opsShipments: () => [...belgelerKeys.all, "ops-shipments"] as const,
   ayarlar: () => [...belgelerKeys.all, "ayarlar"] as const,
 };
@@ -25,7 +25,7 @@ export function useDocumentsQuery(enabled = true, filters?: DocumentsFilter) {
   const { user } = useAuth();
   const key = capKey(user?.capabilities as Record<string, boolean> | undefined);
   return useQuery({
-    queryKey: belgelerKeys.list(key, filters?.tip, filters?.order_id),
+    queryKey: belgelerKeys.list(key, filters?.tip, filters?.order_id, filters?.q),
     queryFn: () => belgelerService.getDocuments(user?.capabilities, filters),
     enabled: enabled && Boolean(user),
   });

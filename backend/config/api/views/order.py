@@ -1,5 +1,6 @@
 """F4-060/061 + API-B1 — buyer order detay/liste + platform ops liste."""
 
+from django.db.models import Q
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -42,6 +43,20 @@ class OrderListView(APIView):
             Order.objects.select_related("alici_firma"),
             request.user,
         )
+        durum = (request.query_params.get("durum") or "").strip().upper()
+        if durum and durum in Order.Durum.values:
+            qs = qs.filter(durum=durum)
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(lines__varyant__sku__icontains=q)
+                | Q(lines__varyant__urun__ad__icontains=q)
+            )
+            if can_ops_read_orders(request.user):
+                cond |= Q(alici_firma__ad__icontains=q)
+            if q.isdigit():
+                cond |= Q(pk=int(q))
+            qs = qs.filter(cond).distinct()
         qs = apply_ordering(
             qs,
             request,

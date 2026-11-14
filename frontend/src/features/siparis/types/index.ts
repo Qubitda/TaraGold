@@ -6,6 +6,8 @@
 export interface BuyerCartLine {
   id: number;
   varyant_id: number;
+  varyant_sku?: string;
+  urun_ad?: string;
   quote_id: number;
   miktar: string; // Decimal string
   birim: string;
@@ -27,6 +29,8 @@ export interface BuyerCart {
 export interface BuyerOrderLine {
   id: number;
   varyant_id: number;
+  varyant_sku?: string;
+  urun_ad?: string;
   miktar: string;
   birim: string;
   snapshot_birim_fiyat_vergisiz: string;
@@ -37,6 +41,7 @@ export interface BuyerOrderLine {
 export interface BuyerOrder {
   id: number;
   alici_firma_id: number;
+  alici_firma_ad?: string;
   durum: "TASLAK" | "BEKLEMEDE" | "ONAYLANDI" | "HAZIRLANIYOR" | "SEVKIYAT" | "TAMAMLANDI" | "IPTAL" | string;
   idempotency_key: string | null;
   line_count: number;

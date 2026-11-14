@@ -14,18 +14,37 @@ import type {
   ShipmentCreateRequest,
 } from "../types";
 
+export interface LogisticsListParams {
+  q?: string;
+  durum?: string;
+  order_id?: number | string;
+  page?: number;
+  page_size?: number;
+}
+
+function buildQuery(params?: LogisticsListParams | Record<string, string>): string {
+  if (!params) return "";
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && String(v).trim() !== "") {
+      sp.set(k, String(v).trim());
+    }
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
 export const lojistikService = {
-  getShipments(): Promise<OpsShipmentPage> {
-    return apiFetch<OpsShipmentPage>("/ops/shipments/");
+  getShipments(params?: LogisticsListParams): Promise<OpsShipmentPage> {
+    return apiFetch<OpsShipmentPage>(`/ops/shipments/${buildQuery(params)}`);
   },
   getOpsShipmentDetail(id: number | string): Promise<OpsShipment> {
     return apiFetch<OpsShipment>(`/ops/shipments/${id}/`);
   },
   getBuyerShipments(
-    params?: Record<string, string>
+    params?: LogisticsListParams | Record<string, string>
   ): Promise<Paginated<BuyerShipment>> {
-    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
-    return apiFetch(`/shipments/${query}`);
+    return apiFetch(`/shipments/${buildQuery(params)}`);
   },
   getBuyerShipmentDetail(id: number | string): Promise<BuyerShipment> {
     return apiFetch<BuyerShipment>(`/shipments/${id}/`);
@@ -91,8 +110,8 @@ export const lojistikService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  getReturns(): Promise<BuyerReturnPage> {
-    return apiFetch<BuyerReturnPage>("/returns/");
+  getReturns(params?: LogisticsListParams): Promise<BuyerReturnPage> {
+    return apiFetch<BuyerReturnPage>(`/returns/${buildQuery(params)}`);
   },
   createReturn(data: CreateReturnRequest): Promise<BuyerReturnDetail> {
     return apiFetch<BuyerReturnDetail>("/returns/", {

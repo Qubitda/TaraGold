@@ -7,8 +7,8 @@ export const raporlarKeys = {
   all: ["raporlar"] as const,
   commercial: (from: string, to: string) =>
     [...raporlarKeys.all, "commercial", from, to] as const,
-  behavior: (from: string, to: string) =>
-    [...raporlarKeys.all, "behavior", from, to] as const,
+  behavior: (from: string, to: string, aliciFirmaId?: number | null) =>
+    [...raporlarKeys.all, "behavior", from, to, aliciFirmaId ?? "self"] as const,
   anomaly: (esik: string) => [...raporlarKeys.all, "anomaly", esik] as const,
 };
 
@@ -31,14 +31,16 @@ export function useCommercialOrdersQuery(
 export function useBuyerBehaviorQuery(
   dateFrom: string,
   dateTo: string,
-  enabled = true
+  enabled = true,
+  aliciFirmaId?: number | null
 ) {
   return useQuery({
-    queryKey: raporlarKeys.behavior(dateFrom, dateTo),
+    queryKey: raporlarKeys.behavior(dateFrom, dateTo, aliciFirmaId),
     queryFn: () =>
       raporlarService.getBuyerBehavior({
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
+        alici_firma_id: aliciFirmaId ?? undefined,
       }),
     enabled,
   });

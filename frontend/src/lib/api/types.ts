@@ -26,6 +26,7 @@ export type MeResponse = S["MeResponse"] & {
   mfa_required?: boolean;
   mfa_ok?: boolean;
   act_as?: ActAsState | null;
+  profil_foto?: string;
 };
 export type LoginResponse = MeResponse;
 export type MeDashboard = S["MeDashboard"];

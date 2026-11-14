@@ -198,10 +198,14 @@ def satir_sil(*, actor, line: CartLine) -> None:
 def present_cart_line(line: CartLine) -> dict:
     """Alıcı yüzeyi — tedarikçi/maliyet/teklif yok (B-02)."""
     q = line.price_quote
+    varyant = getattr(line, "varyant", None) or getattr(q, "varyant", None)
+    urun = getattr(varyant, "urun", None) if varyant else None
     return {
         "id": line.pk,
         "quote_id": q.pk,
         "varyant_id": line.varyant_id,
+        "varyant_sku": getattr(varyant, "sku", "") or "",
+        "urun_ad": getattr(urun, "ad", "") or "",
         "miktar": line.miktar,
         "birim": line.birim,
         "para_birimi": q.para_birimi,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { kaliteService } from "../services";
+import { kaliteService, type InspectionListParams } from "../services";
 import type {
   InspectionCreateRequest,
   InspectionMeasurementRequest,
@@ -9,7 +9,8 @@ import type {
 
 export const kaliteKeys = {
   all: ["kalite"] as const,
-  list: () => [...kaliteKeys.all, "list"] as const,
+  list: (params?: InspectionListParams) =>
+    [...kaliteKeys.all, "list", params || {}] as const,
   detail: (id: number | string) =>
     [...kaliteKeys.all, "detail", String(id)] as const,
 };
@@ -25,6 +26,17 @@ export function useInspectionsQuery(enabled = true) {
       const page = await kaliteService.getInspections();
       return page.results ?? [];
     },
+    enabled,
+  });
+}
+
+export function useInspectionsPageQuery(
+  params?: InspectionListParams,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: kaliteKeys.list(params),
+    queryFn: () => kaliteService.getInspections(params),
     enabled,
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,45 +8,26 @@ import { useAuth } from "@/features/auth";
 import { useTheme } from "@/components/layout";
 import { profilService } from "../services";
 import {
-  useProfileAddressesQuery,
   useProfileDashboardQuery,
   useProfileQuery,
 } from "../hooks";
 import {
   profileSchema,
   passwordChangeSchema,
-  addressSchema,
   emailVerifyConfirmSchema,
   type ProfileInput,
   type PasswordChangeInput,
-  type AddressInput,
   type EmailVerifyConfirmInput,
 } from "../schemas";
-import type { FirmaAdresi, MeProfile } from "../types";
+import type { MeProfile } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
 import { useActionToast } from "@/hooks/use-action-toast";
 import {
   User,
   Shield,
-  MapPin,
   Building2,
   Settings,
   RefreshCw,
@@ -54,15 +35,48 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  Plus,
+  Camera,
   Trash2,
   Mail,
   LogOut,
   ArrowRight,
-  Pencil,
 } from "lucide-react";
 
-type TabId = "personal" | "security" | "addresses" | "firma" | "prefs";
+type TabId = "personal" | "security" | "firma" | "prefs";
+
+async function resizeImageToDataUrl(file: File, maxSize = 256): Promise<string> {
+  const rawUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Dosya okunamadı."));
+    reader.readAsDataURL(file);
+  });
+
+  if (typeof document === "undefined") {
+    return rawUrl;
+  }
+
+  return await new Promise<string>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, maxSize / Math.max(img.width || 1, img.height || 1));
+      const w = Math.max(1, Math.round((img.width || maxSize) * ratio));
+      const h = Math.max(1, Math.round((img.height || maxSize) * ratio));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(rawUrl);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => resolve(rawUrl);
+    img.src = rawUrl;
+  });
+}
 
 function firmTypeLabel(firma: MeProfile["firma"]): string {
   if (!firma) return "—";
@@ -88,11 +102,9 @@ export function ProfileView() {
 
   const [tab, setTab] = useState<TabId>("personal");
   const profileQ = useProfileQuery();
-  const addressesQ = useProfileAddressesQuery();
   const dashQ = useProfileDashboardQuery();
   const profile = profileQ.data ?? null;
   const dashboard = dashQ.data ?? null;
-  const addresses = addressesQ.data ?? [];
   const loading = profileQ.isLoading;
   const [actionError, setActionError] = useState<string | null>(null);
   const error =
@@ -105,11 +117,11 @@ export function ProfileView() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [addressModalOpen, setAddressModalOpen] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<FirmaAdresi | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const {
@@ -137,22 +149,6 @@ export function ProfileView() {
   });
 
   const {
-    register: registerAddress,
-    handleSubmit: handleAddressSubmit,
-    reset: resetAddress,
-    formState: { errors: addressErrors, isSubmitting: isAddressSubmitting },
-  } = useForm<AddressInput>({
-    resolver: zodResolver(addressSchema),
-    defaultValues: {
-      tip: "TESLIMAT",
-      il: "",
-      ilce: "",
-      adres: "",
-      varsayilan: true,
-    },
-  });
-
-  const {
     register: registerVerify,
     handleSubmit: handleVerifySubmit,
     reset: resetVerify,
@@ -166,7 +162,6 @@ export function ProfileView() {
     setActionError(null);
     const [p] = await Promise.all([
       profileQ.refetch(),
-      addressesQ.refetch(),
       dashQ.refetch(),
     ]);
     if (p.data) {
@@ -274,75 +269,52 @@ export function ProfileView() {
     }
   };
 
-  const openCreateAddressModal = () => {
-    setEditingAddress(null);
-    resetAddress({
-      tip: "TESLIMAT",
-      il: "",
-      ilce: "",
-      adres: "",
-      varsayilan: true,
-    });
-    setAddressModalOpen(true);
-  };
-
-  const openEditAddressModal = (addr: FirmaAdresi) => {
-    setEditingAddress(addr);
-    resetAddress({
-      tip: addr.tip === "FATURA" ? "FATURA" : "TESLIMAT",
-      il: addr.il || "",
-      ilce: addr.ilce || "",
-      adres: addr.adres || "",
-      varsayilan: Boolean(addr.varsayilan),
-    });
-    setAddressModalOpen(true);
-  };
-
-  const onAddressSave = async (data: AddressInput) => {
+  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+    if (file.type && !allowedTypes.includes(file.type.toLowerCase())) {
+      setActionError("Yalnız PNG, JPEG, WEBP veya GIF görseli yükleyebilirsiniz.");
+      return;
+    }
     setActionError(null);
     setSuccessMsg(null);
+    setPhotoBusy(true);
     try {
-      if (editingAddress) {
-        await profilService.updateAddress(editingAddress.id, {
-          tip: data.tip,
-          il: data.il,
-          ilce: data.ilce,
-          adres: data.adres,
-          varsayilan: data.varsayilan,
-        });
-        setSuccessMsg("Adres güncellendi.");
-        actionToast.success("Adres güncellendi");
-      } else {
-        await profilService.createAddress({
-          tip: data.tip,
-          il: data.il,
-          ilce: data.ilce,
-          adres: data.adres,
-          varsayilan: data.varsayilan,
-        });
-        setSuccessMsg("Adres kaydedildi.");
-        actionToast.success("Adres kaydedildi");
+      const dataUrl = await resizeImageToDataUrl(file, 256);
+      if (dataUrl.length > 440_000) {
+        setActionError("Görsel boyutu çok büyük; lütfen daha küçük bir fotoğraf seçin.");
+        return;
       }
-      setAddressModalOpen(false);
-      setEditingAddress(null);
-      resetAddress();
-      await fetchData();
+      await profilService.updateProfile({ profil_foto: dataUrl });
+      setSuccessMsg("Profil fotoğrafı güncellendi.");
+      actionToast.success("Profil fotoğrafı güncellendi");
+      await profileQ.refetch();
+      await refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Adres kaydedilemedi.");
-      actionToast.error("Adres kaydedilemedi", err);
+      setActionError(err instanceof Error ? err.message : "Fotoğraf yüklenemedi.");
+      actionToast.error("Fotoğraf yüklenemedi", err);
+    } finally {
+      setPhotoBusy(false);
     }
   };
 
-  const onDeleteAddress = async (id: number) => {
+  const onRemovePhoto = async () => {
     setActionError(null);
+    setSuccessMsg(null);
+    setPhotoBusy(true);
     try {
-      await profilService.deleteAddress(id);
-      setSuccessMsg("Adres silindi.");
-      actionToast.success("Adres silindi");
-      await fetchData();
+      await profilService.updateProfile({ profil_foto: "" });
+      setSuccessMsg("Profil fotoğrafı kaldırıldı.");
+      actionToast.success("Profil fotoğrafı kaldırıldı");
+      await profileQ.refetch();
+      await refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Adres silinemedi.");
-      actionToast.error("Adres silinemedi", err);
+      setActionError(err instanceof Error ? err.message : "Fotoğraf kaldırılamadı.");
+      actionToast.error("Fotoğraf kaldırılamadı", err);
+    } finally {
+      setPhotoBusy(false);
     }
   };
 
@@ -358,7 +330,6 @@ export function ProfileView() {
   const tabs: Array<{ id: TabId; label: string; icon: typeof User }> = [
     { id: "personal", label: "Kişisel", icon: User },
     { id: "security", label: "Güvenlik", icon: Shield },
-    { id: "addresses", label: "Adresler", icon: MapPin },
     { id: "firma", label: "Firma", icon: Building2 },
     { id: "prefs", label: "Tercihler", icon: Settings },
   ];
@@ -371,8 +342,7 @@ export function ProfileView() {
             Profil
           </h1>
           <p className="text-xs text-muted-foreground">
-            Hesap bilgileri, güvenlik ve firma adresleri — yalnızca kendi
-            oturumunuz.
+            Kişisel hesap bilgileriniz, profil fotoğrafınız ve güvenlik ayarlarınız.
           </p>
         </div>
         <Button
@@ -431,11 +401,58 @@ export function ProfileView() {
           {/* Sol özet */}
           <aside className="rounded-[8px] border border-border bg-card p-5 space-y-4 h-fit">
             <div className="flex flex-col items-center gap-3 text-center">
-              <div
-                className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-muted font-mono text-lg font-semibold text-foreground"
-                aria-hidden
-              >
-                {initials(profile)}
+              <div className="relative">
+                {profile?.profil_foto ? (
+                  <img
+                    src={profile.profil_foto}
+                    alt={profile.username}
+                    className="h-20 w-20 rounded-full object-cover border border-border"
+                  />
+                ) : (
+                  <div
+                    className="flex h-20 w-20 items-center justify-center rounded-full border border-border bg-muted font-mono text-lg font-semibold text-foreground"
+                    aria-hidden
+                  >
+                    {initials(profile)}
+                  </div>
+                )}
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => void onPhotoChange(e)}
+              />
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] gap-1"
+                  disabled={photoBusy}
+                  onClick={() => photoInputRef.current?.click()}
+                >
+                  <Camera className="h-3 w-3" />
+                  {photoBusy
+                    ? "Yükleniyor…"
+                    : profile?.profil_foto
+                      ? "Fotoğrafı Değiştir"
+                      : "Fotoğraf Yükle"}
+                </Button>
+                {profile?.profil_foto ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-[11px] gap-1 text-destructive hover:text-destructive"
+                    disabled={photoBusy}
+                    onClick={() => void onRemovePhoto()}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Kaldır
+                  </Button>
+                ) : null}
               </div>
               <div className="space-y-0.5">
                 <div className="text-sm font-semibold text-foreground">
@@ -492,8 +509,7 @@ export function ProfileView() {
             </div>
 
             <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-border pt-3">
-              Profil fotoğrafı, telefon, kayıt/son giriş tarihi ve oturum listesi
-              bu API’de yok; yükleme veya sahte alan eklenmez.
+              Hesap bilgilerinizi ve güvenlik ayarlarınızı yan sekmelerden güncelleyebilirsiniz.
             </p>
 
             <nav className="flex flex-col gap-1 border-t border-border pt-3">
@@ -588,8 +604,7 @@ export function ProfileView() {
                     <div>
                       <div className="text-xs font-medium">E-posta doğrulama</div>
                       <p className="text-[11px] text-muted-foreground">
-                        PATCH e-posta kabul etmez. Doğrulama için{" "}
-                        <code className="font-mono">/auth/email-verify/</code>.
+                        E-posta adresinizi doğrulamak için doğrulama bağlantısı isteyebilirsiniz.
                       </p>
                     </div>
                     {!profile?.email_verified ? (
@@ -709,8 +724,7 @@ export function ProfileView() {
                 <div className="border-t border-border pt-4 space-y-2">
                   <h3 className="text-xs font-semibold">Oturum</h3>
                   <p className="text-[11px] text-muted-foreground">
-                    Cihaz/oturum listesi endpoint’i yok. Mevcut oturumu kapatmak
-                    için logout kullanın.
+                    Güvenliğiniz için ortak cihazlarda çalışmanızı bitirdiğinizde oturumu kapatın.
                   </p>
                   <Button
                     variant="destructive"
@@ -722,99 +736,6 @@ export function ProfileView() {
                     <LogOut className="h-3.5 w-3.5" />
                     {loggingOut ? "Çıkış yapılıyor…" : "Oturumu kapat"}
                   </Button>
-                </div>
-              </section>
-            )}
-
-            {tab === "addresses" && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">Firma adresleri</h2>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5"
-                    onClick={openCreateAddressModal}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Yeni adres
-                  </Button>
-                </div>
-                <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-                  {addresses.length === 0 ? (
-                    <p className="p-6 text-xs text-muted-foreground text-center">
-                      Kayıtlı adres yok.
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Tip</TableHead>
-                          <TableHead>İl / İlçe</TableHead>
-                          <TableHead>Adres</TableHead>
-                          <TableHead>Varsayılan</TableHead>
-                          <TableHead className="text-right">İşlem</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {addresses.map((a) => (
-                          <TableRow key={a.id}>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  a.tip === "TESLIMAT" ? "default" : "secondary"
-                                }
-                                className="font-mono text-[10px]"
-                              >
-                                {a.tip}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs font-medium">
-                              {a.il}
-                              {a.ilce ? ` / ${a.ilce}` : ""}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
-                              {a.adres}
-                            </TableCell>
-                            <TableCell>
-                              {a.varsayilan ? (
-                                <Badge
-                                  variant="outline"
-                                  className="font-mono text-[10px]"
-                                >
-                                  VARSAYILAN
-                                </Badge>
-                              ) : (
-                                "—"
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="inline-flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => openEditAddressModal(a)}
-                                  aria-label="Adresi düzenle"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-destructive"
-                                  onClick={() => void onDeleteAddress(a.id)}
-                                  aria-label="Adresi sil"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
                 </div>
               </section>
             )}
@@ -837,7 +758,7 @@ export function ProfileView() {
                     <Info label="Firma adı" value={profile.firma.ad} />
                     <Info
                       label="Firma kodu"
-                      value={dashboard?.firma_kodu || `ID-${profile.firma.id}`}
+                      value={dashboard?.firma_kodu || "—"}
                       mono
                     />
                     <Info label="Tür" value={firmTypeLabel(profile.firma)} />
@@ -854,10 +775,10 @@ export function ProfileView() {
                 )}
 
                 <div className="border-t border-border pt-4 space-y-2">
-                  <h3 className="text-xs font-semibold">Yetkiler (capabilities)</h3>
+                  <h3 className="text-xs font-semibold">Hesap Yetkileri</h3>
                   {caps.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground">
-                      Capability bilgisi yok.
+                      Ek yetki tanımı yok.
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
@@ -865,7 +786,7 @@ export function ProfileView() {
                         <Badge
                           key={c}
                           variant="outline"
-                          className="font-mono text-[10px]"
+                          className="text-[10px]"
                         >
                           {c}
                         </Badge>
@@ -881,8 +802,7 @@ export function ProfileView() {
                 <div className="border-b border-border pb-3 space-y-1">
                   <h2 className="text-sm font-semibold">Hesap tercihleri</h2>
                   <p className="text-[11px] text-muted-foreground">
-                    Görünüm tercihi tarayıcıda saklanır. Dil/saat dilimi ve
-                    bildirim tercihleri için backend endpoint yok.
+                    Görünüm tercihiniz bu tarayıcıda saklanır.
                   </p>
                 </div>
 
@@ -913,74 +833,6 @@ export function ProfileView() {
         </div>
       )}
 
-      <Dialog
-        open={addressModalOpen}
-        onOpenChange={(open) => {
-          setAddressModalOpen(open);
-          if (!open) setEditingAddress(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingAddress ? `Adresi düzenle (#${editingAddress.id})` : "Yeni adres"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingAddress
-                ? `PATCH /me/addresses/${editingAddress.id}/`
-                : "Teslimat veya fatura adresi (POST /me/addresses/)."}
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={handleAddressSubmit(onAddressSave)}
-            className="flex flex-col gap-4 pt-2"
-          >
-            <Field label="Adres türü" error={addressErrors.tip?.message}>
-              <select
-                className="h-9 w-full rounded-[6px] border border-border bg-background px-3 text-xs"
-                disabled={isAddressSubmitting}
-                {...registerAddress("tip")}
-              >
-                <option value="TESLIMAT">TESLIMAT</option>
-                <option value="FATURA">FATURA</option>
-              </select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="İl" error={addressErrors.il?.message}>
-                <Input disabled={isAddressSubmitting} {...registerAddress("il")} />
-              </Field>
-              <Field label="İlçe">
-                <Input disabled={isAddressSubmitting} {...registerAddress("ilce")} />
-              </Field>
-            </div>
-            <Field label="Açık adres" error={addressErrors.adres?.message}>
-              <Input disabled={isAddressSubmitting} {...registerAddress("adres")} />
-            </Field>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded-[4px] border-border"
-                disabled={isAddressSubmitting}
-                {...registerAddress("varsayilan")}
-              />
-              Varsayılan adres
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setAddressModalOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button type="submit" size="sm" disabled={isAddressSubmitting}>
-                {isAddressSubmitting ? "Kaydediliyor…" : "Kaydet"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

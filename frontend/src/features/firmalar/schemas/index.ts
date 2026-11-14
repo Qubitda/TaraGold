@@ -4,18 +4,20 @@ export const orgUnitSchema = z.object({
   kod: z.string().trim().min(1, "Birim kodu zorunludur."),
   ad: z.string().trim().min(1, "Birim adı zorunludur."),
   parent_id: z.number().nullable().optional(),
+  aktif: z.boolean().optional(),
 });
 
 export const inviteSchema = z.object({
   email: z.string().trim().email("Geçerli bir e-posta adresi girin."),
   rol: z.string().trim().min(1, "Rol seçimi zorunludur."),
+  firma_id: z.number().nullable().optional(),
 });
 
 export const memberSchema = z.object({
   kullanici_id: z
-    .number({ message: "Kullanıcı id zorunludur." })
+    .number({ message: "Lütfen bir kullanıcı seçin." })
     .int()
-    .positive("Kullanıcı id zorunludur."),
+    .positive("Lütfen bir kullanıcı seçin."),
 });
 
 export const approvalCreateSchema = z.object({

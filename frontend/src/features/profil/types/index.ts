@@ -17,6 +17,7 @@ export interface MeProfile {
   last_name: string;
   rol: string;
   email_verified: boolean;
+  profil_foto?: string;
   firma?: FirmaMasked | null;
   allowed_actions?: string[];
   server_now?: string;
@@ -25,6 +26,7 @@ export interface MeProfile {
 export interface ProfilePatchRequest {
   first_name?: string;
   last_name?: string;
+  profil_foto?: string;
 }
 
 export interface FirmaAdresi {

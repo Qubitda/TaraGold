@@ -356,13 +356,21 @@ export function HomeDashboardView() {
     }
 
     if (caps?.can_view_ops && snap.opsSummary?.counts) {
+      const statusLabelMap: Record<string, string> = {
+        ONAY_BEKLIYOR: "Onay Bekleyen Sipariş",
+        ONAYLANDI: "Onaylanan Sipariş",
+        HAZIRLANIYOR: "Hazırlanan Sipariş",
+        SEVKIYAT: "Sevkiyattaki Sipariş",
+        TAMAMLANDI: "Tamamlanan Sipariş",
+        IPTAL: "İptal Edilen Sipariş",
+      };
       const entries = Object.entries(snap.opsSummary.counts).slice(0, 3);
       for (const [k, v] of entries) {
         list.push({
           key: `ops-${k}`,
-          label: `Ops · ${k}`,
+          label: statusLabelMap[k] || k.replace(/_/g, " "),
           value: String(v),
-          href: "/raporlar",
+          href: "/siparis",
         });
       }
     }
@@ -392,15 +400,15 @@ export function HomeDashboardView() {
     for (const a of pendingApprovals.slice(0, 5)) {
       items.push({
         id: `ap-${a.id}`,
-        title: `Onay #${a.id}`,
-        meta: `${formatMoney(a.tutar, a.para_birimi || "TRY")} · ${a.gerekce || "BEKLEMEDE"}`,
+        title: a.gerekce || "Onay Talebi",
+        meta: `${formatMoney(a.tutar, a.para_birimi || "TRY")} · ${a.durum}`,
         href: "/firmalar",
       });
     }
     for (const o of pendingOrders.slice(0, 5)) {
       items.push({
         id: `ord-${o.id}`,
-        title: `Sipariş #${o.id}`,
+        title: o.alici_firma_ad ? `Sipariş · ${o.alici_firma_ad}` : "Sipariş Kaydı",
         meta: `${o.durum} · ${formatDateTime(o.olusturma_tarihi)}`,
         href: "/siparis",
       });
@@ -604,7 +612,7 @@ export function HomeDashboardView() {
           <h2 className="text-sm font-semibold text-foreground">Özet göstergeler</h2>
           {kpis.length === 0 && !loading ? (
             <p className="text-xs text-muted-foreground">
-              Bu oturum için gösterilecek KPI bulunamadı.
+              Bu oturum için gösterilecek özet bulunamadı.
             </p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -635,7 +643,7 @@ export function HomeDashboardView() {
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    {k.href} · {k.label}
+                    {k.label} detayına git
                   </TooltipContent>
                 </Tooltip>
               ))}
@@ -725,7 +733,7 @@ export function HomeDashboardView() {
                 </div>
                 {snap.behaviorReport?.quote_adet != null ? (
                   <div className="flex justify-between">
-                    <span>Quote adedi</span>
+                    <span>Fiyat teklifi adedi</span>
                     <span className="font-mono tabular-nums text-foreground">
                       {snap.behaviorReport.quote_adet}
                     </span>
@@ -738,8 +746,7 @@ export function HomeDashboardView() {
               </p>
             ) : null}
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Günlük/haftalık zaman serisi endpoint’i yok; dağılım yüklü
-              siparişlerden, dönem özeti `/reports/orders/` ile gelir.
+              Dağılım yüklü siparişlerden, dönem özeti ise ticari rapor özetinden hesaplanır.
             </p>
           </section>
 
@@ -753,7 +760,7 @@ export function HomeDashboardView() {
             </div>
             {attention.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Dikkat gerektiren kayıt yok (veya ilgili uçlar yetkisiz).
+                Dikkat gerektiren kayıt yok.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -791,7 +798,7 @@ export function HomeDashboardView() {
             loading={loading && snap.orders.length === 0}
             rows={filteredOrders.slice(0, 8).map((o) => ({
               id: String(o.id),
-              primary: `#${o.id}`,
+              primary: o.alici_firma_ad || `Sipariş (${o.line_count} kalem)`,
               secondary: formatDateTime(o.olusturma_tarihi),
               amount: `${o.line_count} kalem`,
               status: o.durum,
@@ -808,10 +815,10 @@ export function HomeDashboardView() {
             loading={loading && caps?.can_approve && snap.approvals.length === 0}
             rows={snap.approvals.slice(0, 8).map((a) => ({
               id: String(a.id),
-              primary: `#${a.id}`,
+              primary: a.gerekce || "Onay Talebi",
               secondary: a.olusturma_tarihi
                 ? formatDateTime(a.olusturma_tarihi)
-                : a.gerekce || "—",
+                : "Onay kaydı",
               amount: formatMoney(a.tutar, a.para_birimi || "TRY"),
               status: a.durum,
               href: "/firmalar",
@@ -819,7 +826,7 @@ export function HomeDashboardView() {
           />
 
           <RecentBlock
-            title="Son ledger"
+            title="Son cari hareketler"
             href="/finans"
             empty={!caps?.can_view_finance}
             emptyLabel="Finans yetkisi yok"
@@ -827,7 +834,7 @@ export function HomeDashboardView() {
             loading={loading && caps?.can_view_finance && snap.ledger.length === 0}
             rows={snap.ledger.slice(0, 8).map((l) => ({
               id: String(l.id),
-              primary: l.hareket_tipi || l.yon || `#${l.id}`,
+              primary: l.hareket_tipi || l.yon || "Cari Hareket",
               secondary: l.olusturma_tarihi
                 ? formatDateTime(l.olusturma_tarihi)
                 : "—",
@@ -850,8 +857,12 @@ export function HomeDashboardView() {
             }
             rows={snap.shipments.slice(0, 8).map((s) => ({
               id: String(s.id),
-              primary: `Sevkiyat #${s.id}`,
-              secondary: s.order_id ? `Sipariş #${s.order_id}` : "—",
+              primary:
+                s.tasiyici ||
+                s.kargo_firma ||
+                s.takip_no ||
+                "Sevkiyat Kaydı",
+              secondary: s.takip_no ? `Takip: ${s.takip_no}` : "Kayıtlı sevkiyat",
               amount: "—",
               status: s.durum,
               href: "/lojistik",
@@ -873,8 +884,10 @@ export function HomeDashboardView() {
                   to="/finans"
                   className="flex items-center justify-between rounded-[6px] border border-border px-3 py-2 text-xs hover:bg-muted/40"
                 >
-                  <span className="font-mono text-muted-foreground">#{c.id}</span>
-                  <span className="font-mono tabular-nums font-medium">
+                  <span className="text-muted-foreground truncate pr-2">
+                    {c.firma_ad || c.karsi_firma_ad || c.para_birimi}
+                  </span>
+                  <span className="font-mono tabular-nums font-medium shrink-0">
                     {formatMoney(c.bakiye, c.para_birimi)}
                   </span>
                 </Link>

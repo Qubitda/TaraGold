@@ -98,3 +98,83 @@ def olustur_warehouse(
             },
         )
         return wh
+
+
+def guncelle_warehouse(
+    *,
+    actor,
+    warehouse: Warehouse,
+    kod: str | None = None,
+    ad: str | None = None,
+    aktif: bool | None = None,
+) -> Warehouse:
+    try:
+        _assert_can_manage(actor, warehouse.sahip_firma)
+    except PermissionDenied as exc:
+        record_audit_durable(
+            actor=actor,
+            action="warehouse.update",
+            entity_type="Warehouse",
+            entity_id=str(warehouse.pk),
+            success=False,
+            reason=str(exc),
+        )
+        raise
+
+    changed: dict[str, object] = {}
+    if kod is not None:
+        kod_n = kod.strip()
+        if not kod_n:
+            raise ValidationError({"kod": "Depo kodu boş olamaz."})
+        warehouse.kod = kod_n
+        changed["kod"] = kod_n
+    if ad is not None:
+        ad_n = ad.strip()
+        if not ad_n:
+            raise ValidationError({"ad": "Depo adı boş olamaz."})
+        warehouse.ad = ad_n
+        changed["ad"] = ad_n
+    if aktif is not None:
+        warehouse.aktif = bool(aktif)
+        changed["aktif"] = warehouse.aktif
+
+    with domain_atomic():
+        warehouse.save()
+        record_audit(
+            actor=actor,
+            action="warehouse.update",
+            entity_type="Warehouse",
+            entity_id=str(warehouse.pk),
+            success=True,
+            detail=changed,
+        )
+        return warehouse
+
+
+def sil_warehouse(*, actor, warehouse: Warehouse) -> None:
+    try:
+        _assert_can_manage(actor, warehouse.sahip_firma)
+    except PermissionDenied as exc:
+        record_audit_durable(
+            actor=actor,
+            action="warehouse.delete",
+            entity_type="Warehouse",
+            entity_id=str(warehouse.pk),
+            success=False,
+            reason=str(exc),
+        )
+        raise
+
+    wh_id = warehouse.pk
+    kod = warehouse.kod
+    with domain_atomic():
+        warehouse.delete()
+        record_audit(
+            actor=actor,
+            action="warehouse.delete",
+            entity_type="Warehouse",
+            entity_id=str(wh_id),
+            success=True,
+            detail={"kod": kod},
+        )
+

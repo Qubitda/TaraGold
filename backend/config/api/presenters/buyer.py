@@ -32,6 +32,8 @@ def BuyerCartLinePresenter(line) -> dict:
         "id": raw["id"],
         "quote_id": raw["quote_id"],
         "varyant_id": raw["varyant_id"],
+        "varyant_sku": raw.get("varyant_sku", ""),
+        "urun_ad": raw.get("urun_ad", ""),
         "miktar": _dec(raw["miktar"]),
         "birim": raw["birim"],
         "para_birimi": raw["para_birimi"],
@@ -55,7 +57,9 @@ def BuyerCartPresenter(cart, *, include_lines: bool = True) -> dict:
     if include_lines:
         data["lines"] = [
             BuyerCartLinePresenter(ln)
-            for ln in cart.lines.select_related("price_quote").order_by("pk")
+            for ln in cart.lines.select_related(
+                "price_quote", "varyant", "varyant__urun"
+            ).order_by("pk")
         ]
     assert_masked(data)
     return data
@@ -102,9 +106,14 @@ def BuyerPriceLockPresenter(lock: PriceLock, *, now=None) -> dict:
 
     gecerli = is_lock_gecerli(lock, now=now)
     lock.refresh_from_db()
+    quote = getattr(lock, "quote", None)
+    varyant = getattr(quote, "varyant", None) if quote else None
+    urun = getattr(varyant, "urun", None) if varyant else None
     data = {
         "id": lock.pk,
         "quote_id": lock.quote_id,
+        "varyant_sku": getattr(varyant, "sku", "") or "",
+        "urun_ad": getattr(urun, "ad", "") or "",
         "durum": lock.durum,
         "toplam_vergisiz": _dec(lock.toplam_vergisiz),
         "para_birimi": lock.para_birimi,
@@ -114,7 +123,7 @@ def BuyerPriceLockPresenter(lock: PriceLock, *, now=None) -> dict:
         "gecerli": gecerli,
         "allowed_actions": (["checkout"] if gecerli else []),
     }
-    assert_masked(data)
+    assert_masked(data, context="buyer")
     return data
 
 
@@ -139,11 +148,15 @@ def BuyerCatalogItemPresenter(urun) -> dict:
     varyant_count = getattr(urun, "varyant_count", None)
     if varyant_count is None:
         varyant_count = urun.varyantlar.filter(aktif=True).count()
+    kat = getattr(urun, "kategori", None)
     data = {
         "id": urun.pk,
         "ad": urun.ad,
         "platform_kodu": urun.platform_kodu or "",
-        "kategori": getattr(getattr(urun, "kategori", None), "ad", "") or "",
+        "kategori_id": urun.kategori_id,
+        "kategori": getattr(kat, "ad", "") or "",
+        "kategori_sira": getattr(kat, "sira", 0) or 0,
+        "kategori_one_cikan": bool(getattr(kat, "one_cikan", False)),
         "ayar": getattr(getattr(urun, "ayar", None), "ayar_kodu", "") or "",
         "fiyat_tipi": urun.fiyat_tipi,
         "yayin_durumu": urun.yayin_durumu,

@@ -64,7 +64,10 @@ export type OpsFirmaBelge = {
 export type OpsKanalIzni = {
   id: number;
   tedarikci_firma_id: number;
+  tedarikci_ad?: string;
   satis_kanali_id: number;
+  satis_kanali_kod?: string;
+  satis_kanali_ad?: string;
   durum: string;
   talep_tarihi?: string | null;
   karar_tarihi?: string | null;
@@ -80,7 +83,12 @@ export type OpsKanalIzniPage = {
 export type FirmaKullanici = {
   id: number;
   kullanici_id: number;
+  firma_id?: number;
+  firma_ad?: string;
+  firma_kodu?: string;
   username: string;
+  email?: string;
+  ad_soyad?: string;
   rol: string;
   aktif: boolean;
 };
@@ -227,6 +235,12 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  delete(id: number): Promise<void> {
+    return apiFetch<void>(`/ops/firmalar/${id}/`, {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   onayla(id: number): Promise<OpsFirma> {
     return apiFetch<OpsFirma>(`/ops/firmalar/${id}/onayla/`, {
       method: "POST",
@@ -261,6 +275,26 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  updateKontak(
+    firmaId: number,
+    subId: number,
+    data: Partial<Omit<OpsFirmaKontak, "id">>
+  ): Promise<OpsFirmaKontak> {
+    return apiFetch<OpsFirmaKontak>(
+      `/ops/firmalar/${firmaId}/kontaklar/${subId}/`,
+      {
+        method: "PATCH",
+        body: data,
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
+  },
+  deleteKontak(firmaId: number, subId: number): Promise<void> {
+    return apiFetch<void>(`/ops/firmalar/${firmaId}/kontaklar/${subId}/`, {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   listAdresler(firmaId: number): Promise<OpsFirmaAdres[]> {
     return apiFetch<OpsFirmaAdres[]>(`/ops/firmalar/${firmaId}/adresler/`);
   },
@@ -271,6 +305,26 @@ export const opsFirmalarService = {
     return apiFetch<OpsFirmaAdres>(`/ops/firmalar/${firmaId}/adresler/`, {
       method: "POST",
       body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  updateAdres(
+    firmaId: number,
+    subId: number,
+    data: Partial<Omit<OpsFirmaAdres, "id">>
+  ): Promise<OpsFirmaAdres> {
+    return apiFetch<OpsFirmaAdres>(
+      `/ops/firmalar/${firmaId}/adresler/${subId}/`,
+      {
+        method: "PATCH",
+        body: data,
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
+  },
+  deleteAdres(firmaId: number, subId: number): Promise<void> {
+    return apiFetch<void>(`/ops/firmalar/${firmaId}/adresler/${subId}/`, {
+      method: "DELETE",
       idempotencyKey: newIdempotencyKey(),
     });
   },
@@ -287,6 +341,26 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  updateBanka(
+    firmaId: number,
+    subId: number,
+    data: Partial<Omit<OpsFirmaBanka, "id">>
+  ): Promise<OpsFirmaBanka> {
+    return apiFetch<OpsFirmaBanka>(
+      `/ops/firmalar/${firmaId}/banka/${subId}/`,
+      {
+        method: "PATCH",
+        body: data,
+        idempotencyKey: newIdempotencyKey(),
+      }
+    );
+  },
+  deleteBanka(firmaId: number, subId: number): Promise<void> {
+    return apiFetch<void>(`/ops/firmalar/${firmaId}/banka/${subId}/`, {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   listBelgeler(firmaId: number): Promise<OpsFirmaBelge[]> {
     return apiFetch<OpsFirmaBelge[]>(`/ops/firmalar/${firmaId}/belgeler/`);
   },
@@ -297,6 +371,12 @@ export const opsFirmalarService = {
     return apiFetch<OpsFirmaBelge>(`/ops/firmalar/${firmaId}/belgeler/`, {
       method: "POST",
       body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  deleteBelge(firmaId: number, subId: number): Promise<void> {
+    return apiFetch<void>(`/ops/firmalar/${firmaId}/belgeler/${subId}/`, {
+      method: "DELETE",
       idempotencyKey: newIdempotencyKey(),
     });
   },
@@ -328,8 +408,15 @@ export const opsFirmalarService = {
       }
     );
   },
-  listKanalIzinleri(durum?: string): Promise<OpsKanalIzniPage> {
-    const query = durum ? `?${new URLSearchParams({ durum }).toString()}` : "";
+  listKanalIzinleri(params?: string | Record<string, string>): Promise<OpsKanalIzniPage> {
+    const query =
+      typeof params === "string"
+        ? params
+          ? `?${new URLSearchParams({ durum: params }).toString()}`
+          : ""
+        : params && Object.keys(params).length > 0
+          ? `?${new URLSearchParams(params).toString()}`
+          : "";
     return apiFetch<OpsKanalIzniPage>(`/ops/kanal-izinleri/${query}`);
   },
   onaylaKanalIzni(id: number): Promise<OpsKanalIzni> {
@@ -346,11 +433,27 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  listKullanicilar(firmaId?: number | string): Promise<FirmaKullanici[]> {
-    const q =
-      firmaId !== undefined && String(firmaId).trim() !== ""
-        ? `?${new URLSearchParams({ firma_id: String(firmaId).trim() }).toString()}`
-        : "";
+  listKullanicilar(
+    firmaIdOrParams?: number | string | { firma_id?: number | string; q?: string }
+  ): Promise<FirmaKullanici[]> {
+    const sp = new URLSearchParams();
+    if (
+      firmaIdOrParams != null &&
+      typeof firmaIdOrParams === "object"
+    ) {
+      if (firmaIdOrParams.firma_id != null && String(firmaIdOrParams.firma_id).trim() !== "") {
+        sp.set("firma_id", String(firmaIdOrParams.firma_id).trim());
+      }
+      if (firmaIdOrParams.q && firmaIdOrParams.q.trim() !== "") {
+        sp.set("q", firmaIdOrParams.q.trim());
+      }
+    } else if (
+      firmaIdOrParams !== undefined &&
+      String(firmaIdOrParams).trim() !== ""
+    ) {
+      sp.set("firma_id", String(firmaIdOrParams).trim());
+    }
+    const q = sp.toString() ? `?${sp.toString()}` : "";
     return apiFetch<FirmaKullanici[]>(`/firma/kullanicilar/${q}`);
   },
   updateKullanici(
@@ -363,11 +466,16 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  listAliciKanalErisimleri(firmaId?: number): Promise<{
+  listAliciKanalErisimleri(params?: number | Record<string, string>): Promise<{
     count: number;
     results: OpsAliciKanalErisimi[];
   }> {
-    const q = firmaId ? `?firma_id=${firmaId}` : "";
+    const q =
+      typeof params === "number"
+        ? `?firma_id=${params}`
+        : params && Object.keys(params).length > 0
+          ? `?${new URLSearchParams(params).toString()}`
+          : "";
     return apiFetch(`/ops/alici-kanal-erisimleri/${q}`);
   },
   createAliciKanalErisimi(data: {
@@ -382,6 +490,22 @@ export const opsFirmalarService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
+  updateAliciKanalErisimi(
+    id: number,
+    data: { fiyat_grubu_id?: number; aktif?: boolean }
+  ): Promise<OpsAliciKanalErisimi> {
+    return apiFetch<OpsAliciKanalErisimi>(`/ops/alici-kanal-erisimleri/${id}/`, {
+      method: "PATCH",
+      body: data,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  deleteAliciKanalErisimi(id: number): Promise<void> {
+    return apiFetch<void>(`/ops/alici-kanal-erisimleri/${id}/`, {
+      method: "DELETE",
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
   toggleAliciKanalErisimi(id: number): Promise<OpsAliciKanalErisimi> {
     return apiFetch<OpsAliciKanalErisimi>(
       `/ops/alici-kanal-erisimleri/${id}/toggle/`,
@@ -392,8 +516,9 @@ export const opsFirmalarService = {
       }
     );
   },
-  listFiyatGruplari(): Promise<{ count: number; results: OpsFiyatGrubu[] }> {
-    return apiFetch("/ops/fiyat-gruplari/");
+  listFiyatGruplari(q?: string): Promise<{ count: number; results: OpsFiyatGrubu[] }> {
+    const qs = q ? `?${new URLSearchParams({ q }).toString()}` : "";
+    return apiFetch(`/ops/fiyat-gruplari/${qs}`);
   },
   listSalesChannels(): Promise<SalesChannelOption[] | { results: SalesChannelOption[] }> {
     return apiFetch("/sales-channels/");
@@ -404,6 +529,7 @@ export type OpsOrderLineRow = {
   id: number;
   varyant_id: number;
   platform_kodu?: string;
+  urun_ad?: string;
   miktar: string;
   birim: string;
   para_birimi: string;
@@ -436,16 +562,33 @@ export const opsOrdersService = {
   listAll(params?: {
     durum?: string;
     alici_firma_id?: number;
+    q?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<{ results: OpsOrderRow[]; count?: number }> {
     const search = new URLSearchParams();
     if (params?.durum) search.set("durum", params.durum);
     if (params?.alici_firma_id)
       search.set("alici_firma_id", String(params.alici_firma_id));
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
     const q = search.toString() ? `?${search.toString()}` : "";
     return apiFetch(`/ops/orders/${q}`);
   },
-  onayHavuzu(): Promise<{ results: OpsOrderRow[]; count?: number }> {
-    return apiFetch("/ops/orders/onay-havuzu/");
+  onayHavuzu(params?: {
+    durum?: string;
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{ results: OpsOrderRow[]; count?: number }> {
+    const search = new URLSearchParams();
+    if (params?.durum) search.set("durum", params.durum);
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
+    const q = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch(`/ops/orders/onay-havuzu/${q}`);
   },
   onayla(id: number): Promise<OpsOrderRow> {
     return apiFetch(`/ops/orders/${id}/onayla/`, {

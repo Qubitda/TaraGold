@@ -27,6 +27,7 @@ from fiyatlama.services.pricing_service import (
     _tas_toplami_try,
     sec_teklif,
 )
+from piyasa.services.marj_cozumleme import coz_marj_kurali, to_motor_marj
 from stok.models import StockBalance
 from tanimlar.models import KurTaraf, SatisKanali
 from tanimlar.services import kur_servisi
@@ -115,7 +116,10 @@ def _resolve_feed_channel(request, actor, key) -> SatisKanali | None:
     if erisim is not None:
         return erisim.satis_kanali
     return (
-        SatisKanali.objects.filter(kod__in=["B2B_API", "B2C"], aktif=True)
+        SatisKanali.objects.filter(
+            tip__in=[SatisKanali.TIP_B2B_API, SatisKanali.TIP_B2C_API],
+            aktif=True,
+        )
         .order_by("sira", "pk")
         .first()
     )
@@ -183,6 +187,19 @@ def _compute_net_feed_price(
             else _d(alici_kalem.iscilik)
         )
         iscilik_hedef, _ = _cevir_try_hedefe(iscilik, hedef_pb=para_birimi, now=now)
+        marj_kurali = coz_marj_kurali(
+            satis_kanali=kanal,
+            kategori=getattr(urun, "kategori", None),
+        )
+        eff_marj_tipi = alici_kalem.marj_tipi
+        eff_marj_degeri = alici_kalem.marj_degeri
+        if marj_kurali is not None and (
+            marj_kurali.kapsam != "TUMU"
+            or _d(marj_kurali.deger) > Decimal("0")
+            or _d(alici_kalem.marj_degeri) <= Decimal("0")
+        ):
+            eff_marj_tipi, eff_marj_degeri = to_motor_marj(marj_kurali)
+
         sonuc = fiyat_motoru.hesapla_teklif_kalemleri(
             fiyat_modeli=teklif.fiyat_modeli,
             hedef_para_birimi=para_birimi,
@@ -193,8 +210,8 @@ def _compute_net_feed_price(
             islcilik_dahil_mi=bool(alici_kalem.islcilik_dahil_mi),
             birim_fiyat=teklif.birim_fiyat,
             birim_fiyat_pb=teklif.para_birimi,
-            marj_tipi=alici_kalem.marj_tipi,
-            marj_degeri=alici_kalem.marj_degeri,
+            marj_tipi=eff_marj_tipi,
+            marj_degeri=eff_marj_degeri,
             tas_bedeli=tas_hedef,
             ek_bedel=ek_hedef,
             taraf=KurTaraf.ALICI,

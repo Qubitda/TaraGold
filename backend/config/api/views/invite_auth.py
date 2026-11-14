@@ -54,6 +54,7 @@ class InviteCreateView(APIView):
                 "email": inv.email,
                 "rol": inv.rol,
                 "firma_id": inv.firma_id,
+                "firma_ad": getattr(getattr(inv, "firma", None), "ad", ""),
                 "expires_at": inv.expires_at.isoformat(),
             },
             status=status.HTTP_201_CREATED,
@@ -86,6 +87,7 @@ class InviteListView(APIView):
                 "email": i.email,
                 "rol": i.rol,
                 "firma_id": i.firma_id,
+                "firma_ad": getattr(getattr(i, "firma", None), "ad", ""),
                 "expires_at": i.expires_at.isoformat(),
                 "expired": i.is_expired,
             }

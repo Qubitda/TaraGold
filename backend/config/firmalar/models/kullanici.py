@@ -55,6 +55,12 @@ class Kullanici(AbstractUser):
         blank=True,
         help_text="Boş = doğrulanmamış (ADR-0028).",
     )
+    profil_foto = models.TextField(
+        "Profil fotoğrafı",
+        blank=True,
+        default="",
+        help_text="Kullanıcı avatarı (data URL veya temiz boş string).",
+    )
 
     class Meta:
         verbose_name = "Kullanıcı"

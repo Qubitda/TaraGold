@@ -62,9 +62,25 @@ class BuyerCatalogListView(APIView):
             qs = qs.filter(
                 Q(ad__icontains=term) | Q(platform_kodu__icontains=term)
             )
-        qs = apply_ordering(
-            qs, request, whitelist=("pk", "ad", "platform_kodu"), default="pk"
-        )
+        kat_id = (request.query_params.get("kategori_id") or "").strip()
+        if kat_id.isdigit():
+            qs = qs.filter(kategori_id=int(kat_id))
+        one_cikan = (request.query_params.get("one_cikan") or "").strip().lower()
+        if one_cikan in ("true", "1"):
+            qs = qs.filter(kategori__one_cikan=True)
+        elif one_cikan in ("false", "0"):
+            qs = qs.filter(kategori__one_cikan=False)
+
+        raw_ord = (request.query_params.get("ordering") or "").strip()
+        if not raw_ord or raw_ord == "vitrin":
+            qs = qs.order_by("-kategori__one_cikan", "kategori__sira", "pk")
+        else:
+            qs = apply_ordering(
+                qs,
+                request,
+                whitelist=("pk", "ad", "platform_kodu", "kategori__sira", "kategori__one_cikan"),
+                default="pk",
+            )
         return paginate_queryset(
             request, qs, present=BuyerCatalogItemPresenter
         )

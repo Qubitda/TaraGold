@@ -31,13 +31,13 @@ AYARLAR = [
 ]
 
 KANALLAR = [
-    # (kod, ad) — normatif kanonik kodlar + geriye uyumlu legacy kodlar
-    ("KUYUMCU_PORTAL", "Kuyumcu Portalı"),
-    ("B2B_API", "B2B API"),
-    ("B2C", "B2C Kanalı"),
-    ("KUYUMCU_PANEL", "Kuyumcu paneli"),
-    ("CANTACI_PANEL", "Çantacı paneli"),
-    ("B2C_API", "B2C API"),
+    # (kod, ad, tip) — normatif kanonik kodlar + geriye uyumlu legacy kodlar
+    ("KUYUMCU_PORTAL", "Kuyumcu Portalı", SatisKanali.TIP_KUYUMCU_PORTAL),
+    ("B2B_API", "B2B API", SatisKanali.TIP_B2B_API),
+    ("B2C", "B2C Kanalı", SatisKanali.TIP_B2C_API),
+    ("KUYUMCU_PANEL", "Kuyumcu paneli", SatisKanali.TIP_KUYUMCU_PORTAL),
+    ("CANTACI_PANEL", "Çantacı paneli", SatisKanali.TIP_KUYUMCU_PORTAL),
+    ("B2C_API", "B2C API", SatisKanali.TIP_B2C_API),
 ]
 
 
@@ -64,9 +64,9 @@ class Command(BaseCommand):
             )
             yeni += olustu
 
-        for kod, ad in KANALLAR:
+        for kod, ad, tip in KANALLAR:
             _, olustu = SatisKanali.objects.get_or_create(
-                kod=kod, defaults={"ad": ad, "aktif": True}
+                kod=kod, defaults={"ad": ad, "tip": tip, "aktif": True}
             )
             yeni += olustu
 

@@ -19,7 +19,6 @@ import type { Capabilities } from "@/lib/api/types";
 export interface NavItem {
   href: string;
   label: string;
-  backendApp: string;
   icon: ComponentType<{ className?: string }>;
   requiredCapability?: keyof Capabilities;
   /** Herhangi biri yeterli (route guard ile aynı mantık). */
@@ -30,70 +29,60 @@ export const DOMAIN_NAV_ITEMS: NavItem[] = [
   {
     href: "/firmalar",
     label: "Firmalar",
-    backendApp: "firmalar",
     icon: Building2,
     requiredCapability: "can_manage_org",
   },
   {
     href: "/tanimlar",
-    label: "Tanımlar",
-    backendApp: "tanimlar",
+    label: "Tanımlar & Kanallar",
     icon: Sliders,
     requiredCapability: "can_view_ops",
   },
   {
     href: "/urunler",
-    label: "Ürünler",
-    backendApp: "urunler",
+    label: "Ürünler & Katalog",
     icon: Gem,
     requiredCapability: "can_view_catalog",
   },
   {
     href: "/fiyatlama",
     label: "Fiyatlama",
-    backendApp: "fiyatlama",
     icon: Tag,
     requiredCapability: "can_lock_quote",
   },
   {
     href: "/stok",
-    label: "Stok",
-    backendApp: "stok",
+    label: "Stok & Depolar",
     icon: Boxes,
     requiredCapability: "can_view_supplier_stock",
   },
   {
     href: "/siparis",
-    label: "Sipariş",
-    backendApp: "siparis",
+    label: "Siparişler",
     icon: ShoppingCart,
     requiredCapability: "can_view_orders",
   },
   {
     href: "/finans",
-    label: "Finans",
-    backendApp: "finans",
+    label: "Finans & Cari",
     icon: Receipt,
     requiredCapability: "can_view_finance",
   },
   {
     href: "/kalite",
-    label: "Kalite",
-    backendApp: "kalite",
+    label: "Kalite Kontrol",
     icon: CheckCircle,
     requiredCapability: "can_manage_qc",
   },
   {
     href: "/lojistik",
-    label: "Lojistik",
-    backendApp: "lojistik",
+    label: "Lojistik & İadeler",
     icon: Truck,
     requiredCapability: "can_view_shipments",
   },
   {
     href: "/belgeler",
     label: "Belgeler",
-    backendApp: "belgeler",
     icon: FileText,
     requiredAnyOf: [
       "can_view_shipments",
@@ -104,21 +93,18 @@ export const DOMAIN_NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/teklifler",
-    label: "Tedarikçi RFQ",
-    backendApp: "fiyatlama",
+    label: "Tedarikçi Teklif & RFQ",
     icon: Briefcase,
     requiredCapability: "can_manage_offers",
   },
   {
     href: "/profil",
-    label: "Profil & Adres",
-    backendApp: "firmalar",
+    label: "Profil",
     icon: User,
   },
   {
     href: "/raporlar",
     label: "Raporlar & Analitik",
-    backendApp: "siparis",
     icon: BarChart3,
     requiredCapability: "can_view_ops",
   },

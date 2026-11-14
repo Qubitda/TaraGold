@@ -6,8 +6,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { User, LogIn, LogOut, ShieldCheck, UserCog, Loader2, Building2, Check } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RelationSelect } from "@/components/crud";
+import { apiFetch, unwrapResults } from "@/lib/api/client";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +49,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/kalite": "Kalite Kontrol",
   "/lojistik": "Lojistik & Sevkiyat",
   "/belgeler": "Belgeler & Sertifikalar",
-  "/profil": "Profil & Adresler",
+  "/profil": "Profil",
   "/teklifler": "Tedarikçi Teklifleri",
   "/raporlar": "Raporlar & İhracat",
   "/login": "Kullanıcı Girişi",
@@ -110,7 +111,7 @@ export function Header({ user, onLogout }: HeaderProps) {
     setActAsError(null);
     const parsedId = Number(targetUserId.trim());
     if (!Number.isInteger(parsedId) || parsedId <= 0) {
-      setActAsError("Geçerli bir pozitif kullanıcı ID girin.");
+      setActAsError("Lütfen listeden bir kullanıcı seçin.");
       return;
     }
     setActAsLoading(true);
@@ -121,16 +122,16 @@ export function Header({ user, onLogout }: HeaderProps) {
       setActAsOpen(false);
       setTargetUserId("");
       toast.success(
-        "Act-As başlatıldı",
-        `${res.target_username} (#${res.target_id}) olarak işlem yapılıyor.`
+        "Kullanıcı oturumu devralındı",
+        `${res.target_username} adına işlem yapılıyor.`
       );
     } catch (err) {
       const msg =
         err instanceof ApiError
           ? err.problem.detail || err.message
-          : "Act-As başlatılamadı.";
+          : "Kullanıcı değiştirilemedi.";
       setActAsError(msg);
-      toast.error("Act-As hatası", msg);
+      toast.error("İşlem başarısız", msg);
     } finally {
       setActAsLoading(false);
     }
@@ -146,12 +147,6 @@ export function Header({ user, onLogout }: HeaderProps) {
           <h1 className="text-base font-semibold tracking-tight text-foreground shrink-0">
             {currentTitle}
           </h1>
-          <span
-            className="hidden xl:inline font-mono text-xs text-muted-foreground border-l border-border pl-3 shrink-0"
-            aria-hidden="true"
-          >
-            {pathname}
-          </span>
           {user ? <PiyasaPanoStrip /> : null}
         </div>
 
@@ -167,7 +162,15 @@ export function Header({ user, onLogout }: HeaderProps) {
                   className="gap-2 h-9 border-border text-foreground"
                   aria-label={`Hesap menüsü: ${user.username}`}
                 >
-                  <User className="h-4 w-4" aria-hidden="true" />
+                  {user.profil_foto ? (
+                    <img
+                      src={user.profil_foto}
+                      alt={user.username}
+                      className="h-5 w-5 rounded-full object-cover border border-border"
+                    />
+                  ) : (
+                    <User className="h-4 w-4" aria-hidden="true" />
+                  )}
                   <span className="max-w-[120px] truncate text-xs font-medium">
                     {user.username}
                   </span>
@@ -193,7 +196,7 @@ export function Header({ user, onLogout }: HeaderProps) {
                 <DropdownMenuItem asChild>
                   <Link to="/profil" className="cursor-pointer text-xs">
                     <User className="mr-2 h-3.5 w-3.5" />
-                    Profil & Adresler
+                    Profil
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -241,7 +244,7 @@ export function Header({ user, onLogout }: HeaderProps) {
                     className="cursor-pointer text-xs"
                   >
                     <UserCog className="mr-2 h-3.5 w-3.5" />
-                    Kullanıcı Değiştir (Act-As)
+                    Kullanıcı Adına İşlem Yap
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
@@ -270,9 +273,9 @@ export function Header({ user, onLogout }: HeaderProps) {
       <Dialog open={actAsOpen} onOpenChange={setActAsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Kullanıcı Değiştir (Act-As)</DialogTitle>
+            <DialogTitle>Farklı Kullanıcı Adına İşlem Yap</DialogTitle>
             <DialogDescription>
-              Hedef kullanıcının ID numarasını girerek oturumu geçici olarak onun adına devralın. Tüm işlemler denetim günlüğüne kaydedilir.
+              İşlem yapmak istediğiniz kullanıcıyı ada veya firmaya göre arayıp seçin. Tüm işlemler denetim günlüğüne kaydedilir.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleStartActAs} className="space-y-4">
@@ -285,16 +288,39 @@ export function Header({ user, onLogout }: HeaderProps) {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label htmlFor="header-act-as-user-id">Hedef Kullanıcı ID</Label>
-              <Input
-                id="header-act-as-user-id"
-                type="number"
-                min={1}
-                placeholder="Örn: 2"
-                value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
+              <Label htmlFor="header-act-as-user">Hedef Kullanıcı</Label>
+              <RelationSelect
+                id="header-act-as-user"
+                value={targetUserId ? Number(targetUserId) : null}
+                onChange={(val) => setTargetUserId(val ? String(val) : "")}
+                placeholder="Kullanıcı ara ve seç…"
+                searchPlaceholder="Kullanıcı adı veya e-posta yazın…"
+                emptyText="Uygun kullanıcı bulunamadı"
                 disabled={actAsLoading}
-                required
+                loadOptions={async (q) => {
+                  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+                  const res = await apiFetch<{
+                    results?: Array<{
+                      id: number;
+                      kullanici_id?: number;
+                      username: string;
+                      rol: string;
+                      firma_ad?: string;
+                    }>;
+                  }>(`/firma/kullanicilar/${qs}`);
+                  const list = unwrapResults(res as never) as Array<{
+                    id: number;
+                    kullanici_id?: number;
+                    username: string;
+                    rol: string;
+                    firma_ad?: string;
+                  }>;
+                  return list.map((u) => ({
+                    value: u.kullanici_id ?? u.id,
+                    label: u.username,
+                    subtitle: [u.firma_ad, u.rol].filter(Boolean).join(" · "),
+                  }));
+                }}
               />
             </div>
             <DialogFooter>
@@ -306,14 +332,14 @@ export function Header({ user, onLogout }: HeaderProps) {
               >
                 Vazgeç
               </Button>
-              <Button type="submit" disabled={actAsLoading}>
+              <Button type="submit" disabled={actAsLoading || !targetUserId}>
                 {actAsLoading ? (
                   <span className="inline-flex items-center gap-1.5">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Başlatılıyor…
                   </span>
                 ) : (
-                  "Act-As Başlat"
+                  "Oturumu Devral"
                 )}
               </Button>
             </DialogFooter>

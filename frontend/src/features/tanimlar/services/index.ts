@@ -5,6 +5,7 @@ import type {
   OpsDefinitionsPage,
   SalesChannel,
   SalesChannelPage,
+  SalesChannelProductsResponse,
 } from "../types";
 
 function normalizeSalesChannelPage(
@@ -23,16 +24,11 @@ function normalizeSalesChannelPage(
 }
 
 export const tanimlarService = {
-  /** Sayfalı / sarmalanmış yanıt (yönetim ekranı). */
   async getSalesChannelsPage(): Promise<SalesChannelPage> {
     const data = await apiFetch<SalesChannelPage | SalesChannel[]>("/sales-channels/");
     return normalizeSalesChannelPage(data);
   },
 
-  /**
-   * Dizi olarak aktif satış kanalları.
-   * Quote/catalog gibi tüketiciler için geriye dönük dizi API’si.
-   */
   async getSalesChannels(): Promise<SalesChannel[]> {
     const page = await this.getSalesChannelsPage();
     return page.results;
@@ -44,10 +40,18 @@ export const tanimlarService = {
 
   getOpsDefinitions(
     kaynak: OpsDefinitionKaynak,
-    includeRefs = true
+    includeRefs = true,
+    params?: Record<string, string | undefined>
   ): Promise<OpsDefinitionsPage> {
-    const q = includeRefs ? "?include_refs=1" : "";
-    return apiFetch<OpsDefinitionsPage>(`/ops/definitions/${kaynak}/${q}`);
+    const sp = new URLSearchParams();
+    if (includeRefs) sp.set("include_refs", "1");
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v != null && String(v).trim() !== "") sp.set(k, String(v));
+      }
+    }
+    const q = sp.toString();
+    return apiFetch<OpsDefinitionsPage>(`/ops/definitions/${kaynak}/${q ? `?${q}` : ""}`);
   },
 
   createOpsDefinition(
@@ -79,6 +83,35 @@ export const tanimlarService = {
       `/ops/definitions/${kaynak}/${id}/`,
       { method: "DELETE" }
     );
+  },
+
+  getChannelProducts(
+    kanalId: number | string,
+    params?: { q?: string; atanmis?: string }
+  ): Promise<SalesChannelProductsResponse> {
+    const sp = new URLSearchParams();
+    if (params?.q?.trim()) sp.set("q", params.q.trim());
+    if (params?.atanmis) sp.set("atanmis", params.atanmis);
+    const q = sp.toString();
+    return apiFetch<SalesChannelProductsResponse>(
+      `/ops/definitions/satis-kanallari/${kanalId}/products/${q ? `?${q}` : ""}`
+    );
+  },
+
+  setChannelProduct(
+    kanalId: number | string,
+    urunId: number,
+    aktif: boolean
+  ): Promise<{
+    id: number;
+    kanal_id: number;
+    urun_id: number;
+    aktif: boolean;
+  }> {
+    return apiFetch(`/ops/definitions/satis-kanallari/${kanalId}/products/`, {
+      method: "POST",
+      body: { urun_id: urunId, aktif },
+    });
   },
 };
 

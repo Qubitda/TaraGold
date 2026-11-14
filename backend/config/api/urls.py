@@ -51,11 +51,14 @@ from api.views import (
     PiyasaPanoView,
     SalesChannelListView,
     MeView,
+    OpsAliciKanalErisimiDetailView,
     OpsAliciKanalErisimiListCreateView,
     OpsAliciKanalErisimiToggleView,
     OpsBelgeAyarlariView,
     OpsDefinitionsDetailView,
     OpsDefinitionsListCreateView,
+    OpsSalesChannelProductsView,
+    OpsFinanceCariDetailView,
     OpsFinanceCariListView,
     OpsFinanceHakEdisListView,
     OpsFinanceLedgerListView,
@@ -63,6 +66,9 @@ from api.views import (
     OpsFinanceSummaryView,
     OpsFinanceTedarikciOdemeView,
     OpsFiyatGrubuListView,
+    OpsCanliPiyasaView,
+    OpsMarjKuraliDetailView,
+    OpsMarjKuraliListCreateView,
     OpsPiyasaMarjPolitikasiView,
     OpsInspectionCancelView,
     OpsInspectionDetailView,
@@ -73,14 +79,18 @@ from api.views import (
     OpsInspectionStartView,
     OpsOrderListView,
     OpsOrderSummaryView,
+    OpsFirmaAdresDetailView,
     OpsFirmaAdresListCreateView,
     OpsFirmaApiAnahtarIptalView,
     OpsFirmaApiAnahtarListCreateView,
     OpsFirmaAskiyaAlView,
+    OpsFirmaBankaDetailView,
     OpsFirmaBankaListCreateView,
+    OpsFirmaBelgeDetailView,
     OpsFirmaBelgeListCreateView,
     OpsFirmaDavetView,
     OpsFirmaDetailView,
+    OpsFirmaKontakDetailView,
     OpsFirmaKontakListCreateView,
     OpsFirmaListCreateView,
     OpsFirmaOnaylaView,
@@ -102,7 +112,13 @@ from api.views import (
     FeedUrunDetailView,
     FeedUrunListView,
     FeedXsdSchemaView,
+    CategoryListView,
+    OpsCatalogRefDetailView,
+    OpsCatalogRefsView,
+    OpsCategoryDetailView,
+    OpsCategoryListCreateView,
     OpsProductApproveView,
+    OpsProductChannelsView,
     OpsProductDetailView,
     OpsProductListCreateView,
     OpsProductPublishView,
@@ -110,6 +126,7 @@ from api.views import (
     OpsProductSubmitView,
     OpsProductUnpublishView,
     OpsProductVariantCreateView,
+    OpsProductVariantDetailView,
     OpsRfqMatchApproveView,
     OpsRfqMatchCandidatesView,
     OpsRfqMatchListCreateView,
@@ -126,6 +143,7 @@ from api.views import (
     OrderFromCheckoutView,
     OrderListView,
     OrderReorderView,
+    OrgMemberDetailView,
     OrgMemberListCreateView,
     OrgUnitDetailView,
     OrgUnitListCreateView,
@@ -166,6 +184,8 @@ from api.views import (
     SupplierRfqRevisionView,
     SupplierStockAdjustView,
     SupplierStockSummaryView,
+    SupplierVariantListView,
+    SupplierWarehouseDetailView,
     SupplierWarehouseListView,
 )
 
@@ -260,6 +280,31 @@ api_urlpatterns = [
         name="api-buyer-catalog-taslar",
     ),
     path(
+        "categories/",
+        CategoryListView.as_view(),
+        name="api-categories",
+    ),
+    path(
+        "ops/categories/",
+        OpsCategoryListCreateView.as_view(),
+        name="api-ops-categories",
+    ),
+    path(
+        "ops/categories/<int:pk>/",
+        OpsCategoryDetailView.as_view(),
+        name="api-ops-category-detail",
+    ),
+    path(
+        "ops/catalog-refs/",
+        OpsCatalogRefsView.as_view(),
+        name="api-ops-catalog-refs",
+    ),
+    path(
+        "ops/catalog-refs/<str:kaynak>/<int:pk>/",
+        OpsCatalogRefDetailView.as_view(),
+        name="api-ops-catalog-ref-detail",
+    ),
+    path(
         "catalog/<int:pk>/",
         BuyerCatalogDetailView.as_view(),
         name="api-buyer-catalog-detail",
@@ -270,6 +315,21 @@ api_urlpatterns = [
         name="api-sales-channels",
     ),
     path("piyasa/pano/", PiyasaPanoView.as_view(), name="api-piyasa-pano"),
+    path(
+        "ops/piyasa/canli/",
+        OpsCanliPiyasaView.as_view(),
+        name="api-ops-piyasa-canli",
+    ),
+    path(
+        "ops/piyasa/marj-kurallari/",
+        OpsMarjKuraliListCreateView.as_view(),
+        name="api-ops-piyasa-marj-kurallari",
+    ),
+    path(
+        "ops/piyasa/marj-kurallari/<int:pk>/",
+        OpsMarjKuraliDetailView.as_view(),
+        name="api-ops-piyasa-marj-kurali-detail",
+    ),
     path(
         "ops/piyasa/marj-politikasi/",
         OpsPiyasaMarjPolitikasiView.as_view(),
@@ -393,6 +453,16 @@ api_urlpatterns = [
         name="api-supplier-warehouses",
     ),
     path(
+        "supplier/warehouses/<int:pk>/",
+        SupplierWarehouseDetailView.as_view(),
+        name="api-supplier-warehouse-detail",
+    ),
+    path(
+        "supplier/variants/",
+        SupplierVariantListView.as_view(),
+        name="api-supplier-variants",
+    ),
+    path(
         "supplier/stock/",
         SupplierStockSummaryView.as_view(),
         name="api-supplier-stock",
@@ -452,6 +522,11 @@ api_urlpatterns = [
         "ops/finance/cari/",
         OpsFinanceCariListView.as_view(),
         name="api-ops-finance-cari",
+    ),
+    path(
+        "ops/finance/cari/<int:pk>/",
+        OpsFinanceCariDetailView.as_view(),
+        name="api-ops-finance-cari-detail",
     ),
     path(
         "ops/finance/ledger/",
@@ -671,9 +746,19 @@ api_urlpatterns = [
         name="api-ops-firma-kontaklar",
     ),
     path(
+        "ops/firmalar/<int:pk>/kontaklar/<int:sub_id>/",
+        OpsFirmaKontakDetailView.as_view(),
+        name="api-ops-firma-kontak-detail",
+    ),
+    path(
         "ops/firmalar/<int:pk>/adresler/",
         OpsFirmaAdresListCreateView.as_view(),
         name="api-ops-firma-adresler",
+    ),
+    path(
+        "ops/firmalar/<int:pk>/adresler/<int:sub_id>/",
+        OpsFirmaAdresDetailView.as_view(),
+        name="api-ops-firma-adres-detail",
     ),
     path(
         "ops/firmalar/<int:pk>/banka/",
@@ -681,9 +766,19 @@ api_urlpatterns = [
         name="api-ops-firma-banka",
     ),
     path(
+        "ops/firmalar/<int:pk>/banka/<int:sub_id>/",
+        OpsFirmaBankaDetailView.as_view(),
+        name="api-ops-firma-banka-detail",
+    ),
+    path(
         "ops/firmalar/<int:pk>/belgeler/",
         OpsFirmaBelgeListCreateView.as_view(),
         name="api-ops-firma-belgeler",
+    ),
+    path(
+        "ops/firmalar/<int:pk>/belgeler/<int:sub_id>/",
+        OpsFirmaBelgeDetailView.as_view(),
+        name="api-ops-firma-belge-detail",
     ),
     path(
         "ops/firmalar/<int:pk>/api-anahtarlar/",
@@ -716,6 +811,11 @@ api_urlpatterns = [
         name="api-ops-alici-kanal-erisimleri",
     ),
     path(
+        "ops/alici-kanal-erisimleri/<int:pk>/",
+        OpsAliciKanalErisimiDetailView.as_view(),
+        name="api-ops-alici-kanal-erisim-detail",
+    ),
+    path(
         "ops/alici-kanal-erisimleri/<int:pk>/toggle/",
         OpsAliciKanalErisimiToggleView.as_view(),
         name="api-ops-alici-kanal-erisim-toggle",
@@ -724,6 +824,11 @@ api_urlpatterns = [
         "ops/fiyat-gruplari/",
         OpsFiyatGrubuListView.as_view(),
         name="api-ops-fiyat-gruplari",
+    ),
+    path(
+        "ops/definitions/satis-kanallari/<int:pk>/products/",
+        OpsSalesChannelProductsView.as_view(),
+        name="api-ops-sales-channel-products",
     ),
     path(
         "ops/definitions/<str:kaynak>/",
@@ -759,6 +864,16 @@ api_urlpatterns = [
         "ops/products/<int:pk>/variants/",
         OpsProductVariantCreateView.as_view(),
         name="api-ops-product-variants",
+    ),
+    path(
+        "ops/products/<int:pk>/variants/<int:vid>/",
+        OpsProductVariantDetailView.as_view(),
+        name="api-ops-product-variant-detail",
+    ),
+    path(
+        "ops/products/<int:pk>/channels/",
+        OpsProductChannelsView.as_view(),
+        name="api-ops-product-channels",
     ),
     path(
         "ops/products/<int:pk>/submit/",
@@ -801,6 +916,11 @@ api_urlpatterns = [
         "org-units/<int:pk>/members/",
         OrgMemberListCreateView.as_view(),
         name="api-org-members",
+    ),
+    path(
+        "org-units/<int:pk>/members/<int:member_id>/",
+        OrgMemberDetailView.as_view(),
+        name="api-org-member-detail",
     ),
     path(
         "approvals/",

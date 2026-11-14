@@ -9,6 +9,7 @@ export type ShipmentPodInfo = {
 };
 
 export type OpsShipment = components["schemas"]["OpsShipment"] & {
+  alici_firma_ad?: string;
   kargo_firma?: string;
   tasiyici?: string | null;
   takip_no?: string;
@@ -26,10 +27,16 @@ export type OpsShipmentPage = Omit<
   results: OpsShipment[];
 };
 export type BuyerReturn = components["schemas"]["BuyerReturn"] & {
+  alici_firma_ad?: string;
   iade_sebebi?: string | null;
   mahsup_tutari?: string | null;
 };
-export type BuyerReturnPage = components["schemas"]["BuyerReturnPage"];
+export type BuyerReturnPage = Omit<
+  components["schemas"]["BuyerReturnPage"],
+  "results"
+> & {
+  results: BuyerReturn[];
+};
 export type BuyerShipment = components["schemas"]["BuyerShipment"] & {
   kargo_firma?: string;
   tasiyici?: string | null;
@@ -88,6 +95,7 @@ export type BuyerReturnDetail = BuyerReturn & {
   lines?: Array<{
     id?: number;
     order_line_id: number;
+    varyant_sku?: string;
     miktar: string;
     birim?: string;
   }>;

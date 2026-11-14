@@ -88,13 +88,18 @@ function shipmentDocs(
   const out: DocumentItem[] = [];
   for (const s of list) {
     const podRef = (s.pod?.belgeler_ref || s.belgeler_ref || s.pod_ref || "").trim();
-    const href = source === "ops_shipment" ? "/lojistik" : "/lojistik";
+    const href = "/lojistik";
+    const shipLabel = s.tasiyici
+      ? `Sevkiyat (${s.tasiyici})`
+      : s.takip_no
+        ? `Sevkiyat (${s.takip_no})`
+        : "Sevkiyat Kaydı";
 
     out.push({
       id: `${source}-${s.id}`,
       belge_tipi: "SEVKIYAT",
-      ad: `Sevkiyat #${s.id}`,
-      belge_no: `SHP-${s.id}`,
+      ad: shipLabel,
+      belge_no: s.takip_no || undefined,
       durum: s.durum,
       referans_tipi: source,
       referans_id: s.id,
@@ -105,7 +110,6 @@ function shipmentDocs(
       allowed_actions: s.allowed_actions,
       href,
       meta: {
-        order_id: s.order_id,
         tasiyici: s.tasiyici,
         takip_no: s.takip_no,
       },
@@ -115,8 +119,10 @@ function shipmentDocs(
       out.push({
         id: `${source}-pod-${s.id}`,
         belge_tipi: "POD",
-        ad: `POD · Sevkiyat #${s.id}`,
-        belge_no: `POD-${s.id}`,
+        ad: s.pod?.teslim_alan
+          ? `Teslimat Kanıtı (${s.pod.teslim_alan})`
+          : "Teslimat Kanıtı",
+        belge_no: s.takip_no || undefined,
         durum: s.pod ? "KAYITLI" : "REF",
         dosya_url: isHttpUrl(podRef) ? podRef : undefined,
         raw_ref: podRef || undefined,
@@ -128,7 +134,7 @@ function shipmentDocs(
         href,
         meta: {
           teslim_alan: s.pod?.teslim_alan,
-          belgeler_ref: podRef,
+          referans: podRef,
         },
       });
     }
@@ -139,6 +145,7 @@ function shipmentDocs(
 export interface DocumentsFilter {
   tip?: string;
   order_id?: string;
+  q?: string;
 }
 
 const PDF_DOC_TIPS = new Set([
@@ -167,6 +174,10 @@ export const belgelerService = {
     if (cleanOrderId && /^\d+$/.test(cleanOrderId)) {
       params.set("order_id", cleanOrderId);
     }
+    const cleanQ = filters?.q?.trim();
+    if (cleanQ) {
+      params.set("q", cleanQ);
+    }
 
     const jobs: Array<Promise<void>> = [
       (async () => {
@@ -178,10 +189,9 @@ export const belgelerService = {
             items.push({
               id: `belge-${doc.id}`,
               belge_tipi: doc.tip || "DIGER",
-              ad: doc.baslik || `Belge #${doc.id}`,
-              belge_no: doc.revizyon
-                ? `DOC-${doc.id}-R${doc.revizyon}`
-                : `DOC-${doc.id}`,
+              ad: doc.baslik || "Resmi Belge",
+              belge_no: doc.revizyon ? `Revizyon ${doc.revizyon}` : doc.belge_turu || undefined,
+              firma_ad: doc.firma_ad,
               durum: "HAZIR",
               dosya_url: doc.download_url || `/api/v1/documents/${doc.id}/download/`,
               referans_tipi: "belge",
@@ -244,8 +254,11 @@ export const belgelerService = {
               items.push({
                 id: `order-${o.id}`,
                 belge_tipi: "SIPARIS",
-                ad: `Sipariş #${o.id}`,
-                belge_no: `ORD-${o.id}`,
+                ad: o.alici_firma_ad
+                  ? `Sipariş (${o.alici_firma_ad})`
+                  : "Sipariş Kaydı",
+                belge_no: `${o.line_count} kalem`,
+                firma_ad: o.alici_firma_ad,
                 durum: o.durum,
                 referans_tipi: "order",
                 referans_id: o.id,
@@ -274,8 +287,12 @@ export const belgelerService = {
               items.push({
                 id: `ledger-${row.id}`,
                 belge_tipi: "LEDGER",
-                ad: `Ledger #${row.id}`,
-                belge_no: `LED-${row.id}`,
+                ad: row.hareket_tipi
+                  ? `Cari Hareket (${row.hareket_tipi})`
+                  : "Cari Hareket",
+                belge_no: row.tutar
+                  ? `${row.tutar} ${row.para_birimi || "TRY"}`
+                  : undefined,
                 durum: row.hareket_tipi || row.yon || "KAYIT",
                 referans_tipi: "ledger",
                 referans_id: row.id,
@@ -286,15 +303,11 @@ export const belgelerService = {
                 olusturma_tarihi: row.olusturma_tarihi || undefined,
                 format: "KAYIT",
                 href: "/finans",
-                raw_ref:
-                  row.referans_tip && row.referans_id != null
-                    ? `${row.referans_tip}:${row.referans_id}`
-                    : undefined,
+                raw_ref: row.referans_tip || undefined,
                 meta: {
                   tutar: row.tutar,
                   para_birimi: row.para_birimi,
                   referans_tip: row.referans_tip,
-                  referans_id: row.referans_id,
                 },
               });
             }
@@ -316,8 +329,7 @@ export const belgelerService = {
               items.push({
                 id: `return-${row.id}`,
                 belge_tipi: "IADE",
-                ad: `İade #${row.id}`,
-                belge_no: `RET-${row.id}`,
+                ad: row.sebep ? `İade (${row.sebep})` : "İade Kaydı",
                 durum: row.durum,
                 referans_tipi: "return",
                 referans_id: row.id,
@@ -326,7 +338,7 @@ export const belgelerService = {
                 format: "KAYIT",
                 href: "/lojistik",
                 allowed_actions: row.allowed_actions,
-                meta: { sebep: row.sebep, order_id: row.order_id },
+                meta: { sebep: row.sebep },
               });
             }
           } else {
@@ -347,8 +359,9 @@ export const belgelerService = {
               items.push({
                 id: `insp-${row.id}`,
                 belge_tipi: "KALITE",
-                ad: `QC İnceleme #${row.id}`,
-                belge_no: `QC-${row.id}`,
+                ad: row.notlar
+                  ? `Kalite Kontrol (${row.notlar})`
+                  : "Kalite Kontrol Kaydı",
                 durum: row.durum,
                 referans_tipi: "inspection",
                 referans_id: row.id,
@@ -358,7 +371,6 @@ export const belgelerService = {
                 href: "/kalite",
                 allowed_actions: row.allowed_actions,
                 meta: {
-                  order_line_id: row.order_line_id,
                   notlar: row.notlar,
                 },
               });

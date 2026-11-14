@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const elleTahsilatSchema = z.object({
-  order_id: z.number().int().positive("Sipariş ID zorunludur."),
+  order_id: z.number().int().positive("Sipariş seçimi zorunludur."),
   tutar: z.string().trim().min(1, "Tutar zorunludur."),
   yontem: z.string().trim().min(1, "Ödeme yöntemi zorunludur."),
   para_birimi: z.string().trim().optional(),
@@ -12,7 +12,7 @@ export const elleTahsilatSchema = z.object({
 export type ElleTahsilatInput = z.infer<typeof elleTahsilatSchema>;
 
 export const elleTedarikciOdemeSchema = z.object({
-  tedarikci_firma_id: z.number().int().positive("Tedarikçi firma ID zorunludur."),
+  tedarikci_firma_id: z.number().int().positive("Tedarikçi firma seçimi zorunludur."),
   hak_edis_id: z.number().int().positive().optional(),
   order_id: z.number().int().positive().optional(),
   tutar: z.string().trim().min(1, "Tutar zorunludur."),

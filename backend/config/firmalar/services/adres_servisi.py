@@ -168,21 +168,48 @@ def sil(*, actor, row: FirmaAdresi) -> None:
         )
 
 
+_MAX_PROFIL_FOTO_LEN = 450_000
+_VALID_IMAGE_PREFIXES = (
+    "data:image/png;base64,",
+    "data:image/jpeg;base64,",
+    "data:image/jpg;base64,",
+    "data:image/webp;base64,",
+    "data:image/gif;base64,",
+)
+
+
 def guncelle_profil(
     *,
     actor,
     first_name: str | None = None,
     last_name: str | None = None,
+    profil_foto: str | None = None,
 ):
-    """Kendi profil: yalnız first_name / last_name (e-posta ayrı verify akışı)."""
-    if first_name is None and last_name is None:
+    """Kendi profil: first_name / last_name / profil_foto (e-posta ayrı verify akışı)."""
+    if first_name is None and last_name is None and profil_foto is None:
         raise ValidationError({"detail": "Güncellenecek alan yok."})
+    update_fields: list[str] = []
+    if profil_foto is not None:
+        foto_s = str(profil_foto).strip()
+        if foto_s:
+            if len(foto_s) > _MAX_PROFIL_FOTO_LEN:
+                raise ValidationError(
+                    {"profil_foto": "Profil fotoğrafı çok büyük (en fazla ~300 KB)."}
+                )
+            if not foto_s.lower().startswith(_VALID_IMAGE_PREFIXES):
+                raise ValidationError(
+                    {"profil_foto": "Yalnızca PNG, JPG, WEBP veya GIF görsel yüklenebilir."}
+                )
+        actor.profil_foto = foto_s
+        update_fields.append("profil_foto")
     with domain_atomic():
         if first_name is not None:
             actor.first_name = str(first_name).strip()[:150]
+            update_fields.append("first_name")
         if last_name is not None:
             actor.last_name = str(last_name).strip()[:150]
-        actor.save(update_fields=["first_name", "last_name"])
+            update_fields.append("last_name")
+        actor.save(update_fields=update_fields)
         record_audit(
             actor=actor,
             action="firmalar.profil.update",

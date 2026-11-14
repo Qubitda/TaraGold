@@ -36,6 +36,7 @@ from fiyatlama.models.sozlesme_cozumleme import (
 )
 from fiyatlama.selectors.tenant import teklif_eslestirme_uygun_mu
 from fiyatlama.services import fiyat_hesaplama, fiyat_motoru
+from piyasa.services.marj_cozumleme import coz_marj_kurali, to_motor_marj
 from tanimlar.models import KurTaraf
 from tanimlar.services import currency_conversion, kur_servisi
 
@@ -403,6 +404,20 @@ def quote(
         # Döviz/metal gerekmeyen uç — yine de sağlayıcı beklenir (kur politikası)
         raise ValidationError("Aktif kur sağlayıcı yok; quote üretilemez.")
 
+    marj_kurali = coz_marj_kurali(
+        satis_kanali=satis_kanali,
+        kategori=getattr(urun, "kategori", None),
+    )
+    eff_marj_tipi = alici_kalem.marj_tipi
+    eff_marj_degeri = alici_kalem.marj_degeri
+    if marj_kurali is not None:
+        if (
+            marj_kurali.kapsam != "TUMU"
+            or _d(marj_kurali.deger) > _ZERO
+            or _d(alici_kalem.marj_degeri) <= _ZERO
+        ):
+            eff_marj_tipi, eff_marj_degeri = to_motor_marj(marj_kurali)
+
     maliyet_referans: dict[str, Any] | None = None
     quote_fiyat_modeli = teklif.fiyat_modeli
 
@@ -442,8 +457,8 @@ def quote(
                 islcilik_dahil_mi=bool(alici_kalem.islcilik_dahil_mi),
                 birim_fiyat=teklif.birim_fiyat,
                 birim_fiyat_pb=teklif.para_birimi,
-                marj_tipi=alici_kalem.marj_tipi,
-                marj_degeri=alici_kalem.marj_degeri,
+                marj_tipi=eff_marj_tipi,
+                marj_degeri=eff_marj_degeri,
                 tas_bedeli=tas_hedef,
                 ek_bedel=ek_hedef,
                 taraf=KurTaraf.ALICI,
@@ -468,8 +483,8 @@ def quote(
             islcilik_dahil_mi=bool(alici_kalem.islcilik_dahil_mi),
             birim_fiyat=teklif.birim_fiyat,
             birim_fiyat_pb=teklif.para_birimi,
-            marj_tipi=alici_kalem.marj_tipi,
-            marj_degeri=alici_kalem.marj_degeri,
+            marj_tipi=eff_marj_tipi,
+            marj_degeri=eff_marj_degeri,
             tas_bedeli=tas_hedef,
             ek_bedel=ek_hedef,
             taraf=KurTaraf.ALICI,
@@ -488,8 +503,10 @@ def quote(
         "teklif_fiyat_modeli": teklif.fiyat_modeli,
         "gram": str(gram) if gram is not None else None,
         "milyem": str(milyem) if milyem is not None else None,
-        "marj_tipi": alici_kalem.marj_tipi,
-        "marj_degeri": str(alici_kalem.marj_degeri),
+        "marj_tipi": eff_marj_tipi,
+        "marj_degeri": str(eff_marj_degeri),
+        "marj_kurali_id": marj_kurali.pk if marj_kurali is not None else None,
+        "marj_kurali_kapsam": marj_kurali.kapsam if marj_kurali is not None else None,
         "islcilik_dahil_mi": bool(alici_kalem.islcilik_dahil_mi),
         "teklif_id": teklif.pk,
         "teklif_versiyon": teklif.versiyon,

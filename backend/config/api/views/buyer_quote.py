@@ -1,6 +1,7 @@
 """API-B2 — buyer quote oluştur / oku (pricing_service + buyer_quote selector)."""
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -8,21 +9,46 @@ from rest_framework.views import APIView
 
 from api.exc import raise_drf
 from api.mixins import IdempotencyMixin
+from api.pagination import apply_ordering, paginate_queryset
 from api.permissions import HasQuoteObjectAccess, IsBuyerCommerceWrite
 from api.presenters.buyer import BuyerQuotePresenter
 from api.throttles import BuyerRateThrottle
 from firmalar.services.yetki_servisi import can_view_all_tenants
+from fiyatlama.models import PriceQuote
 from fiyatlama.selectors.buyer_quote import BuyerQuoteNotFound, get_quote_for_actor
+from fiyatlama.selectors.tenant import scope_price_quote_queryset
 from fiyatlama.services import pricing_service
 from tanimlar.models import SatisKanali
 from urunler.models import Varyant
 
 
 class QuoteCreateView(IdempotencyMixin, APIView):
-    """POST /api/v1/quotes/ — {varyant_id, satis_kanali_id, para_birimi?}."""
+    """GET liste / POST /api/v1/quotes/ — {varyant_id, satis_kanali_id, para_birimi?}."""
 
     permission_classes = [IsBuyerCommerceWrite]
     throttle_classes = [BuyerRateThrottle]
+
+    def get(self, request):
+        qs = scope_price_quote_queryset(
+            PriceQuote.objects.select_related(
+                "varyant",
+                "varyant__urun",
+                "varyant__urun__ayar",
+                "satis_kanali",
+                "alici_firma",
+            ),
+            request.user,
+        )
+        term = (request.query_params.get("q") or "").strip()
+        if term:
+            qs = qs.filter(
+                Q(varyant__sku__icontains=term)
+                | Q(varyant__urun__ad__icontains=term)
+                | Q(varyant__urun__platform_kodu__icontains=term)
+                | Q(satis_kanali__kod__icontains=term)
+            )
+        qs = apply_ordering(qs, request, whitelist=("pk", "hesap_zamani"), default="-pk")
+        return paginate_queryset(request, qs, present=BuyerQuotePresenter)
 
     def post(self, request):
         if can_view_all_tenants(request.user):

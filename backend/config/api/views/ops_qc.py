@@ -8,6 +8,7 @@ from django.core.exceptions import (
     PermissionDenied as DjangoPermissionDenied,
     ValidationError as DjangoValidationError,
 )
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -56,8 +57,8 @@ def _load_order(order_id: int) -> Order:
 def _get_inspection(pk: int) -> QualityInspection:
     insp = (
         QualityInspection.objects.filter(pk=pk)
-        .select_related("order")
-        .prefetch_related("measurements")
+        .select_related("order", "order__alici_firma")
+        .prefetch_related("measurements__order_line__varyant")
         .first()
     )
     if insp is None:
@@ -74,9 +75,9 @@ class OpsInspectionListCreateView(IdempotencyMixin, APIView):
     def get(self, request):
         _assert_qc_read(request.user)
         request.query_params.get("firma_id")  # ignore
-        qs = QualityInspection.objects.select_related("order").prefetch_related(
-            "measurements"
-        )
+        qs = QualityInspection.objects.select_related(
+            "order", "order__alici_firma"
+        ).prefetch_related("measurements__order_line__varyant")
         durum = (request.query_params.get("durum") or "").strip()
         if durum and durum in {c.value for c in QualityInspection.Durum}:
             qs = qs.filter(durum=durum)
@@ -86,6 +87,16 @@ class OpsInspectionListCreateView(IdempotencyMixin, APIView):
                 qs = qs.filter(order_id=int(order_id))
             except (TypeError, ValueError) as exc:
                 raise NotFound(detail="Sipariş bulunamadı.") from exc
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(order__alici_firma__ad__icontains=q)
+                | Q(notlar__icontains=q)
+                | Q(order__lines__varyant__sku__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(order_id=int(q))
+            qs = qs.filter(cond).distinct()
         qs = apply_ordering(
             qs,
             request,

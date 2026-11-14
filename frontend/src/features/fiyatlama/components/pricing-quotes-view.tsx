@@ -1,20 +1,28 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { fiyatlamaService } from "../services";
+import React, { useMemo, useState } from "react";
 import {
-  rememberLockId,
-  rememberQuoteId,
-  useSessionQuotesAndLocks,
+  useCreatePriceLockMutation,
+  usePriceLocksListQuery,
+  useQuotesListQuery,
 } from "../hooks";
+import { fiyatlamaService } from "../services";
+import type { PriceLock, PriceQuote } from "../types";
 import { useAuth } from "@/features/auth";
 import { OpsMarjPolitikasiCard } from "@/features/piyasa";
-import { siparisService } from "@/features/siparis";
+import { urunlerService, type BuyerCatalogVariant } from "@/features/urunler";
+import { tanimlarService } from "@/features/tanimlar";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import {
   QuoteCountdown,
   isQuoteExpired,
 } from "@/components/commerce/quote-countdown";
+import {
+  EntityModal,
+  ListPage,
+  RelationSelect,
+  RowActions,
+} from "@/components/crud";
 import {
   Table,
   TableHeader,
@@ -25,8 +33,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tag, Lock, RefreshCw, AlertCircle } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Lock, RefreshCw, Tag } from "lucide-react";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
 import { BlindPoolCallout } from "./blind-pool-callout";
@@ -47,132 +55,165 @@ function lockBadgeVariant(
 export function PricingQuotesView() {
   const { user } = useAuth();
   const canOps = Boolean(user?.capabilities?.can_view_ops && user?.firma?.platform_mu);
+  const canBuyerWrite = Boolean(user?.firma?.alici_mi && !canOps);
   const actionToast = useActionToast();
-  const { quotes, locks, loading, error, refresh, setError } =
-    useSessionQuotesAndLocks();
-  const [lookupId, setLookupId] = useState("");
-  const [lockLookupId, setLockLookupId] = useState("");
+
+  const [activeTab, setActiveTab] = useState<"quotes" | "locks">("quotes");
+  const [quoteSearch, setQuoteSearch] = useState("");
+  const [quotePage, setQuotePage] = useState(1);
+  const [quotePageSize, setQuotePageSize] = useState(20);
+
+  const [lockSearch, setLockSearch] = useState("");
+  const [lockDurumFilter, setLockDurumFilter] = useState("");
+  const [lockPage, setLockPage] = useState(1);
+  const [lockPageSize, setLockPageSize] = useState(20);
+
   const [lockingId, setLockingId] = useState<number | null>(null);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
 
-  const fetchPricing = async () => {
+  // Yeni Fiyat Teklifi (Quote) Al modal state
+  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [productVariants, setProductVariants] = useState<BuyerCatalogVariant[]>([]);
+  const [selectedVariantId, setSelectedVariantId] = useState<string>("");
+  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<"TRY" | "USD" | "EUR">("TRY");
+  const [creatingQuote, setCreatingQuote] = useState(false);
+  const [createQuoteError, setCreateQuoteError] = useState<string | null>(null);
+
+  const quoteParams = useMemo(
+    () => ({
+      page: String(quotePage),
+      page_size: String(quotePageSize),
+      ...(quoteSearch.trim() ? { q: quoteSearch.trim() } : {}),
+    }),
+    [quotePage, quotePageSize, quoteSearch]
+  );
+
+  const lockParams = useMemo(
+    () => ({
+      page: String(lockPage),
+      page_size: String(lockPageSize),
+      ...(lockSearch.trim() ? { q: lockSearch.trim() } : {}),
+      ...(lockDurumFilter ? { durum: lockDurumFilter } : {}),
+    }),
+    [lockPage, lockPageSize, lockSearch, lockDurumFilter]
+  );
+
+  const quotesQ = useQuotesListQuery(quoteParams);
+  const locksQ = usePriceLocksListQuery(lockParams);
+  const createLockMut = useCreatePriceLockMutation();
+
+  const quotes: PriceQuote[] = quotesQ.data?.results ?? [];
+  const locks: PriceLock[] = locksQ.data?.results ?? [];
+
+  const handleProductChange = async (pid: number | null) => {
+    setSelectedProductId(pid);
+    setSelectedVariantId("");
+    setProductVariants([]);
+    if (!pid) return;
     try {
-      const cart = await siparisService.getMyCart();
-      const quoteIds = (cart.lines || [])
-        .map((l) => l.quote_id)
-        .filter((id): id is number => Number.isFinite(id));
-      quoteIds.forEach(rememberQuoteId);
-      await refresh(quoteIds);
-    } catch {
-      await refresh();
+      const detail = await urunlerService.getProductDetail(pid);
+      const vars = detail.varyantlar ?? [];
+      setProductVariants(vars);
+      if (vars.length > 0) setSelectedVariantId(String(vars[0].id));
+    } catch (err) {
+      actionToast.error("Ürün seçenekleri alınamadı", err);
     }
   };
 
-  useEffect(() => {
-    void fetchPricing();
-  }, []);
-
-  const handleLookup = async (e: React.FormEvent) => {
+  const handleCreateQuoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = Number(lookupId);
-    if (!Number.isFinite(id) || id <= 0) {
-      setError("Geçerli bir quote id girin.");
+    setCreateQuoteError(null);
+    const vid = Number(selectedVariantId);
+    if (!vid || !selectedChannelId) {
+      setCreateQuoteError("Lütfen ürün, varyant ve satış kanalını seçin.");
       return;
     }
+    setCreatingQuote(true);
     try {
-      const quote = await fiyatlamaService.getQuote(id);
-      rememberQuoteId(quote.id);
-      setLookupId("");
-      await fetchPricing();
-      actionToast.success("Quote yüklendi", `#${quote.id}`);
+      await fiyatlamaService.createQuote({
+        varyant_id: vid,
+        satis_kanali_id: selectedChannelId,
+        para_birimi: currency,
+      });
+      actionToast.success("Fiyat teklifi oluşturuldu");
+      setQuoteModalOpen(false);
+      await quotesQ.refetch();
     } catch (err) {
-      setError(mapCommerceError(err, "Quote bulunamadı."));
-      actionToast.error("Quote bulunamadı", err);
-    }
-  };
-
-  const handleLockLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = Number(lockLookupId);
-    if (!Number.isFinite(id) || id <= 0) {
-      setError("Geçerli bir PriceLock id girin.");
-      return;
-    }
-    try {
-      const lock = await fiyatlamaService.getPriceLock(id);
-      rememberLockId(lock.id);
-      setLockLookupId("");
-      await fetchPricing();
-      actionToast.success("PriceLock yüklendi", `#${lock.id}`);
-    } catch (err) {
-      setError(mapCommerceError(err, "PriceLock bulunamadı."));
-      actionToast.error("PriceLock bulunamadı", err);
+      const msg = mapCommerceError(err, "Fiyat teklifi alınamadı.");
+      setCreateQuoteError(msg);
+      actionToast.error("Fiyat teklifi alınamadı", err);
+    } finally {
+      setCreatingQuote(false);
     }
   };
 
   const handleRefreshQuote = async (quoteId: number) => {
     setRefreshingId(quoteId);
-    setError(null);
     try {
       const quote = await fiyatlamaService.getQuote(quoteId);
-      rememberQuoteId(quote.id);
-      await fetchPricing();
+      await quotesQ.refetch();
       if (isQuoteExpired(quote.expires_at)) {
-        actionToast.info(
-          "Quote süresi dolmuş",
-          "Katalogdan yeni fiyat alın."
-        );
+        actionToast.info("Teklif süresi dolmuş", "Katalogdan yeni fiyat alabilirsiniz.");
       } else {
-        actionToast.success("Quote yenilendi", `#${quoteId}`);
+        actionToast.success("Fiyat teklifi güncellendi");
       }
     } catch (err) {
-      setError(mapCommerceError(err, "Quote yenilenemedi."));
-      actionToast.error("Quote yenilenemedi", err);
+      actionToast.error("Fiyat teklifi yenilenemedi", err);
     } finally {
       setRefreshingId(null);
     }
   };
 
-  const handleLock = async (quoteId: number) => {
-    const quote = quotes.find((q) => q.id === quoteId);
-    if (quote && isQuoteExpired(quote.expires_at)) {
-      setError("Quote süresi dolmuş. Önce yenileyin veya yeni fiyat alın.");
-      actionToast.error("Quote süresi dolmuş", "Kilitleme yapılamaz.");
+  const handleLock = async (q: PriceQuote) => {
+    if (isQuoteExpired(q.expires_at)) {
+      actionToast.error("Teklif süresi dolmuş", "Süresi dolan fiyat kilitlenemez.");
       return;
     }
-    setLockingId(quoteId);
-    setError(null);
+    setLockingId(q.id);
     try {
-      const lock = await fiyatlamaService.createPriceLock(quoteId);
-      rememberLockId(lock.id);
-      await fetchPricing();
-      actionToast.success("Fiyat kilitlendi", `Quote #${quoteId}`);
+      await createLockMut.mutateAsync(q.id);
+      actionToast.success("Fiyat kilitlendi");
+      await Promise.all([quotesQ.refetch(), locksQ.refetch()]);
     } catch (err) {
-      setError(mapCommerceError(err, "Fiyat kilitlenemedi"));
       actionToast.error("Fiyat kilitlenemedi", err);
     } finally {
       setLockingId(null);
     }
   };
 
+  const tabSwitcher = (
+    <div className="flex items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1">
+      <Button
+        type="button"
+        variant={activeTab === "quotes" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        onClick={() => setActiveTab("quotes")}
+      >
+        <Tag className="h-3.5 w-3.5" />
+        Fiyat Teklifleri
+      </Button>
+      <Button
+        type="button"
+        variant={activeTab === "locks" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        onClick={() => setActiveTab("locks")}
+      >
+        <Lock className="h-3.5 w-3.5" />
+        Fiyat Kilitleri
+      </Button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1 border-b border-border pb-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Fiyatlama, Quote & PriceLock
-        </h1>
-        <p className="text-xs text-muted-foreground">
-          Sepetteki quote_id’ler ve ID ile sorgulanan Quote / PriceLock kayıtları
-          gösterilir. Süre dolunca kilitleme kapanır; yenileme GET quote ile.
-          Borsa şeridi: <span className="font-mono text-[10px]">GET /piyasa/pano/</span>.
-        </p>
-      </div>
-
       {canOps ? <OpsMarjPolitikasiCard /> : null}
-
       <BlindPoolCallout role="buyer" />
 
-      {quotes.length > 0 ? (
+      {quotes.length > 0 && activeTab === "quotes" ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quotes.slice(0, 3).map((q) => (
             <BuyerNetPriceCard key={`net-${q.id}`} quote={q} />
@@ -180,255 +221,310 @@ export function PricingQuotesView() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <form
-          onSubmit={handleLookup}
-          className="flex flex-col sm:flex-row gap-2 sm:items-end"
+      {activeTab === "quotes" ? (
+        <ListPage
+          title="Fiyatlama & Fiyat Teklifleri"
+          description="Alıcıya sunulan güncel fiyat tekliflerini inceleyin ve süresi dolmadan fiyatı kilitleyin."
+          createLabel={canBuyerWrite ? "Yeni Fiyat Al" : undefined}
+          onCreate={
+            canBuyerWrite
+              ? () => {
+                  setCreateQuoteError(null);
+                  setSelectedProductId(null);
+                  setProductVariants([]);
+                  setSelectedVariantId("");
+                  setSelectedChannelId(null);
+                  setQuoteModalOpen(true);
+                }
+              : undefined
+          }
+          extraActions={tabSwitcher}
+          searchValue={quoteSearch}
+          onSearchChange={(val) => {
+            setQuoteSearch(val);
+            setQuotePage(1);
+          }}
+          searchPlaceholder="Ürün adı, stok kodu veya kanal ara…"
+          loading={quotesQ.isLoading}
+          error={
+            quotesQ.isError
+              ? mapCommerceError(quotesQ.error, "Fiyat teklifleri alınamadı.")
+              : null
+          }
+          onRetry={() => void quotesQ.refetch()}
+          isEmpty={quotes.length === 0}
+          emptyTitle="Henüz fiyat teklifi bulunmuyor"
+          emptyDescription="Katalogdan ürün seçerek veya Yeni Fiyat Al butonunu kullanarak güncel net fiyat alabilirsiniz."
+          page={quotePage}
+          pageSize={quotePageSize}
+          totalCount={quotesQ.data?.count ?? quotes.length}
+          onPageChange={setQuotePage}
+          onPageSizeChange={(sz) => {
+            setQuotePageSize(sz);
+            setQuotePage(1);
+          }}
         >
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-xs text-muted-foreground" htmlFor="quote-lookup">
-              Quote ID ile getir
-            </label>
-            <Input
-              id="quote-lookup"
-              value={lookupId}
-              onChange={(e) => setLookupId(e.target.value)}
-              inputMode="numeric"
-              placeholder="Örn: 101"
-              className="font-mono"
-            />
-          </div>
-          <Button type="submit" size="sm" className="h-9">
-            Quote Getir
-          </Button>
-        </form>
-
-        <form
-          onSubmit={handleLockLookup}
-          className="flex flex-col sm:flex-row gap-2 sm:items-end"
-        >
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-xs text-muted-foreground" htmlFor="lock-lookup">
-              PriceLock ID ile getir
-            </label>
-            <Input
-              id="lock-lookup"
-              value={lockLookupId}
-              onChange={(e) => setLockLookupId(e.target.value)}
-              inputMode="numeric"
-              placeholder="Örn: 55"
-              className="font-mono"
-            />
-          </div>
-          <Button type="submit" size="sm" variant="secondary" className="h-9">
-            Kilit Getir
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={() => void fetchPricing()}
-          >
-            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            Yenile
-          </Button>
-        </form>
-      </div>
-
-      {error && (
-        <div
-          className="flex items-center justify-between rounded-[8px] border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive"
-          role="alert"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchPricing()}
-            className="h-8 border-destructive/30"
-          >
-            Yeniden Dene
-          </Button>
-        </div>
-      )}
-
-      {loading ? (
-        <div
-          className="flex h-48 w-full items-center justify-center"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            <span>Fiyatlama kayıtları alınıyor…</span>
-          </div>
-        </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ürün & Varyant</TableHead>
+                <TableHead className="text-right">Net Tutar</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead>Geçerlilik Süresi</TableHead>
+                <TableHead className="w-[140px] text-right">İşlem</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {quotes.map((q) => {
+                const expired = isQuoteExpired(q.expires_at);
+                return (
+                  <TableRow key={q.id} className={expired ? "opacity-75" : undefined}>
+                    <TableCell className="text-xs">
+                      <div className="font-medium text-foreground">
+                        {q.urun || "Katalog Ürünü"}
+                      </div>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {q.varyant_sku || "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums font-medium">
+                      {formatMoney(q.toplam_vergisiz || q.birim_fiyat, q.para_birimi)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={expired ? "destructive" : "success"}
+                        className="text-[10px]"
+                      >
+                        {expired ? "Süresi Doldu" : "Geçerli"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <QuoteCountdown expiresAt={q.expires_at} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <RowActions
+                        itemLabel={q.urun || q.varyant_sku || "Fiyat Teklifi"}
+                        extraActions={[
+                          {
+                            label:
+                              refreshingId === q.id ? "Yenileniyor…" : "Süreyi Kontrol Et",
+                            icon: <RefreshCw className="h-3.5 w-3.5" />,
+                            onClick: () => void handleRefreshQuote(q.id),
+                            disabled: refreshingId === q.id,
+                          },
+                          ...(canBuyerWrite
+                            ? [
+                                {
+                                  label:
+                                    lockingId === q.id
+                                      ? "Kilitleniyor…"
+                                      : "Fiyatı Kilitle",
+                                  icon: <Lock className="h-3.5 w-3.5" />,
+                                  onClick: () => void handleLock(q),
+                                  disabled: lockingId === q.id || expired,
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ListPage>
       ) : (
-        <div className="flex flex-col gap-8">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-foreground">PriceLock</h2>
-            </div>
-            <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-              {locks.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
-                  Fiyat kilidi kaydı bulunamadı.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Kilit ID</TableHead>
-                      <TableHead>Quote Ref</TableHead>
-                      <TableHead>Durum</TableHead>
-                      <TableHead className="text-right">Kilitli Tutar</TableHead>
-                      <TableHead>Kalan / Bitiş</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {locks.map((l) => (
-                      <TableRow key={l.id}>
-                        <TableCell className="font-mono text-xs font-semibold">
-                          #{l.id}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          Q-{l.quote_id}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={lockBadgeVariant(l.durum, l.gecerli)}
-                            className="font-mono text-[10px]"
-                          >
-                            {l.durum}
-                            {l.gecerli === false ? " · geçersiz" : ""}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums font-semibold">
-                          {l.kilit_fiyati
-                            ? formatMoney(l.kilit_fiyati, l.para_birimi)
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <div className="flex flex-col gap-0.5">
-                            <QuoteCountdown expiresAt={l.expires_at} />
-                            <span className="text-muted-foreground">
-                              {l.expires_at
-                                ? formatDateTime(l.expires_at)
-                                : "—"}
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
+        <ListPage
+          title="Fiyat Kilitleri"
+          description="Sipariş öncesi sabitlenen fiyat kilitlerinin kalan sürelerini takip edin."
+          extraActions={tabSwitcher}
+          searchValue={lockSearch}
+          onSearchChange={(val) => {
+            setLockSearch(val);
+            setLockPage(1);
+          }}
+          searchPlaceholder="Ürün veya stok kodu ile ara…"
+          filters={
+            <select
+              value={lockDurumFilter}
+              onChange={(e) => {
+                setLockDurumFilter(e.target.value);
+                setLockPage(1);
+              }}
+              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs text-foreground"
+              aria-label="Fiyat kilidi durum filtresi"
+            >
+              <option value="">Tüm Durumlar</option>
+              <option value="AKTIF">Aktif</option>
+              <option value="SURESI_DOLDU">Süresi Doldu</option>
+            </select>
+          }
+          loading={locksQ.isLoading}
+          error={
+            locksQ.isError
+              ? mapCommerceError(locksQ.error, "Fiyat kilitleri alınamadı.")
+              : null
+          }
+          onRetry={() => void locksQ.refetch()}
+          isEmpty={locks.length === 0}
+          emptyTitle="Henüz fiyat kilidi yok"
+          emptyDescription="Geçerli bir fiyat teklifini kilitlediğinizde burada listelenir."
+          page={lockPage}
+          pageSize={lockPageSize}
+          totalCount={locksQ.data?.count ?? locks.length}
+          onPageChange={setLockPage}
+          onPageSizeChange={(sz) => {
+            setLockPageSize(sz);
+            setLockPage(1);
+          }}
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ürün & Varyant</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead className="text-right">Kilitli Tutar</TableHead>
+                <TableHead>Kalan Süre / Bitiş</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {locks.map((l) => (
+                <TableRow key={l.id}>
+                  <TableCell className="text-xs">
+                    <div className="font-medium text-foreground">
+                      {l.urun_ad || "Katalog Ürünü"}
+                    </div>
+                    <div className="font-mono text-[11px] text-muted-foreground">
+                      {l.varyant_sku || "—"}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={lockBadgeVariant(l.durum, l.gecerli)}
+                      className="text-[10px]"
+                    >
+                      {l.gecerli === false ? "Süresi Doldu" : l.durum}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums font-semibold">
+                    {l.kilit_fiyati
+                      ? formatMoney(l.kilit_fiyati, l.para_birimi)
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <QuoteCountdown expiresAt={l.expires_at} />
+                      <span className="text-muted-foreground">
+                        {l.expires_at ? formatDateTime(l.expires_at) : "—"}
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ListPage>
+      )}
+
+      {/* Yeni Fiyat Teklifi Al Modalı */}
+      <EntityModal
+        open={quoteModalOpen}
+        onOpenChange={setQuoteModalOpen}
+        title="Yeni Fiyat Teklifi Al"
+        description="Katalogdan ürün ve satış kanalı seçerek anlık net fiyat teklifi hesaplayın."
+        isDirty={Boolean(selectedProductId || selectedChannelId)}
+        isSubmitting={creatingQuote}
+        submitLabel="Fiyat Hesapla"
+        error={createQuoteError}
+        onSubmit={handleCreateQuoteSubmit}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Ürün</Label>
+            <RelationSelect
+              value={selectedProductId}
+              onChange={(val) => void handleProductChange(val ? Number(val) : null)}
+              placeholder="Ürün seçin…"
+              searchPlaceholder="Ürün adı veya kodu ara…"
+              loadOptions={async (q) => {
+                const page = await urunlerService.getCatalog({
+                  page_size: "30",
+                  ...(q ? { q } : {}),
+                });
+                return (page.results ?? []).map((u) => ({
+                  value: u.id,
+                  label: u.ad,
+                  sublabel: `${u.platform_kodu || ""} · ${u.kategori || ""}`.trim(),
+                }));
+              }}
+            />
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-foreground">PriceQuote</h2>
+          {productVariants.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="quote-variant-select">Varyant</Label>
+              <select
+                id="quote-variant-select"
+                className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                value={selectedVariantId}
+                onChange={(e) => setSelectedVariantId(e.target.value)}
+              >
+                {productVariants.map((v) => (
+                  <option key={v.id} value={String(v.id)}>
+                    {v.sku} {v.gram ? `· ${v.gram}g` : ""} {v.renk ? `· ${v.renk}` : ""}{" "}
+                    {v.beden ? `· ${v.beden}` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-              {quotes.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
-                  Quote kaydı bulunamadı. Katalogdan fiyat alın veya id ile
-                  getirin.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Quote No</TableHead>
-                      <TableHead>Ürün / SKU</TableHead>
-                      <TableHead className="text-right">Tutar</TableHead>
-                      <TableHead>Durum</TableHead>
-                      <TableHead>Kalan süre</TableHead>
-                      <TableHead className="text-right">İşlem</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {quotes.map((q) => {
-                      const expired = isQuoteExpired(q.expires_at);
-                      return (
-                        <TableRow
-                          key={q.id}
-                          className={expired ? "opacity-80" : undefined}
-                        >
-                          <TableCell className="font-mono text-xs font-medium">
-                            #{q.id}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <div className="font-medium text-foreground">
-                              {q.urun || `Varyant #${q.varyant_id}`}
-                            </div>
-                            <div className="font-mono text-muted-foreground">
-                              {q.varyant_sku || "—"}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono tabular-nums font-medium">
-                            {formatMoney(
-                              q.toplam_vergisiz || q.birim_fiyat,
-                              q.para_birimi
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={expired ? "destructive" : "outline"}
-                              className="font-mono text-[10px]"
-                            >
-                              {expired ? "SÜRESİ DOLDU" : q.durum || "—"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <QuoteCountdown expiresAt={q.expires_at} />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1.5">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={refreshingId === q.id}
-                                onClick={() => void handleRefreshQuote(q.id)}
-                                className="h-7 text-xs gap-1"
-                                aria-label={`Quote ${q.id} yenile`}
-                              >
-                                <RefreshCw
-                                  className={`h-3 w-3 ${
-                                    refreshingId === q.id ? "animate-spin" : ""
-                                  }`}
-                                />
-                                Yenile
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                disabled={lockingId === q.id || expired}
-                                onClick={() => void handleLock(q.id)}
-                                className="h-7 text-xs gap-1"
-                              >
-                                <Lock className="h-3 w-3" />
-                                Kilitle
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
+          ) : null}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Satış Kanalı</Label>
+              <RelationSelect
+                value={selectedChannelId}
+                onChange={(val) => setSelectedChannelId(val ? Number(val) : null)}
+                placeholder="Kanal seçin…"
+                searchPlaceholder="Kanal ara…"
+                loadOptions={async (q) => {
+                  const list = await tanimlarService.getSalesChannels();
+                  const filtered = q
+                    ? list.filter(
+                        (k) =>
+                          k.ad.toLowerCase().includes(q.toLowerCase()) ||
+                          k.kod.toLowerCase().includes(q.toLowerCase())
+                      )
+                    : list;
+                  return filtered.map((k) => ({
+                    value: k.id,
+                    label: k.ad,
+                    sublabel: k.kod,
+                  }));
+                }}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="quote-currency">Para Birimi</Label>
+              <select
+                id="quote-currency"
+                className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                value={currency}
+                onChange={(e) =>
+                  setCurrency((e.target.value as "TRY" | "USD" | "EUR") || "TRY")
+                }
+              >
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
             </div>
           </div>
         </div>
-      )}
+      </EntityModal>
     </div>
   );
 }

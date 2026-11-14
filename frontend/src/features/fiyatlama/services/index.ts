@@ -1,11 +1,13 @@
 import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
-import type { BuyerPriceLock, BuyerQuote } from "@/lib/api/types";
+import type { BuyerPriceLock, BuyerQuote, Paginated } from "@/lib/api/types";
 import type {
   BuyerRfqCreateRequest,
   OpsRfqMatch,
   OpsRfqMatchCandidate,
   PriceLock,
+  PriceLockPage,
   PriceQuote,
+  PriceQuotePage,
   RfqMessage,
   RfqRevision,
   SupplierOffer,
@@ -16,10 +18,28 @@ import type {
   SupplierOfferPage,
   SupplierRfq,
   SupplierRfqPage,
+  SupplierVariantPage,
 } from "../types";
+
+function qs(params?: Record<string, string | undefined>): string {
+  if (!params) return "";
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && String(v).trim() !== "") sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
 
 function mapQuote(q: BuyerQuote): PriceQuote {
   const net = q.net_ozet;
+  const urunVal = q.urun as unknown;
+  const urunLabel =
+    typeof urunVal === "string"
+      ? urunVal
+      : urunVal && typeof urunVal === "object" && "ad" in urunVal
+      ? String((urunVal as { ad?: string }).ad || "")
+      : undefined;
   return {
     id: q.id,
     varyant_id: q.varyant_id ?? 0,
@@ -41,11 +61,13 @@ function mapQuote(q: BuyerQuote): PriceQuote {
         }
       : undefined,
     varyant_sku: q.varyant_sku,
-    urun: typeof q.urun === "string" ? q.urun : undefined,
+    urun: urunLabel,
   };
 }
 
-function mapLock(l: BuyerPriceLock): PriceLock {
+function mapLock(
+  l: BuyerPriceLock & { varyant_sku?: string; urun_ad?: string }
+): PriceLock {
   return {
     id: l.id,
     quote_id: l.quote_id,
@@ -54,11 +76,18 @@ function mapLock(l: BuyerPriceLock): PriceLock {
     durum: (l.durum as PriceLock["durum"]) || "AKTIF",
     expires_at: l.expires_at || "",
     gecerli: l.gecerli,
+    varyant_sku: l.varyant_sku,
+    urun_ad: l.urun_ad,
   };
 }
 
 export const fiyatlamaService = {
-  /** Liste GET yok (OpenAPI). Tek kayıt: GET /quotes/{id}/ */
+  getQuotes(params?: Record<string, string | undefined>): Promise<PriceQuotePage> {
+    return apiFetch<Paginated<BuyerQuote>>(`/quotes/${qs(params)}`).then((res) => ({
+      count: res.count ?? 0,
+      results: (res.results ?? []).map(mapQuote),
+    }));
+  },
   getQuote(id: number | string): Promise<PriceQuote> {
     return apiFetch<BuyerQuote>(`/quotes/${id}/`).then(mapQuote);
   },
@@ -77,6 +106,14 @@ export const fiyatlamaService = {
       idempotencyKey: newIdempotencyKey(),
     }).then(mapQuote);
   },
+  getPriceLocks(params?: Record<string, string | undefined>): Promise<PriceLockPage> {
+    return apiFetch<
+      Paginated<BuyerPriceLock & { varyant_sku?: string; urun_ad?: string }>
+    >(`/price-locks/${qs(params)}`).then((res) => ({
+      count: res.count ?? 0,
+      results: (res.results ?? []).map(mapLock),
+    }));
+  },
   getPriceLock(id: number | string): Promise<PriceLock> {
     return apiFetch<BuyerPriceLock>(`/price-locks/${id}/`).then(mapLock);
   },
@@ -87,14 +124,23 @@ export const fiyatlamaService = {
       idempotencyKey: newIdempotencyKey(),
     }).then(mapLock);
   },
-  getSupplierRfqs(): Promise<SupplierRfqPage> {
-    return apiFetch<SupplierRfqPage>("/supplier/rfqs/");
+  getSupplierVariants(
+    params?: Record<string, string | undefined>
+  ): Promise<SupplierVariantPage> {
+    return apiFetch<SupplierVariantPage>(`/supplier/variants/${qs(params)}`);
+  },
+  getSupplierRfqs(
+    params?: Record<string, string | undefined>
+  ): Promise<SupplierRfqPage> {
+    return apiFetch<SupplierRfqPage>(`/supplier/rfqs/${qs(params)}`);
   },
   getSupplierRfq(id: number | string): Promise<SupplierRfq> {
     return apiFetch<SupplierRfq>(`/supplier/rfqs/${id}/`);
   },
-  getSupplierOffers(): Promise<SupplierOfferPage> {
-    return apiFetch<SupplierOfferPage>("/supplier/offers/");
+  getSupplierOffers(
+    params?: Record<string, string | undefined>
+  ): Promise<SupplierOfferPage> {
+    return apiFetch<SupplierOfferPage>(`/supplier/offers/${qs(params)}`);
   },
   getSupplierOfferDetail(id: number | string): Promise<SupplierOffer> {
     return apiFetch<SupplierOffer>(`/supplier/offers/${id}/`);
@@ -128,7 +174,6 @@ export const fiyatlamaService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  /** GAP-F3-04 — CSV metin önizleme (PDF desteklenmez) */
   previewOfferImport(csv: string): Promise<SupplierOfferImportPreview> {
     return apiFetch<SupplierOfferImportPreview>(
       "/supplier/offers/import/preview/",
@@ -151,8 +196,8 @@ export const fiyatlamaService = {
       }
     );
   },
-  getBuyerRfqs(): Promise<SupplierRfqPage> {
-    return apiFetch<SupplierRfqPage>("/rfqs/");
+  getBuyerRfqs(params?: Record<string, string | undefined>): Promise<SupplierRfqPage> {
+    return apiFetch<SupplierRfqPage>(`/rfqs/${qs(params)}`);
   },
   getBuyerRfqDetail(id: number | string): Promise<SupplierRfq> {
     return apiFetch<SupplierRfq>(`/rfqs/${id}/`);

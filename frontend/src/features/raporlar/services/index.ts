@@ -9,20 +9,24 @@ export const raporlarService = {
   getCommercialOrders(params?: {
     date_from?: string;
     date_to?: string;
+    alici_firma_id?: number;
   }): Promise<CommercialOrderReport> {
     const q = new URLSearchParams();
     if (params?.date_from) q.set("date_from", params.date_from);
     if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.alici_firma_id) q.set("alici_firma_id", String(params.alici_firma_id));
     const query = q.toString() ? `?${q}` : "";
     return apiFetch<CommercialOrderReport>(`/reports/orders/${query}`);
   },
   getBuyerBehavior(params?: {
     date_from?: string;
     date_to?: string;
+    alici_firma_id?: number;
   }): Promise<BuyerBehaviorReport> {
     const q = new URLSearchParams();
     if (params?.date_from) q.set("date_from", params.date_from);
     if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.alici_firma_id) q.set("alici_firma_id", String(params.alici_firma_id));
     const query = q.toString() ? `?${q}` : "";
     return apiFetch<BuyerBehaviorReport>(`/reports/buyer-behavior/${query}`);
   },

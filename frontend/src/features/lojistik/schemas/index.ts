@@ -17,7 +17,7 @@ export const shipmentPodSchema = z.object({
 export type ShipmentPodInput = z.infer<typeof shipmentPodSchema>;
 
 export const createShipmentSchema = z.object({
-  order_id: z.number().int().positive("Geçerli bir Sipariş ID girin."),
+  order_id: z.number({ message: "Sipariş seçilmelidir." }).int().positive("Sipariş seçilmelidir."),
   takip_no: z.string().trim().optional(),
   notlar: z.string().trim().optional(),
   teslim_modeli: z.enum(["PLATFORM_QC", "DOGRUDAN", "TEDARIKCI_TO_PLATFORM"]).optional(),
@@ -27,11 +27,11 @@ export const createShipmentSchema = z.object({
 export type CreateShipmentInput = z.infer<typeof createShipmentSchema>;
 
 export const createReturnSchema = z.object({
-  order_id: z.number().int().positive("Sipariş ID zorunludur."),
-  shipment_id: z.number().int().positive("Sevkiyat ID zorunludur."),
+  order_id: z.number({ message: "Sipariş seçilmelidir." }).int().positive("Sipariş seçilmelidir."),
+  shipment_id: z.number({ message: "Sevkiyat seçilmelidir." }).int().positive("Sevkiyat seçilmelidir."),
   sebep: z.string().trim().min(2, "İade sebebi zorunludur."),
   notlar: z.string().trim().optional(),
-  order_line_id: z.number().int().positive("Sipariş satırı seçilmelidir."),
+  order_line_id: z.number({ message: "Sipariş kalemi seçilmelidir." }).int().positive("Sipariş kalemi seçilmelidir."),
   miktar: z.string().trim().min(1, "İade miktarı zorunludur."),
 });
 

@@ -60,25 +60,65 @@ export const finansService = {
   getOpsFinance(): Promise<OpsFinanceSummary> {
     return apiFetch<OpsFinanceSummary>("/ops/finance/");
   },
-  getOpsFinanceCari(): Promise<Paginated<OpsCariRow>> {
-    return apiFetch<Paginated<OpsCariRow>>("/ops/finance/cari/");
+  getOpsFinanceCari(params?: {
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<Paginated<OpsCariRow>> {
+    const search = new URLSearchParams();
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
+    const qs = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch<Paginated<OpsCariRow>>(`/ops/finance/cari/${qs}`);
   },
-  getOpsFinanceLedger(): Promise<Paginated<OpsLedgerRow>> {
-    return apiFetch<Paginated<OpsLedgerRow>>("/ops/finance/ledger/");
+  updateOpsCariLimit(id: number, kredi_limiti: string): Promise<OpsCariRow> {
+    return apiFetch<OpsCariRow>(`/ops/finance/cari/${id}/`, {
+      method: "PATCH",
+      body: { kredi_limiti },
+      idempotencyKey: newIdempotencyKey(),
+    });
   },
-  getOpsFinancePayments(): Promise<Paginated<OpsPaymentRow>> {
-    return apiFetch<Paginated<OpsPaymentRow>>("/ops/finance/payments/");
+  getOpsFinanceLedger(params?: {
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<Paginated<OpsLedgerRow>> {
+    const search = new URLSearchParams();
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
+    const qs = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch<Paginated<OpsLedgerRow>>(`/ops/finance/ledger/${qs}`);
+  },
+  getOpsFinancePayments(params?: {
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<Paginated<OpsPaymentRow>> {
+    const search = new URLSearchParams();
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
+    const qs = search.toString() ? `?${search.toString()}` : "";
+    return apiFetch<Paginated<OpsPaymentRow>>(`/ops/finance/payments/${qs}`);
   },
   getOpsFinanceHakEdis(params?: {
     durum?: string;
     tedarikci_firma_id?: number;
     order_id?: number;
+    q?: string;
+    page?: number;
+    page_size?: number;
   }): Promise<Paginated<OpsHakEdisRow>> {
     const search = new URLSearchParams();
     if (params?.durum) search.set("durum", params.durum);
     if (params?.tedarikci_firma_id)
       search.set("tedarikci_firma_id", String(params.tedarikci_firma_id));
     if (params?.order_id) search.set("order_id", String(params.order_id));
+    if (params?.q?.trim()) search.set("q", params.q.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.page_size) search.set("page_size", String(params.page_size));
     const q = search.toString() ? `?${search.toString()}` : "";
     return apiFetch<Paginated<OpsHakEdisRow>>(`/ops/finance/hak-edis/${q}`);
   },

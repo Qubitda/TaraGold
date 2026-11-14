@@ -1,16 +1,36 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useAdjustStockMutation,
-  useSupplierStockQuery,
-  useSupplierWarehousesQuery,
+  useCreateWarehouseMutation,
+  useDeleteWarehouseMutation,
+  useSupplierStockPageQuery,
+  useSupplierWarehousesPageQuery,
+  useUpdateWarehouseMutation,
 } from "../hooks";
-import { stockAdjustmentSchema, type StockAdjustmentInput } from "../schemas";
+import {
+  stockAdjustmentSchema,
+  warehouseSchema,
+  type StockAdjustmentInput,
+  type WarehouseInput,
+} from "../schemas";
+import { stokService } from "../services";
+import type { SupplierWarehouse } from "../types";
+import { fiyatlamaService } from "@/features/fiyatlama/services";
+import { opsFirmalarService } from "@/features/firmalar/services/ops-firmalar";
+import { useAuth } from "@/features/auth";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
+import {
+  ConfirmDialog,
+  EntityModal,
+  ListPage,
+  RelationSelect,
+  RowActions,
+} from "@/components/crud";
 import {
   Table,
   TableHeader,
@@ -19,40 +39,70 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Boxes, RefreshCw, AlertCircle, Plus } from "lucide-react";
+import { Boxes, Plus, Warehouse } from "lucide-react";
 
 export function StockManagementView() {
+  const { user } = useAuth();
+  const isOps = Boolean(user?.firma?.platform_mu || user?.capabilities?.can_view_ops);
   const actionToast = useActionToast();
-  const stockQ = useSupplierStockQuery();
-  const warehousesQ = useSupplierWarehousesQuery();
-  const adjustMut = useAdjustStockMutation();
+
+  const [activeTab, setActiveTab] = useState<"stock" | "warehouses">("stock");
+
+  // Stock list state
+  const [stockSearch, setStockSearch] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [stockPage, setStockPage] = useState(1);
+  const [stockPageSize, setStockPageSize] = useState(20);
+
+  // Warehouse list state
+  const [whSearch, setWhSearch] = useState("");
+  const [whAktifFilter, setWhAktifFilter] = useState("");
+  const [whPage, setWhPage] = useState(1);
+  const [whPageSize, setWhPageSize] = useState(20);
+
+  // Modals
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
-  const warehouses = warehousesQ.data ?? [];
-  const warehouseMap = useMemo(() => {
-    const map = new Map<number, { kod: string; ad: string }>();
-    for (const w of warehouses) {
-      map.set(w.id, { kod: w.kod, ad: w.ad });
-    }
-    return map;
-  }, [warehouses]);
+  const [whModalOpen, setWhModalOpen] = useState(false);
+  const [editingWh, setEditingWh] = useState<SupplierWarehouse | null>(null);
+  const [whModalError, setWhModalError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SupplierWarehouse | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<StockAdjustmentInput>({
+  const stockParams = useMemo(
+    () => ({
+      page: String(stockPage),
+      page_size: String(stockPageSize),
+      ...(stockSearch.trim() ? { q: stockSearch.trim() } : {}),
+      ...(warehouseFilter ? { warehouse_id: warehouseFilter } : {}),
+    }),
+    [stockPage, stockPageSize, stockSearch, warehouseFilter]
+  );
+
+  const whParams = useMemo(
+    () => ({
+      page: String(whPage),
+      page_size: String(whPageSize),
+      ...(whSearch.trim() ? { q: whSearch.trim() } : {}),
+      ...(whAktifFilter ? { aktif: whAktifFilter } : {}),
+    }),
+    [whPage, whPageSize, whSearch, whAktifFilter]
+  );
+
+  const stockQ = useSupplierStockPageQuery(stockParams);
+  const warehousesQ = useSupplierWarehousesPageQuery(whParams);
+  const allWarehousesQ = useSupplierWarehousesPageQuery({ page_size: "100" });
+
+  const adjustMut = useAdjustStockMutation();
+  const createWhMut = useCreateWarehouseMutation();
+  const updateWhMut = useUpdateWarehouseMutation();
+  const deleteWhMut = useDeleteWarehouseMutation();
+
+  const adjustForm = useForm<StockAdjustmentInput>({
     resolver: zodResolver(stockAdjustmentSchema),
     defaultValues: {
       warehouse_id: undefined,
@@ -62,110 +112,216 @@ export function StockManagementView() {
     },
   });
 
-  const balances = stockQ.data ?? [];
-  const loading = stockQ.isLoading;
-  const error = stockQ.isError
-    ? mapCommerceError(stockQ.error, "Stok verisi alınamadı.")
-    : null;
+  const whForm = useForm<WarehouseInput>({
+    resolver: zodResolver(warehouseSchema),
+    defaultValues: {
+      kod: "",
+      ad: "",
+      sahip_firma_id: undefined,
+      aktif: true,
+    },
+  });
 
-  const onAdjustSubmit = async (data: StockAdjustmentInput) => {
+  const balances = stockQ.data?.results ?? [];
+  const warehouses = warehousesQ.data?.results ?? [];
+  const filterWarehouses = allWarehousesQ.data?.results ?? [];
+
+  const openAdjustModal = () => {
+    setAdjustError(null);
+    adjustForm.reset({
+      warehouse_id: undefined,
+      teklif_id: undefined,
+      miktar: "",
+      neden: "",
+    });
+    setAdjustOpen(true);
+  };
+
+  const openCreateWhModal = () => {
+    setEditingWh(null);
+    setWhModalError(null);
+    whForm.reset({
+      kod: "",
+      ad: "",
+      sahip_firma_id: undefined,
+      aktif: true,
+    });
+    setWhModalOpen(true);
+  };
+
+  const openEditWhModal = (w: SupplierWarehouse) => {
+    setEditingWh(w);
+    setWhModalError(null);
+    whForm.reset({
+      kod: w.kod,
+      ad: w.ad,
+      sahip_firma_id: w.sahip_firma_id,
+      aktif: w.aktif,
+    });
+    setWhModalOpen(true);
+  };
+
+  const onAdjustSubmit = adjustForm.handleSubmit(async (data) => {
+    setAdjustError(null);
     try {
       await adjustMut.mutateAsync({
         warehouse_id: Number(data.warehouse_id),
         teklif_id: Number(data.teklif_id),
-        miktar: data.miktar,
-        neden: data.neden || "",
+        miktar: data.miktar.trim(),
+        neden: data.neden.trim(),
       });
       actionToast.success("Stok düzeltmesi kaydedildi");
-      reset();
       setAdjustOpen(false);
     } catch (err) {
+      const msg = mapCommerceError(err, "Stok hareketi işlenemedi.");
+      setAdjustError(msg);
       actionToast.error("Stok hareketi işlenemedi", err);
+    }
+  });
+
+  const onWhSubmit = whForm.handleSubmit(async (data) => {
+    setWhModalError(null);
+    try {
+      if (editingWh) {
+        await updateWhMut.mutateAsync({
+          id: editingWh.id,
+          data: {
+            kod: data.kod.trim(),
+            ad: data.ad.trim(),
+            aktif: data.aktif,
+          },
+        });
+        actionToast.success("Depo güncellendi", data.ad);
+      } else {
+        await createWhMut.mutateAsync({
+          kod: data.kod.trim(),
+          ad: data.ad.trim(),
+          aktif: data.aktif,
+          ...(isOps && data.sahip_firma_id
+            ? { sahip_firma_id: data.sahip_firma_id }
+            : {}),
+        });
+        actionToast.success("Depo oluşturuldu", data.ad);
+      }
+      setWhModalOpen(false);
+    } catch (err) {
+      const msg = mapCommerceError(err, "Depo kaydedilemedi.");
+      setWhModalError(msg);
+      actionToast.error("Depo kaydedilemedi", err);
+    }
+  });
+
+  const handleToggleWh = async (w: SupplierWarehouse) => {
+    try {
+      await updateWhMut.mutateAsync({
+        id: w.id,
+        data: { aktif: !w.aktif },
+      });
+      actionToast.success(w.aktif ? "Depo pasife alındı" : "Depo aktifleştirildi", w.ad);
+    } catch (err) {
+      actionToast.error("Depo durumu güncellenemedi", err);
     }
   };
 
+  const handleDeleteWh = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteWhMut.mutateAsync(deleteTarget.id);
+      actionToast.success("Depo silindi", deleteTarget.ad);
+      setDeleteTarget(null);
+    } catch (err) {
+      actionToast.error("Depo silinemedi", err);
+    }
+  };
+
+  const tabSwitcher = (
+    <div className="flex items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1">
+      <Button
+        type="button"
+        variant={activeTab === "stock" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        onClick={() => setActiveTab("stock")}
+      >
+        <Boxes className="h-3.5 w-3.5" />
+        Stok Bakiyeleri
+      </Button>
+      <Button
+        type="button"
+        variant={activeTab === "warehouses" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        onClick={() => setActiveTab("warehouses")}
+      >
+        <Warehouse className="h-3.5 w-3.5" />
+        Depolar
+      </Button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Stok & Depo Dengesi
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            `GET /supplier/stock/` ve `GET /supplier/warehouses/` — available / reserved / on_hand stok bakiyeleri.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void stockQ.refetch();
-              void warehousesQ.refetch();
-            }}
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Yenile
-          </Button>
-          <Button
-            onClick={() => setAdjustOpen(true)}
-            className="gap-2"
-            size="sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Stok Düzeltmesi</span>
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <div
-          className="flex items-center justify-between rounded-[8px] border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive"
-          role="alert"
+      {activeTab === "stock" ? (
+        <ListPage
+          title="Stok & Depo Yönetimi"
+          description="Depo bazlı eldeki, rezerve ve kullanılabilir stok miktarlarını yönetin."
+          createLabel="Stok Düzeltmesi"
+          onCreate={openAdjustModal}
+          extraActions={tabSwitcher}
+          searchValue={stockSearch}
+          onSearchChange={(val) => {
+            setStockSearch(val);
+            setStockPage(1);
+          }}
+          searchPlaceholder="Ürün, stok kodu, depo veya teklif ara…"
+          filters={
+            <select
+              value={warehouseFilter}
+              onChange={(e) => {
+                setWarehouseFilter(e.target.value);
+                setStockPage(1);
+              }}
+              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs text-foreground"
+              aria-label="Depo filtresi"
+            >
+              <option value="">Tüm Depolar</option>
+              {filterWarehouses.map((w) => (
+                <option key={w.id} value={String(w.id)}>
+                  {w.kod} — {w.ad}
+                </option>
+              ))}
+            </select>
+          }
+          loading={stockQ.isLoading}
+          error={
+            stockQ.isError
+              ? mapCommerceError(stockQ.error, "Stok verileri alınamadı.")
+              : null
+          }
+          onRetry={() => void stockQ.refetch()}
+          isEmpty={balances.length === 0}
+          emptyTitle="Stok bakiyesi bulunamadı"
+          emptyDescription="Henüz tanımlı stok bakiyesi yok. Stok Düzeltmesi ile ilk girişinizi yapabilirsiniz."
+          page={stockPage}
+          pageSize={stockPageSize}
+          totalCount={stockQ.data?.count ?? balances.length}
+          onPageChange={setStockPage}
+          onPageSizeChange={(sz) => {
+            setStockPageSize(sz);
+            setStockPage(1);
+          }}
         >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void stockQ.refetch()}
-            className="h-8 border-destructive/30"
-          >
-            Yeniden Dene
-          </Button>
-        </div>
-      )}
-
-      <div className="rounded-[8px] border border-border bg-card overflow-hidden">
-        {loading ? (
-          <div className="flex h-48 w-full items-center justify-center">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>Stok dengesi yükleniyor…</span>
-            </div>
-          </div>
-        ) : balances.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center gap-2 text-center p-6 text-xs text-muted-foreground">
-            <Boxes className="h-8 w-8 opacity-40 mb-1" />
-            <span className="text-sm font-medium text-foreground">
-              Veri bulunamadı
-            </span>
-            <span className="max-w-sm">Tedarikçi stok bakiyesi dönmedi.</span>
-          </div>
-        ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Depo</TableHead>
+                <TableHead>Ürün / Varyant</TableHead>
                 <TableHead>Teklif</TableHead>
-                <TableHead>Varyant</TableHead>
                 <TableHead>Birim</TableHead>
-                <TableHead className="text-right">On Hand</TableHead>
-                <TableHead className="text-right">Reserved</TableHead>
-                <TableHead className="text-right">Available</TableHead>
+                <TableHead className="text-right">Eldeki</TableHead>
+                <TableHead className="text-right">Rezerve</TableHead>
+                <TableHead className="text-right">Kullanılabilir</TableHead>
+                <TableHead className="w-[100px] text-right">İşlem</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -174,145 +330,380 @@ export function StockManagementView() {
                   key={`${b.warehouse_id ?? "w"}-${b.teklif_id ?? "t"}-${b.varyant_id}`}
                 >
                   <TableCell className="text-xs">
-                    {b.warehouse_id != null ? (
-                      warehouseMap.has(b.warehouse_id) ? (
-                        <div>
-                          <span className="font-medium">
-                            {warehouseMap.get(b.warehouse_id)?.ad}
-                          </span>{" "}
-                          <span className="font-mono text-muted-foreground">
-                            ({warehouseMap.get(b.warehouse_id)?.kod} · #{b.warehouse_id})
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="font-mono tabular-nums">#{b.warehouse_id}</span>
-                      )
-                    ) : (
-                      "—"
-                    )}
+                    <div className="font-medium text-foreground">
+                      {b.warehouse_ad || "Depo"}
+                    </div>
+                    {b.warehouse_kod ? (
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {b.warehouse_kod}
+                      </div>
+                    ) : null}
                   </TableCell>
-                  <TableCell className="font-mono text-xs tabular-nums">
-                    {b.teklif_id != null ? `#${b.teklif_id}` : "—"}
+                  <TableCell className="text-xs">
+                    <div className="font-medium text-foreground">
+                      {b.urun_ad || b.platform_kodu || "Katalog Ürünü"}
+                    </div>
+                    {b.varyant_sku ? (
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {b.varyant_sku}
+                      </div>
+                    ) : null}
                   </TableCell>
-                  <TableCell className="font-mono text-xs font-medium tabular-nums">
-                    #{b.varyant_id}
+                  <TableCell className="text-xs text-muted-foreground">
+                    {b.teklif_kodu || "Standart Teklif"}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{b.birim}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {b.on_hand ?? "—"}
+                    {b.on_hand ?? "0"}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                    {b.reserved ?? "—"}
+                    {b.reserved ?? "0"}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums font-semibold">
                     {b.available}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => {
+                        setAdjustError(null);
+                        adjustForm.reset({
+                          warehouse_id: b.warehouse_id ?? undefined,
+                          teklif_id: b.teklif_id ?? undefined,
+                          miktar: "",
+                          neden: "",
+                        });
+                        setAdjustOpen(true);
+                      }}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Düzelt
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        )}
-      </div>
+        </ListPage>
+      ) : (
+        <ListPage
+          title="Depo Yönetimi"
+          description="Stok girişi ve sevkiyat için kullanılan depoları tanımlayın ve yönetin."
+          createLabel="Yeni Depo"
+          onCreate={openCreateWhModal}
+          extraActions={tabSwitcher}
+          searchValue={whSearch}
+          onSearchChange={(val) => {
+            setWhSearch(val);
+            setWhPage(1);
+          }}
+          searchPlaceholder="Depo kodu, adı veya firma ara…"
+          filters={
+            <select
+              value={whAktifFilter}
+              onChange={(e) => {
+                setWhAktifFilter(e.target.value);
+                setWhPage(1);
+              }}
+              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs text-foreground"
+              aria-label="Depo durum filtresi"
+            >
+              <option value="">Tüm Durumlar</option>
+              <option value="true">Aktif</option>
+              <option value="false">Pasif</option>
+            </select>
+          }
+          loading={warehousesQ.isLoading}
+          error={
+            warehousesQ.isError
+              ? mapCommerceError(warehousesQ.error, "Depolar alınamadı.")
+              : null
+          }
+          onRetry={() => void warehousesQ.refetch()}
+          isEmpty={warehouses.length === 0}
+          emptyTitle="Henüz depo tanımlanmamış"
+          emptyDescription="Stok takibi başlatmak için Yeni Depo butonunu kullanın."
+          page={whPage}
+          pageSize={whPageSize}
+          totalCount={warehousesQ.data?.count ?? warehouses.length}
+          onPageChange={setWhPage}
+          onPageSizeChange={(sz) => {
+            setWhPageSize(sz);
+            setWhPage(1);
+          }}
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Depo Kodu</TableHead>
+                <TableHead>Depo Adı</TableHead>
+                <TableHead>Sahiplik</TableHead>
+                <TableHead>Durum</TableHead>
+                <TableHead className="w-[100px] text-right">İşlemler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {warehouses.map((w) => (
+                <TableRow key={w.id}>
+                  <TableCell className="font-mono text-xs font-semibold">
+                    {w.kod}
+                  </TableCell>
+                  <TableCell className="text-xs font-medium text-foreground">
+                    {w.ad}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {w.sahip_firma_ad || (w.sahip_tipi === "PLATFORM" ? "Platform" : "Tedarikçi")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={w.aktif ? "success" : "outline"} className="text-[10px]">
+                      {w.aktif ? "Aktif" : "Pasif"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RowActions
+                      itemLabel={w.ad}
+                      isActive={w.aktif}
+                      onEdit={() => openEditWhModal(w)}
+                      onToggleActive={() => handleToggleWh(w)}
+                      onDelete={() => setDeleteTarget(w)}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ListPage>
+      )}
 
-      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Stok Düzeltmesi</DialogTitle>
-            <DialogDescription>
-              `POST /supplier/stock/adjustments/` — warehouse_id, teklif_id,
-              miktar (string Decimal).
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={handleSubmit(onAdjustSubmit)}
-            className="flex flex-col gap-4 pt-2"
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="warehouse_id">Depo (Warehouse)</Label>
-              {warehouses.length > 0 ? (
-                <select
-                  id="warehouse_id"
-                  className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
-                  disabled={isSubmitting}
-                  {...register("warehouse_id", { valueAsNumber: true })}
-                >
-                  <option value="">Depo seçin…</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      #{w.id} · {w.kod} — {w.ad}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  id="warehouse_id"
-                  type="number"
-                  placeholder={warehousesQ.isLoading ? "Depolar yükleniyor…" : "Depo ID"}
-                  className="font-mono tabular-nums"
-                  disabled={isSubmitting}
-                  {...register("warehouse_id", { valueAsNumber: true })}
+      {/* Stok Düzeltmesi Modalı */}
+      <EntityModal
+        open={adjustOpen}
+        onOpenChange={setAdjustOpen}
+        title="Stok Düzeltmesi"
+        description="Seçili depo ve tedarikçi teklifi için artı (+) veya eksi (-) stok hareketi kaydedin."
+        isDirty={adjustForm.formState.isDirty}
+        isSubmitting={adjustForm.formState.isSubmitting || adjustMut.isPending}
+        submitLabel="Hareketi Kaydet"
+        error={adjustError}
+        onSubmit={onAdjustSubmit}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Depo</Label>
+            <Controller
+              name="warehouse_id"
+              control={adjustForm.control}
+              render={({ field }) => (
+                <RelationSelect
+                  value={field.value ?? null}
+                  onChange={(val) => field.onChange(val ? Number(val) : undefined)}
+                  placeholder="Depo seçin…"
+                  searchPlaceholder="Depo kodu veya adı ile ara…"
+                  createLabel="Yeni Depo Ekle"
+                  onCreateNew={() => {
+                    setAdjustOpen(false);
+                    openCreateWhModal();
+                  }}
+                  loadOptions={async (q) => {
+                    const page = await stokService.getWarehouses({
+                      aktif: "true",
+                      page_size: "30",
+                      ...(q ? { q } : {}),
+                    });
+                    return (page.results ?? []).map((w) => ({
+                      value: w.id,
+                      label: `${w.kod} — ${w.ad}`,
+                      subtitle: w.sahip_firma_ad || undefined,
+                    }));
+                  }}
                 />
               )}
-              {warehousesQ.isError ? (
-                <p className="text-[11px] text-destructive">
-                  Depo listesi alınamadı; depo ID elle girebilirsiniz.
+            />
+            {adjustForm.formState.errors.warehouse_id ? (
+              <p className="text-xs text-destructive">
+                {adjustForm.formState.errors.warehouse_id.message}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Tedarikçi Teklifi</Label>
+            <Controller
+              name="teklif_id"
+              control={adjustForm.control}
+              render={({ field }) => (
+                <RelationSelect
+                  value={field.value ?? null}
+                  onChange={(val) => field.onChange(val ? Number(val) : undefined)}
+                  placeholder="Teklif seçin…"
+                  searchPlaceholder="Ürün, stok kodu veya teklif kodu ile ara…"
+                  loadOptions={async (q) => {
+                    const page = await fiyatlamaService.getSupplierOffers({
+                      page_size: "30",
+                      ...(q ? { q } : {}),
+                    });
+                    return (page.results ?? []).map((t) => ({
+                      value: t.id,
+                      label: `${t.urun_ad || t.varyant_sku || "Ürün"} ${
+                        t.tedarikci_kodu ? `(${t.tedarikci_kodu})` : ""
+                      }`,
+                      subtitle: `${t.varyant_sku || ""} · ${t.durum} · ${
+                        t.birim_fiyat ? `${t.birim_fiyat} ${t.para_birimi}` : t.fiyat_modeli
+                      }`,
+                    }));
+                  }}
+                />
+              )}
+            />
+            {adjustForm.formState.errors.teklif_id ? (
+              <p className="text-xs text-destructive">
+                {adjustForm.formState.errors.teklif_id.message}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="stok-miktar">Miktar (artış için +, düşüm için -)</Label>
+            <Input
+              id="stok-miktar"
+              placeholder="Örn: 10 veya -2.5"
+              className="font-mono tabular-nums"
+              {...adjustForm.register("miktar")}
+            />
+            {adjustForm.formState.errors.miktar ? (
+              <p className="text-xs text-destructive">
+                {adjustForm.formState.errors.miktar.message}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="stok-neden">Açıklama / Neden</Label>
+            <Input
+              id="stok-neden"
+              placeholder="Örn: Sayım fazlası girişi / fire düşümü"
+              {...adjustForm.register("neden")}
+            />
+            {adjustForm.formState.errors.neden ? (
+              <p className="text-xs text-destructive">
+                {adjustForm.formState.errors.neden.message}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </EntityModal>
+
+      {/* Depo Oluştur / Düzenle Modalı */}
+      <EntityModal
+        open={whModalOpen}
+        onOpenChange={setWhModalOpen}
+        title={editingWh ? "Depo Bilgilerini Düzenle" : "Yeni Depo Tanımla"}
+        description="Stok hareketlerinin tutulacağı depo bilgilerini girin."
+        isDirty={whForm.formState.isDirty}
+        isSubmitting={
+          whForm.formState.isSubmitting || createWhMut.isPending || updateWhMut.isPending
+        }
+        submitLabel={editingWh ? "Değişiklikleri Kaydet" : "Depoyu Oluştur"}
+        error={whModalError}
+        onSubmit={onWhSubmit}
+        size="md"
+      >
+        <div className="space-y-4">
+          {!editingWh && isOps ? (
+            <div className="space-y-1.5">
+              <Label>Sahip Firma (Opsiyonel — boşsa Platform deposu)</Label>
+              <Controller
+                name="sahip_firma_id"
+                control={whForm.control}
+                render={({ field }) => (
+                  <RelationSelect
+                    value={field.value ?? null}
+                    onChange={(val) => field.onChange(val ? Number(val) : undefined)}
+                    placeholder="Kendi firmanız veya tedarikçi seçin…"
+                    searchPlaceholder="Firma adı veya vergi no ile ara…"
+                    clearable
+                    loadOptions={async (q) => {
+                      const res = await opsFirmalarService.list({
+                        tedarikci_mi: "true",
+                        page_size: "30",
+                        ...(q ? { q } : {}),
+                      });
+                      return (res.results ?? []).map((f) => ({
+                        value: f.id,
+                        label: f.ad,
+                        subtitle: f.durum,
+                      }));
+                    }}
+                  />
+                )}
+              />
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="wh-kod">Depo Kodu</Label>
+              <Input
+                id="wh-kod"
+                placeholder="Örn: IST-MERKEZ"
+                className="font-mono"
+                {...whForm.register("kod")}
+              />
+              {whForm.formState.errors.kod ? (
+                <p className="text-xs text-destructive">
+                  {whForm.formState.errors.kod.message}
                 </p>
               ) : null}
-              {errors.warehouse_id && (
-                <p className="text-xs text-destructive">
-                  {errors.warehouse_id.message}
-                </p>
-              )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="teklif_id">Teklif ID</Label>
+              <Label htmlFor="wh-ad">Depo Adı</Label>
               <Input
-                id="teklif_id"
-                type="number"
-                className="font-mono tabular-nums"
-                {...register("teklif_id", { valueAsNumber: true })}
+                id="wh-ad"
+                placeholder="Örn: İstanbul Merkez Kasa"
+                {...whForm.register("ad")}
               />
-              {errors.teklif_id && (
+              {whForm.formState.errors.ad ? (
                 <p className="text-xs text-destructive">
-                  {errors.teklif_id.message}
+                  {whForm.formState.errors.ad.message}
                 </p>
-              )}
+              ) : null}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="miktar">Miktar</Label>
-              <Input
-                id="miktar"
-                className="font-mono tabular-nums"
-                {...register("miktar")}
-              />
-              {errors.miktar && (
-                <p className="text-xs text-destructive">
-                  {errors.miktar.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="neden">Neden</Label>
-              <Input id="neden" {...register("neden")} />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAdjustOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || adjustMut.isPending}
-              >
-                Kaydet
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border"
+              checked={whForm.watch("aktif")}
+              onChange={(e) =>
+                whForm.setValue("aktif", e.target.checked, { shouldDirty: true })
+              }
+            />
+            <span>Depo aktif (stok giriş/çıkış işlemlerine açık)</span>
+          </label>
+        </div>
+      </EntityModal>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Depoyu Sil"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.ad}" (${deleteTarget.kod}) deposunu silmek istediğinize emin misiniz? Stok hareketi olan depolar silinemez.`
+            : ""
+        }
+        confirmLabel="Sil"
+        variant="destructive"
+        loading={deleteWhMut.isPending}
+        onConfirm={handleDeleteWh}
+      />
     </div>
   );
 }

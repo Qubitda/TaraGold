@@ -35,18 +35,47 @@ export function rememberLockId(id: number) {
 
 export const fiyatlamaKeys = {
   all: ["fiyatlama"] as const,
+  quotesList: (params?: Record<string, string | undefined>) =>
+    [...fiyatlamaKeys.all, "quotes-list", params ?? {}] as const,
+  locksList: (params?: Record<string, string | undefined>) =>
+    [...fiyatlamaKeys.all, "locks-list", params ?? {}] as const,
   session: (extraQuoteIds: number[] = []) =>
     [...fiyatlamaKeys.all, "session", [...extraQuoteIds].sort((a, b) => a - b)] as const,
   quote: (id: number | string) =>
     [...fiyatlamaKeys.all, "quote", String(id)] as const,
   lock: (id: number | string) =>
     [...fiyatlamaKeys.all, "lock", String(id)] as const,
-  supplierRfqs: () => [...fiyatlamaKeys.all, "supplier-rfqs"] as const,
+  supplierRfqs: (params?: Record<string, string | undefined>) =>
+    [...fiyatlamaKeys.all, "supplier-rfqs", params ?? {}] as const,
   supplierRfq: (id: number | string) =>
     [...fiyatlamaKeys.all, "supplier-rfq", String(id)] as const,
-  supplierOffers: () => [...fiyatlamaKeys.all, "supplier-offers"] as const,
-  buyerRfqs: () => [...fiyatlamaKeys.all, "buyer-rfqs"] as const,
+  supplierOffers: (params?: Record<string, string | undefined>) =>
+    [...fiyatlamaKeys.all, "supplier-offers", params ?? {}] as const,
+  buyerRfqs: (params?: Record<string, string | undefined>) =>
+    [...fiyatlamaKeys.all, "buyer-rfqs", params ?? {}] as const,
 };
+
+export function useQuotesListQuery(
+  params?: Record<string, string | undefined>,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: fiyatlamaKeys.quotesList(params),
+    queryFn: () => fiyatlamaService.getQuotes(params),
+    enabled,
+  });
+}
+
+export function usePriceLocksListQuery(
+  params?: Record<string, string | undefined>,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: fiyatlamaKeys.locksList(params),
+    queryFn: () => fiyatlamaService.getPriceLocks(params),
+    enabled,
+  });
+}
 
 async function loadSessionQuotesAndLocks(
   extraQuoteIds: number[] = []
@@ -80,7 +109,6 @@ async function loadSessionQuotesAndLocks(
   return { quotes, locks };
 }
 
-/** OpenAPI'de quote/lock listesi yok; oturum id + cart quote_id. */
 export function useSessionQuotesAndLocksQuery(extraQuoteIds: number[] = []) {
   return useQuery({
     queryKey: fiyatlamaKeys.session(extraQuoteIds),
@@ -88,7 +116,6 @@ export function useSessionQuotesAndLocksQuery(extraQuoteIds: number[] = []) {
   });
 }
 
-/** Geriye uyum: pricing-quotes-view için. */
 export function useSessionQuotesAndLocks() {
   const qc = useQueryClient();
   const query = useSessionQuotesAndLocksQuery();
@@ -115,9 +142,7 @@ export function useSessionQuotesAndLocks() {
         : "Fiyatlama kayıtları alınamadı."
       : null,
     refresh,
-    setError: (_msg: string | null) => {
-      /* Query hataları query.error üzerinden; satır içi set için no-op uyum. */
-    },
+    setError: (_msg: string | null) => {},
   };
 }
 
@@ -132,15 +157,21 @@ export function useCreatePriceLockMutation() {
   });
 }
 
-export function useSupplierRfqsQuery(enabled = true) {
+export function useSupplierRfqsQuery(
+  params?: Record<string, string | undefined>,
+  enabled = true
+) {
   return useQuery({
-    queryKey: fiyatlamaKeys.supplierRfqs(),
-    queryFn: () => fiyatlamaService.getSupplierRfqs(),
+    queryKey: fiyatlamaKeys.supplierRfqs(params),
+    queryFn: () => fiyatlamaService.getSupplierRfqs(params),
     enabled,
   });
 }
 
-export function useSupplierRfqQuery(id: number | string | undefined, enabled = true) {
+export function useSupplierRfqQuery(
+  id: number | string | undefined,
+  enabled = true
+) {
   return useQuery({
     queryKey: fiyatlamaKeys.supplierRfq(id ?? ""),
     queryFn: () => fiyatlamaService.getSupplierRfq(id!),
@@ -148,23 +179,32 @@ export function useSupplierRfqQuery(id: number | string | undefined, enabled = t
   });
 }
 
-export function useSupplierOffersQuery(enabled = true) {
+export function useSupplierOffersQuery(
+  params?: Record<string, string | undefined>,
+  enabled = true
+) {
   return useQuery({
-    queryKey: fiyatlamaKeys.supplierOffers(),
-    queryFn: () => fiyatlamaService.getSupplierOffers(),
+    queryKey: fiyatlamaKeys.supplierOffers(params),
+    queryFn: () => fiyatlamaService.getSupplierOffers(params),
     enabled,
   });
 }
 
-export function useBuyerRfqsQuery(enabled = true) {
+export function useBuyerRfqsQuery(
+  params?: Record<string, string | undefined>,
+  enabled = true
+) {
   return useQuery({
-    queryKey: fiyatlamaKeys.buyerRfqs(),
-    queryFn: () => fiyatlamaService.getBuyerRfqs(),
+    queryKey: fiyatlamaKeys.buyerRfqs(params),
+    queryFn: () => fiyatlamaService.getBuyerRfqs(params),
     enabled,
   });
 }
 
-export function useBuyerRfqQuery(id: number | string | undefined, enabled = true) {
+export function useBuyerRfqQuery(
+  id: number | string | undefined,
+  enabled = true
+) {
   return useQuery({
     queryKey: [...fiyatlamaKeys.buyerRfqs(), "detail", String(id ?? "")] as const,
     queryFn: () => fiyatlamaService.getBuyerRfqDetail(id!),

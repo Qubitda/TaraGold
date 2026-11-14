@@ -6,6 +6,7 @@ from django.core.exceptions import (
     PermissionDenied as DjangoPermissionDenied,
     ValidationError as DjangoValidationError,
 )
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -46,7 +47,11 @@ def _load_order(order_id: int) -> Order:
 
 
 def _get_shipment(pk: int) -> Shipment:
-    ship = Shipment.objects.filter(pk=pk).select_related("order").first()
+    ship = (
+        Shipment.objects.filter(pk=pk)
+        .select_related("order", "order__alici_firma")
+        .first()
+    )
     if ship is None:
         raise NotFound(detail="Sevkiyat bulunamadı.")
     return ship
@@ -61,7 +66,7 @@ class OpsShipmentListCreateView(IdempotencyMixin, APIView):
     def get(self, request):
         _assert_ship_ops(request.user)
         request.query_params.get("firma_id")  # ignore
-        qs = Shipment.objects.select_related("order")
+        qs = Shipment.objects.select_related("order", "order__alici_firma")
         durum = (request.query_params.get("durum") or "").strip()
         if durum and durum in {c.value for c in Shipment.Durum}:
             qs = qs.filter(durum=durum)
@@ -71,6 +76,17 @@ class OpsShipmentListCreateView(IdempotencyMixin, APIView):
                 qs = qs.filter(order_id=int(order_id))
             except (TypeError, ValueError) as exc:
                 raise NotFound(detail="Sipariş bulunamadı.") from exc
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(takip_no__icontains=q)
+                | Q(kargo_firma__icontains=q)
+                | Q(tasiyici__icontains=q)
+                | Q(order__alici_firma__ad__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(order_id=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
             qs,
             request,

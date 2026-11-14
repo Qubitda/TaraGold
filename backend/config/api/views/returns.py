@@ -8,6 +8,7 @@ from django.core.exceptions import (
     PermissionDenied as DjangoPermissionDenied,
     ValidationError as DjangoValidationError,
 )
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -55,9 +56,9 @@ def _scope_returns(qs, actor):
 
 
 def _get_return(actor, pk: int) -> ReturnRequest:
-    qs = ReturnRequest.objects.select_related("order", "shipment").prefetch_related(
-        "lines"
-    )
+    qs = ReturnRequest.objects.select_related(
+        "order", "order__alici_firma", "shipment"
+    ).prefetch_related("lines__order_line__varyant")
     qs = _scope_returns(qs, actor)
     req = qs.filter(pk=pk).first()
     if req is None:
@@ -134,8 +135,13 @@ class ReturnListCreateView(IdempotencyMixin, APIView):
 
     def get(self, request):
         _assert_buyer_or_ops(request.user)
-        qs = ReturnRequest.objects.select_related("order", "shipment")
+        qs = ReturnRequest.objects.select_related(
+            "order", "order__alici_firma", "shipment"
+        )
         qs = _scope_returns(qs, request.user)
+        durum = (request.query_params.get("durum") or "").strip().upper()
+        if durum and durum in ReturnRequest.Durum.values:
+            qs = qs.filter(durum=durum)
         order_id = request.query_params.get("order_id")
         if order_id:
             try:
@@ -144,6 +150,14 @@ class ReturnListCreateView(IdempotencyMixin, APIView):
                 raise NotFound(detail="Sipariş bulunamadı.") from None
             _load_order(request.user, oid)
             qs = qs.filter(order_id=oid)
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = Q(sebep__icontains=q) | Q(notlar__icontains=q)
+            if _can_manage_returns(request.user):
+                cond |= Q(order__alici_firma__ad__icontains=q)
+            if q.isdigit():
+                cond |= Q(pk=int(q)) | Q(order_id=int(q))
+            qs = qs.filter(cond)
         qs = apply_ordering(
             qs,
             request,
@@ -153,7 +167,7 @@ class ReturnListCreateView(IdempotencyMixin, APIView):
         actor = request.user
         return paginate_queryset(
             request,
-            qs.prefetch_related("lines"),
+            qs.prefetch_related("lines__order_line__varyant"),
             present=lambda r: present_return(r, actor=actor),
         )
 

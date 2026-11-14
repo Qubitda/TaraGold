@@ -43,7 +43,7 @@ export function toOpsMeasurementBody(input: MeasurementInput): {
 }
 
 export const createInspectionSchema = z.object({
-  order_id: z.number().int().positive("Sipariş ID zorunludur."),
+  order_id: z.number({ message: "Sipariş seçilmelidir." }).int().positive("Sipariş seçilmelidir."),
   order_line_id: z.string().trim().optional(),
   notlar: z.string().trim().optional(),
 });

@@ -3,6 +3,7 @@ import type { components } from "@/lib/api/schema";
 export type InspectionMeasurementItem = {
   id: number;
   order_line_id: number;
+  varyant_sku?: string;
   birim?: string;
   beklenen?: string;
   olculen: string;
@@ -15,13 +16,19 @@ export type InspectionMeasurementItem = {
 };
 
 export type OpsInspection = components["schemas"]["OpsInspection"] & {
+  alici_firma_ad?: string;
   order_line_id?: number | null;
   shipment_blok?: boolean;
   notlar?: string;
   measurements?: InspectionMeasurementItem[];
   olusturma_tarihi?: string | null;
 };
-export type OpsInspectionPage = components["schemas"]["OpsInspectionPage"];
+export type OpsInspectionPage = Omit<
+  components["schemas"]["OpsInspectionPage"],
+  "results"
+> & {
+  results: OpsInspection[];
+};
 export type InspectionMeasurementRequest = Omit<
   components["schemas"]["OpsMeasurementRequest"],
   "olculen"

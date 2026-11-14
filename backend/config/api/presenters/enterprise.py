@@ -13,13 +13,18 @@ def present_org(ob: OrgBirimi, *, can_manage: bool = False) -> dict:
     actions = []
     if can_manage and ob.aktif:
         actions.append("add_member")
+    parent = getattr(ob, "parent", None)
+    firma = getattr(ob, "firma", None)
     data = {
         "id": ob.pk,
         "kod": ob.kod,
         "ad": ob.ad,
         "aktif": ob.aktif,
         "parent_id": ob.parent_id,
+        "parent_kod": getattr(parent, "kod", None) if parent else None,
+        "parent_ad": getattr(parent, "ad", None) if parent else None,
         "firma_id": ob.firma_id,
+        "firma_ad": getattr(firma, "ad", "") if firma else "",
         "allowed_actions": actions,
         "server_now": timezone.now().isoformat(),
     }
@@ -28,10 +33,16 @@ def present_org(ob: OrgBirimi, *, can_manage: bool = False) -> dict:
 
 
 def present_org_member(uy: OrgUyeligi) -> dict:
+    kullanici = getattr(uy, "kullanici", None)
+    full_name = ""
+    if kullanici is not None:
+        full_name = f"{getattr(kullanici, 'first_name', '') or ''} {getattr(kullanici, 'last_name', '') or ''}".strip()
     data = {
         "id": uy.pk,
         "org_birimi_id": uy.org_birimi_id,
         "kullanici_id": uy.kullanici_id,
+        "kullanici_username": getattr(kullanici, "username", "") if kullanici else "",
+        "kullanici_ad_soyad": full_name,
         "olusturma_tarihi": uy.olusturma_tarihi.isoformat()
         if uy.olusturma_tarihi
         else None,

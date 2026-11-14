@@ -56,8 +56,16 @@ from .finance import (
 )
 from .health import HealthView, ReadyView
 from .ops import OpsOrderSummaryView
+from .ops_categories import (
+    CategoryListView,
+    OpsCatalogRefDetailView,
+    OpsCatalogRefsView,
+    OpsCategoryDetailView,
+    OpsCategoryListCreateView,
+)
 from .ops_products import (
     OpsProductApproveView,
+    OpsProductChannelsView,
     OpsProductDetailView,
     OpsProductListCreateView,
     OpsProductPublishView,
@@ -65,18 +73,24 @@ from .ops_products import (
     OpsProductSubmitView,
     OpsProductUnpublishView,
     OpsProductVariantCreateView,
+    OpsProductVariantDetailView,
 )
 from .ops_firmalar import (
+    OpsAliciKanalErisimiDetailView,
     OpsAliciKanalErisimiListCreateView,
     OpsAliciKanalErisimiToggleView,
+    OpsFirmaAdresDetailView,
     OpsFirmaAdresListCreateView,
     OpsFirmaApiAnahtarIptalView,
     OpsFirmaApiAnahtarListCreateView,
     OpsFirmaAskiyaAlView,
+    OpsFirmaBankaDetailView,
     OpsFirmaBankaListCreateView,
+    OpsFirmaBelgeDetailView,
     OpsFirmaBelgeListCreateView,
     OpsFirmaDavetView,
     OpsFirmaDetailView,
+    OpsFirmaKontakDetailView,
     OpsFirmaKontakListCreateView,
     OpsFirmaListCreateView,
     OpsFirmaOnaylaView,
@@ -105,6 +119,7 @@ from .feed import (
     FeedXsdSchemaView,
 )
 from .ops_finance import (
+    OpsFinanceCariDetailView,
     OpsFinanceCariListView,
     OpsFinanceHakEdisListView,
     OpsFinanceLedgerListView,
@@ -124,8 +139,14 @@ from .ops_qc import (
 from .ops_definitions import (
     OpsDefinitionsDetailView,
     OpsDefinitionsListCreateView,
+    OpsSalesChannelProductsView,
 )
-from .ops_piyasa import OpsPiyasaMarjPolitikasiView
+from .ops_piyasa import (
+    OpsCanliPiyasaView,
+    OpsMarjKuraliDetailView,
+    OpsMarjKuraliListCreateView,
+    OpsPiyasaMarjPolitikasiView,
+)
 from .ops_shipment import (
     OpsShipmentCancelView,
     OpsShipmentDeliverView,
@@ -136,7 +157,12 @@ from .ops_shipment import (
     OpsShipmentPrepareView,
 )
 from .order import OrderDetailView, OrderListView
-from .org import OrgMemberListCreateView, OrgUnitDetailView, OrgUnitListCreateView
+from .org import (
+    OrgMemberDetailView,
+    OrgMemberListCreateView,
+    OrgUnitDetailView,
+    OrgUnitListCreateView,
+)
 from .payment import PaymentIntentCreateView
 from .payment_webhook import PaymentWebhookView
 from .reports import AliciDavranisOzetView, CiroAnomaliView, TicariSiparisOzetView
@@ -181,6 +207,8 @@ from .supplier import (
     SupplierRfqRevisionView,
     SupplierStockAdjustView,
     SupplierStockSummaryView,
+    SupplierVariantListView,
+    SupplierWarehouseDetailView,
     SupplierWarehouseListView,
 )
 
@@ -238,9 +266,26 @@ __all__ = [
     "PiyasaPanoView",
     "SalesChannelListView",
     "MeView",
+    "OpsAliciKanalErisimiDetailView",
     "OpsAliciKanalErisimiListCreateView",
     "OpsAliciKanalErisimiToggleView",
+    "OpsFirmaAdresDetailView",
+    "OpsFirmaAdresListCreateView",
+    "OpsFirmaApiAnahtarIptalView",
+    "OpsFirmaApiAnahtarListCreateView",
+    "OpsFirmaAskiyaAlView",
+    "OpsFirmaBankaDetailView",
+    "OpsFirmaBankaListCreateView",
+    "OpsFirmaBelgeDetailView",
+    "OpsFirmaBelgeListCreateView",
+    "OpsFirmaDavetView",
+    "OpsFirmaDetailView",
+    "OpsFirmaKontakDetailView",
+    "OpsFirmaKontakListCreateView",
+    "OpsFirmaListCreateView",
+    "OpsFirmaOnaylaView",
     "OpsBelgeAyarlariView",
+    "OpsFinanceCariDetailView",
     "OpsFinanceCariListView",
     "OpsFinanceHakEdisListView",
     "OpsFinanceLedgerListView",
@@ -257,7 +302,13 @@ __all__ = [
     "OpsInspectionStartView",
     "OpsOrderListView",
     "OpsOrderSummaryView",
+    "CategoryListView",
+    "OpsCatalogRefDetailView",
+    "OpsCatalogRefsView",
+    "OpsCategoryDetailView",
+    "OpsCategoryListCreateView",
     "OpsProductApproveView",
+    "OpsProductChannelsView",
     "OpsProductDetailView",
     "OpsProductListCreateView",
     "OpsProductPublishView",
@@ -265,8 +316,13 @@ __all__ = [
     "OpsProductSubmitView",
     "OpsProductUnpublishView",
     "OpsProductVariantCreateView",
+    "OpsProductVariantDetailView",
     "OpsDefinitionsDetailView",
     "OpsDefinitionsListCreateView",
+    "OpsSalesChannelProductsView",
+    "OpsCanliPiyasaView",
+    "OpsMarjKuraliDetailView",
+    "OpsMarjKuraliListCreateView",
     "OpsPiyasaMarjPolitikasiView",
     "OpsShipmentCancelView",
     "OpsShipmentDeliverView",
@@ -280,6 +336,7 @@ __all__ = [
     "OrderFromCheckoutView",
     "OrderListView",
     "OrderReorderView",
+    "OrgMemberDetailView",
     "OrgMemberListCreateView",
     "OrgUnitDetailView",
     "OrgUnitListCreateView",
@@ -324,5 +381,7 @@ __all__ = [
     "SupplierRfqRevisionView",
     "SupplierStockAdjustView",
     "SupplierStockSummaryView",
+    "SupplierVariantListView",
+    "SupplierWarehouseDetailView",
     "SupplierWarehouseListView",
 ]

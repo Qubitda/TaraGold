@@ -4,7 +4,10 @@ export type FinanceSummary = components["schemas"]["BuyerFinanceSummary"] & {
   credit?: CreditInfo | null;
   payment_intents?: PaymentIntent[];
 };
-export type CariHesap = components["schemas"]["BuyerCari"];
+export type CariHesap = components["schemas"]["BuyerCari"] & {
+  firma_ad?: string;
+  karsi_firma_ad?: string;
+};
 export type LedgerEntry = components["schemas"]["BuyerLedger"];
 export type CreditInfo = components["schemas"]["BuyerCredit"];
 export type PaymentIntent = components["schemas"]["BuyerPaymentIntent"] & {
@@ -20,7 +23,9 @@ export type CreditCheckResponse = {
 export type OpsCariRow = {
   id: number;
   firma_id: number;
+  firma_ad?: string;
   karsi_firma_id?: number | null;
+  karsi_firma_ad?: string;
   para_birimi: string;
   bakiye: string;
   kredi_limiti?: string | null;
@@ -30,7 +35,9 @@ export type OpsCariRow = {
 export type OpsLedgerRow = {
   id: number;
   firma_id: number;
+  firma_ad?: string;
   karsi_firma_id?: number | null;
+  karsi_firma_ad?: string;
   yon: string;
   tutar: string;
   para_birimi: string;
@@ -44,6 +51,7 @@ export type OpsPaymentRow = {
   id: number;
   order_id: number;
   alici_firma_id: number;
+  alici_firma_ad?: string;
   durum: string;
   tutar: string;
   para_birimi: string;

@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -48,6 +49,7 @@ def _present_order_ops(o: Order) -> dict:
                 "varyant_id": ln.varyant_id,
                 "platform_kodu": getattr(ln.varyant, "sku", "")
                 or getattr(getattr(ln.varyant, "urun", None), "platform_kodu", ""),
+                "urun_ad": getattr(getattr(ln.varyant, "urun", None), "ad", ""),
                 "miktar": str(ln.miktar),
                 "birim": ln.birim,
                 "para_birimi": pb,
@@ -103,6 +105,16 @@ class OpsOrderListView(APIView):
                 qs = qs.filter(alici_firma_id=int(alici_id))
             except (TypeError, ValueError) as exc:
                 raise ValidationError({"alici_firma_id": "Geçersiz."}) from exc
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(alici_firma__ad__icontains=q)
+                | Q(lines__varyant__sku__icontains=q)
+                | Q(lines__varyant__urun__ad__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q))
+            qs = qs.filter(cond).distinct()
         qs = apply_ordering(qs, request, whitelist=("pk", "olusturma_tarihi"), default="-pk")
         return paginate_queryset(request, qs, present=_present_order_ops)
 
@@ -121,6 +133,19 @@ class OpsOrderOnayHavuzuView(APIView):
             )
             .filter(durum__in=[Order.Durum.ONAY_BEKLIYOR, Order.Durum.OLUSTURULDU])
         )
+        durum = (request.query_params.get("durum") or "").strip().upper()
+        if durum and durum in Order.Durum.values:
+            qs = qs.filter(durum=durum)
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            cond = (
+                Q(alici_firma__ad__icontains=q)
+                | Q(lines__varyant__sku__icontains=q)
+                | Q(lines__varyant__urun__ad__icontains=q)
+            )
+            if q.isdigit():
+                cond |= Q(pk=int(q))
+            qs = qs.filter(cond).distinct()
         qs = apply_ordering(qs, request, whitelist=("pk", "olusturma_tarihi"), default="-pk")
         return paginate_queryset(request, qs, present=_present_order_ops)
 

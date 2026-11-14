@@ -227,6 +227,8 @@ function createMockState() {
       {
         id: 1,
         varyant_id: 1001,
+        varyant_sku: "TG-BLZ-22-001-62",
+        urun_ad: "22 Ayar Adana Burma Bilezik",
         quote_id: 501,
         miktar: "2.000",
         birim: "ADET",
@@ -253,6 +255,8 @@ function createMockState() {
         {
           id: 1,
           varyant_id: 1001,
+          varyant_sku: "TG-BLZ-22-001-62",
+          urun_ad: "22 Ayar Adana Burma Bilezik",
           miktar: "2.000",
           birim: "ADET",
           snapshot_birim_fiyat_vergisiz: "98450.00",
@@ -298,6 +302,8 @@ function createMockState() {
         {
           id: 2,
           varyant_id: 1003,
+          varyant_sku: "TG-YZK-14-014-14",
+          urun_ad: "14 Ayar Tektaş Montür Yüzük",
           miktar: "5.000",
           birim: "ADET",
           snapshot_birim_fiyat_vergisiz: "9850.00",
@@ -444,9 +450,11 @@ function createMockState() {
     {
       id: 601,
       order_id: 201,
+      alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
       durum: "YOLDA",
       teslim_modeli: "PLATFORM_QC",
       sevk_yonu: "PLATFORM_TO_ALICI",
+      tasiyici: "Loomis Zırhlı Lojistik",
       kargo_firma: "Loomis",
       takip_no: "LOOMIS-TR-99812",
       notlar: "Zırhlı araç teslimatı",
@@ -460,14 +468,25 @@ function createMockState() {
     {
       id: 751,
       order_id: 201,
+      alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
       shipment_id: 601,
       durum: "TASLAK",
       sebep: "Numune ayar kontrol farkı",
+      iade_sebebi: "Numune ayar kontrol farkı",
+      mahsup_tutari: null,
       notlar: "",
       stok_iade_yapildi: false,
       finans_mahsup_yapildi: false,
       olusturma_tarihi: new Date(Date.now() - 3_600_000).toISOString(),
-      lines: [{ id: 1, order_line_id: 1, miktar: "1.000", birim: "ADET" }],
+      lines: [
+        {
+          id: 1,
+          order_line_id: 1,
+          varyant_sku: "TG-BLZ-22-001-62",
+          miktar: "1.000",
+          birim: "ADET",
+        },
+      ],
       allowed_actions: ["submit_review", "approve", "reject", "cancel"],
     },
   ];
@@ -477,12 +496,132 @@ function createMockState() {
       id: 701,
       order_id: 201,
       order_line_id: 1,
+      alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
       durum: "TASLAK",
       shipment_blok: true,
       notlar: "İlk parti ayar & gram kontrolü",
       olusturma_tarihi: new Date(Date.now() - 7_200_000).toISOString(),
       measurements: [],
       allowed_actions: ["start", "cancel"],
+    },
+  ];
+
+  const warehousesSeed: any[] = [
+    {
+      id: 1,
+      kod: "KASA-01",
+      ad: "Ana Kasa Depo",
+      sahip_tipi: "PLATFORM",
+      sahip_firma_id: 1,
+      sahip_firma_ad: "TaraGold Platform A.Ş.",
+      aktif: true,
+      olusturma_tarihi: nowIso(),
+    },
+  ];
+
+  const categoriesSeed: any[] = [
+    {
+      id: 1,
+      kod: "BILEZIK",
+      ad: "Bilezik",
+      slug: "bilezik",
+      tam_ad: "Bilezik",
+      ust_id: null,
+      fiyat_grubu_id: 1,
+      fiyat_grubu_ad: "VIP Kuyumcu",
+      etkin_fiyat_grubu_id: 1,
+      etkin_fiyat_grubu_ad: "VIP Kuyumcu",
+      sira: 10,
+      aktif: true,
+      dahili: false,
+      one_cikan: true,
+      urun_sayisi: 1,
+    },
+    {
+      id: 2,
+      kod: "YUZUK",
+      ad: "Yüzük",
+      slug: "yuzuk",
+      tam_ad: "Yüzük",
+      ust_id: null,
+      fiyat_grubu_id: 1,
+      fiyat_grubu_ad: "VIP Kuyumcu",
+      etkin_fiyat_grubu_id: 1,
+      etkin_fiyat_grubu_ad: "VIP Kuyumcu",
+      sira: 20,
+      aktif: true,
+      dahili: false,
+      one_cikan: true,
+      urun_sayisi: 1,
+    },
+    {
+      id: 3,
+      kod: "KULCE",
+      ad: "Külçe",
+      slug: "kulce",
+      tam_ad: "Külçe",
+      ust_id: null,
+      fiyat_grubu_id: 2,
+      fiyat_grubu_ad: "B2B API Standart",
+      etkin_fiyat_grubu_id: 2,
+      etkin_fiyat_grubu_ad: "B2B API Standart",
+      sira: 30,
+      aktif: true,
+      dahili: false,
+      one_cikan: false,
+      urun_sayisi: 1,
+    },
+  ];
+
+  const opsRenkler: any[] = [
+    { id: 1, kod: "SARI", ad: "Sarı", hex_kodu: "#D4AF37" },
+    { id: 2, kod: "BEYAZ", ad: "Beyaz", hex_kodu: "#E5E7EB" },
+    { id: 3, kod: "ROZE", ad: "Roze", hex_kodu: "#E8A89A" },
+  ];
+  const opsOlculer: any[] = [
+    { id: 1, tip: "BILEZIK_CAP", sayisal_deger: "62.00", deger: "62 mm" },
+    { id: 2, tip: "YUZUK_NO", sayisal_deger: "14.00", deger: "14" },
+  ];
+  const opsAyarlar: any[] = [
+    { id: 1, metal_id: 1, metal_kod: "XAU", metal_ad: "Altın", fiyat_kaynagi: "HAS_ALTIN", ayar_degeri: 22, ayar_kodu: "22K", milyem: "0.9160" },
+    { id: 2, metal_id: 1, metal_kod: "XAU", metal_ad: "Altın", fiyat_kaynagi: "HAS_ALTIN", ayar_degeri: 14, ayar_kodu: "14K", milyem: "0.5850" },
+    { id: 3, metal_id: 1, metal_kod: "XAU", metal_ad: "Altın", fiyat_kaynagi: "HAS_ALTIN", ayar_degeri: 24, ayar_kodu: "24K", milyem: "0.9950" },
+  ];
+  const opsMetalKurlari: any[] = [
+    { id: 1, metal_id: 1, metal_kod: "XAU", metal_ad: "Altın", saglayici_id: 1, saglayici_kod: "NADIR", kur_tipi: "SATIS", saf_birim_fiyat: "3450.00", kaynak: "CANLI", manuel_neden: "", zaman: nowIso() },
+  ];
+  const opsDovizKurlari: any[] = [
+    { id: 1, para_birimi: "USD", saglayici_id: 1, saglayici_kod: "TCMB", kur_tipi: "SATIS", kur: "38.2000", kaynak: "CANLI", manuel_neden: "", zaman: nowIso() },
+    { id: 2, para_birimi: "EUR", saglayici_id: 1, saglayici_kod: "TCMB", kur_tipi: "SATIS", kur: "41.4500", kaynak: "CANLI", manuel_neden: "", zaman: nowIso() },
+  ];
+  const marjPolitikasi = {
+    alis_marj: "0.50",
+    satis_marj: "1.25",
+    marj_modu: "YUZDE",
+    guncelleme_tarihi: nowIso(),
+  };
+  const opsCariList: any[] = [
+    {
+      id: 1,
+      firma_id: 2,
+      firma_ad: "Anadolu Kuyumculuk Ltd.",
+      karsi_firma_id: 1,
+      karsi_firma_ad: "TaraGold Platform A.Ş.",
+      para_birimi: "TRY",
+      bakiye: "53100.00",
+      kredi_limiti: "1000000.00",
+      guncelleme_tarihi: nowIso(),
+    },
+    {
+      id: 2,
+      firma_id: 1,
+      firma_ad: "TaraGold Platform A.Ş.",
+      karsi_firma_id: 2,
+      karsi_firma_ad: "Anadolu Kuyumculuk Ltd.",
+      para_birimi: "USD",
+      bakiye: "12500.00",
+      kredi_limiti: "250000.00",
+      guncelleme_tarihi: nowIso(),
     },
   ];
 
@@ -1327,9 +1466,25 @@ function createMockState() {
       return true;
     }
 
-    // Catalog & Ops Products
+    // Catalog, Categories, Definitions & Ops Products
     if (path === "/catalog/" && method === "GET") {
-      sendJson(res, 200, paginate(catalogProducts, url));
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const filtered = q
+        ? catalogProducts.filter((p) => `${p.ad} ${p.platform_kodu} ${p.kategori}`.toLowerCase().includes(q))
+        : catalogProducts;
+      sendJson(res, 200, paginate(filtered, url));
+      return true;
+    }
+    if (path === "/catalog/monturler/" && method === "GET") {
+      sendJson(res, 200, paginate(catalogProducts.filter((p) => p.kategori === "Yüzük"), url));
+      return true;
+    }
+    if (path === "/catalog/taslar/" && method === "GET") {
+      sendJson(res, 200, {
+        count: 1,
+        results: [{ id: 1, kod: "PRL", ad: "Pırlanta", degerli: true, sira: 1 }],
+        referanslar: { kesimler: [], berrakliklar: [], renk_dereceleri: [], kesim_kaliteleri: [], sertifika_kurumlari: [], menseiler: [] },
+      });
       return true;
     }
     const catDetailMatch = /^\/catalog\/(\d+)\/$/.exec(path);
@@ -1342,19 +1497,190 @@ function createMockState() {
       sendJson(res, 200, item);
       return true;
     }
+    if (path === "/categories/" && method === "GET") {
+      const activeOnly = categoriesSeed.filter((c) => c.aktif);
+      sendJson(res, 200, paginate(activeOnly, url));
+      return true;
+    }
+    if (path === "/ops/categories/") {
+      if (method === "GET") {
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const filtered = q
+          ? categoriesSeed.filter((c) => `${c.ad} ${c.kod}`.toLowerCase().includes(q))
+          : categoriesSeed;
+        sendJson(res, 200, paginate(filtered, url));
+        return true;
+      }
+      if (method === "POST") {
+        const body = await readJsonBody(req);
+        const c = {
+          id: genId(),
+          kod: String(body.kod || "KAT").toUpperCase(),
+          ad: String(body.ad || "Yeni Kategori"),
+          slug: String(body.ad || "yeni").toLowerCase().replace(/\s+/g, "-"),
+          tam_ad: String(body.ad || "Yeni Kategori"),
+          ust_id: body.ust_id ?? null,
+          fiyat_grubu_id: body.fiyat_grubu_id ?? null,
+          sira: Number(body.sira ?? 0),
+          aktif: body.aktif !== false,
+          dahili: Boolean(body.dahili),
+          one_cikan: Boolean(body.one_cikan),
+          urun_sayisi: 0,
+        };
+        categoriesSeed.push(c);
+        sendJson(res, 201, c);
+        return true;
+      }
+    }
+    const opsCatDetailMatch = /^\/ops\/categories\/(\d+)\/$/.exec(path);
+    if (opsCatDetailMatch) {
+      const idx = categoriesSeed.findIndex((c) => c.id === Number(opsCatDetailMatch[1]));
+      if (idx === -1) {
+        sendJson(res, 404, { status: 404, title: "Kategori bulunamadı" });
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        Object.assign(categoriesSeed[idx], body);
+        sendJson(res, 200, categoriesSeed[idx]);
+        return true;
+      }
+      if (method === "DELETE") {
+        const [removed] = categoriesSeed.splice(idx, 1);
+        sendJson(res, 200, { deleted: true, id: removed.id });
+        return true;
+      }
+    }
+    if (path === "/ops/catalog-refs/") {
+      if (method === "GET") {
+        sendJson(res, 200, {
+          renkler: opsRenkler,
+          olculer: opsOlculer,
+          ayarlar: opsAyarlar,
+          birimler: [
+            { kod: "ADET", ad: "Adet" },
+            { kod: "GRAM", ad: "Gram" },
+          ],
+          olcu_tipleri: [
+            { kod: "STANDART", ad: "Standart" },
+            { kod: "YUZUK_NO", ad: "Yüzük Numarası" },
+            { kod: "BILEZIK_CAP", ad: "Bilezik Çapı" },
+          ],
+          fiyat_tipleri: [
+            { kod: "GRAM_HAS_ISCILIK", ad: "Has + İşçilik" },
+            { kod: "SABIT_FIYAT", ad: "Sabit Fiyat" },
+          ],
+          temin_tipleri: [
+            { kod: "STOKTAN", ad: "Stoktan Teslim" },
+            { kod: "SIPARIS_UZERINE", ad: "Sipariş Üzerine" },
+          ],
+          server_now: nowIso(),
+        });
+        return true;
+      }
+      if (method === "POST") {
+        const body = await readJsonBody(req);
+        const item = { id: genId(), ...body };
+        if (body.tip === "renk") opsRenkler.push(item as any);
+        else if (body.tip === "olcu") opsOlculer.push(item as any);
+        sendJson(res, 201, item);
+        return true;
+      }
+    }
+    if (path === "/ops/piyasa/marj-politikasi/") {
+      if (method === "GET") {
+        sendJson(res, 200, marjPolitikasi);
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        Object.assign(marjPolitikasi, body, { guncelleme_tarihi: nowIso() });
+        sendJson(res, 200, marjPolitikasi);
+        return true;
+      }
+    }
+    const opsDefMatch = /^\/ops\/definitions\/([^/]+)\/(?:([^/]+)\/)?$/.exec(path);
+    if (opsDefMatch) {
+      const kaynak = opsDefMatch[1];
+      const itemId = opsDefMatch[2];
+      const store: any[] =
+        kaynak === "satis-kanallari"
+          ? salesChannels
+          : kaynak === "fiyat-gruplari"
+            ? fiyatGruplari
+            : kaynak === "ayar-milyem"
+              ? opsAyarlar
+              : kaynak === "metal-kurlari"
+                ? opsMetalKurlari
+                : kaynak === "doviz-kurlari"
+                  ? opsDovizKurlari
+                  : [
+                      { id: "ADET", kod: "ADET", ad: "Adet" },
+                      { id: "GRAM", kod: "GRAM", ad: "Gram" },
+                    ];
+      if (!itemId && method === "GET") {
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const filtered = q
+          ? store.filter((x) => JSON.stringify(x).toLowerCase().includes(q))
+          : store;
+        sendJson(res, 200, {
+          kaynak,
+          ...paginate(filtered, url),
+          server_now: nowIso(),
+          refs: {
+            metaller: [{ id: 1, kod: "XAU", ad: "Altın", gram_bazli: true }],
+            saglayicilar: [{ id: 1, kod: "NADIR", ad: "Nadir", aktif: true }],
+            kur_tipleri: ["ALIS", "SATIS"],
+            fiyat_kaynaklari: ["HAS_ALTIN", "SABIT"],
+            para_birimleri: ["TRY", "USD", "EUR"],
+          },
+        });
+        return true;
+      }
+      if (!itemId && method === "POST") {
+        const body = await readJsonBody(req);
+        const created = { id: genId(), aktif: true, sira: 0, ...body };
+        store.push(created);
+        sendJson(res, 201, created);
+        return true;
+      }
+      if (itemId) {
+        const idx = store.findIndex((x) => String(x.id) === String(itemId));
+        if (idx === -1) {
+          sendJson(res, 404, { status: 404, title: "Tanım bulunamadı" });
+          return true;
+        }
+        if (method === "PATCH") {
+          const body = await readJsonBody(req);
+          Object.assign(store[idx], body);
+          sendJson(res, 200, store[idx]);
+          return true;
+        }
+        if (method === "DELETE") {
+          const [removed] = store.splice(idx, 1);
+          sendJson(res, 200, { deleted: true, id: removed.id, kaynak });
+          return true;
+        }
+      }
+    }
     if (path === "/ops/products/") {
       if (method === "GET") {
-        sendJson(res, 200, paginate(catalogProducts, url));
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const filtered = q
+          ? catalogProducts.filter((p) => `${p.ad} ${p.platform_kodu} ${p.kategori}`.toLowerCase().includes(q))
+          : catalogProducts;
+        sendJson(res, 200, paginate(filtered, url));
         return true;
       }
       if (method === "POST") {
         const body = await readJsonBody(req);
         const id = genId();
+        const cat = categoriesSeed.find((c) => c.id === Number(body.kategori_id));
         const item = {
           id,
           ad: String(body.ad || "Yeni Ürün"),
           platform_kodu: `TG-NEW-${id}`,
-          kategori: "Genel",
+          kategori: cat?.ad || "Genel",
           kategori_id: Number(body.kategori_id || 1),
           ayar: "14K",
           ayar_id: Number(body.ayar_id || 2),
@@ -1372,17 +1698,73 @@ function createMockState() {
         return true;
       }
     }
-    const opsProdMatch = /^\/ops\/products\/(\d+)\/(?:(variants|submit|approve|reject|publish|unpublish)\/)?$/.exec(path);
-    if (opsProdMatch) {
-      const prod = catalogProducts.find((p) => p.id === Number(opsProdMatch[1]));
+    const opsVariantMatch = /^\/ops\/products\/(\d+)\/variants\/(\d+)\/$/.exec(path);
+    if (opsVariantMatch) {
+      const prod = catalogProducts.find((p) => p.id === Number(opsVariantMatch[1]));
       if (!prod) {
+        sendJson(res, 404, { status: 404, title: "Ürün bulunamadı" });
+        return true;
+      }
+      const vIdx = prod.varyantlar.findIndex((v) => v.id === Number(opsVariantMatch[2]));
+      if (vIdx === -1) {
+        sendJson(res, 404, { status: 404, title: "Varyant bulunamadı" });
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        Object.assign(prod.varyantlar[vIdx], body);
+        sendJson(res, 200, prod.varyantlar[vIdx]);
+        return true;
+      }
+      if (method === "DELETE") {
+        const [rem] = prod.varyantlar.splice(vIdx, 1);
+        prod.varyant_count = prod.varyantlar.length;
+        sendJson(res, 200, { deleted: true, id: rem.id });
+        return true;
+      }
+    }
+    const opsProdMatch = /^\/ops\/products\/(\d+)\/(?:(variants|channels|submit|approve|reject|publish|unpublish)\/)?$/.exec(path);
+    if (opsProdMatch) {
+      const prodIdx = catalogProducts.findIndex((p) => p.id === Number(opsProdMatch[1]));
+      if (prodIdx === -1) {
         sendJson(res, 404, { status: 404, title: "Bulunamadı" });
         return true;
       }
+      const prod = catalogProducts[prodIdx];
       const action = opsProdMatch[2];
       if (!action && method === "GET") {
         sendJson(res, 200, prod);
         return true;
+      }
+      if (!action && method === "PATCH") {
+        const body = await readJsonBody(req);
+        Object.assign(prod, body);
+        sendJson(res, 200, prod);
+        return true;
+      }
+      if (!action && method === "DELETE") {
+        catalogProducts.splice(prodIdx, 1);
+        sendJson(res, 200, { deleted: true, id: prod.id });
+        return true;
+      }
+      if (action === "channels") {
+        if (method === "GET") {
+          sendJson(res, 200, {
+            urun_id: prod.id,
+            results: salesChannels.map((ch) => ({
+              kanal_id: ch.id,
+              kod: ch.kod,
+              ad: ch.ad,
+              atanmis: true,
+              aktif: ch.aktif,
+            })),
+          });
+          return true;
+        }
+        if (method === "POST") {
+          sendJson(res, 200, { ok: true });
+          return true;
+        }
       }
       if (action === "variants" && method === "POST") {
         const body = await readJsonBody(req);
@@ -1411,20 +1793,49 @@ function createMockState() {
       }
     }
 
-    // Quotes & Price Locks
-    if (path === "/quotes/" && method === "POST") {
-      const body = await readJsonBody(req);
-      const id = genId();
-      const q = defaultQuote(id, Number(body.varyant_id || 1001), String(body.para_birimi || "TRY"));
-      quotes.set(id, q);
-      sendJson(res, 201, q);
+    if (path === "/supplier/variants/" && method === "GET") {
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const rows = catalogProducts.flatMap((p) =>
+        p.varyantlar.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          urun_id: p.id,
+          urun_ad: p.ad,
+          platform_kodu: p.platform_kodu,
+          gram: v.gram,
+          renk: v.renk,
+          beden: v.beden,
+        }))
+      );
+      const filtered = q ? rows.filter((r) => `${r.sku} ${r.urun_ad}`.toLowerCase().includes(q)) : rows;
+      sendJson(res, 200, paginate(filtered, url));
       return true;
+    }
+
+    // Quotes & Price Locks
+    if (path === "/quotes/") {
+      if (method === "GET") {
+        sendJson(res, 200, paginate(Array.from(quotes.values()), url));
+        return true;
+      }
+      if (method === "POST") {
+        const body = await readJsonBody(req);
+        const id = genId();
+        const q = defaultQuote(id, Number(body.varyant_id || 1001), String(body.para_birimi || "TRY"));
+        quotes.set(id, q);
+        sendJson(res, 201, q);
+        return true;
+      }
     }
     const quoteMatch = /^\/quotes\/(\d+)\/$/.exec(path);
     if (quoteMatch && method === "GET") {
       const id = Number(quoteMatch[1]);
       const q = quotes.get(id) || defaultQuote(id);
       sendJson(res, 200, q);
+      return true;
+    }
+    if (path === "/price-locks/" && method === "GET") {
+      sendJson(res, 200, paginate(Array.from(priceLocks.values()), url));
       return true;
     }
     if (path === "/price-locks/" && method === "POST") {
@@ -1766,7 +2177,12 @@ function createMockState() {
       return true;
     }
     if (path === "/orders/" && method === "GET") {
-      sendJson(res, 200, paginate(orders, url));
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+      let list = orders;
+      if (d) list = list.filter((o) => o.durum === d);
+      if (q) list = list.filter((o) => `${o.id} ${o.alici_firma_ad || ""} ${o.durum}`.toLowerCase().includes(q));
+      sendJson(res, 200, paginate(list, url));
       return true;
     }
     const orderMatch = /^\/orders\/(\d+)\/(?:(cancel|reorder)\/)?$/.exec(path);
@@ -1808,9 +2224,11 @@ function createMockState() {
     if (path === "/ops/orders/" && method === "GET") {
       const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
       const aid = url.searchParams.get("alici_firma_id");
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
       let list = orders;
       if (d) list = list.filter((o) => o.durum === d);
       if (aid) list = list.filter((o) => String(o.alici_firma_id) === String(aid));
+      if (q) list = list.filter((o) => `${o.id} ${o.alici_firma_ad || ""} ${o.durum}`.toLowerCase().includes(q));
       sendJson(res, 200, paginate(list, url));
       return true;
     }
@@ -1826,9 +2244,11 @@ function createMockState() {
       return true;
     }
     if (path === "/ops/orders/onay-havuzu/" && method === "GET") {
-      const pool = orders.filter(
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      let pool = orders.filter(
         (o) => o.durum === "ONAY_BEKLIYOR" || o.durum === "OLUSTURULDU" || o.durum === "BEKLEMEDE"
       );
+      if (q) pool = pool.filter((o) => `${o.id} ${o.alici_firma_ad || ""}`.toLowerCase().includes(q));
       sendJson(res, 200, { count: pool.length, results: pool });
       return true;
     }
@@ -1971,17 +2391,23 @@ function createMockState() {
       return true;
     }
 
-    // Belgeler & BelgeAyarlari
-    if (path === "/belgeler/" && method === "GET") {
+    // Belgeler / Documents & BelgeAyarlari
+    if ((path === "/belgeler/" || path === "/documents/") && method === "GET") {
       const tipFilter = (url.searchParams.get("tip") || "").trim().toUpperCase();
       const orderFilter = url.searchParams.get("order_id");
-      let list = belgeler;
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      let list = belgeler.map((b) => ({
+        ...b,
+        firma_ad: opsFirmalar.find((f) => f.id === b.firma_id)?.ad || "",
+        download_url: `/api/v1/documents/${b.id}/download/`,
+      }));
       if (tipFilter) list = list.filter((b) => b.tip === tipFilter);
       if (orderFilter) list = list.filter((b) => String(b.order_id) === String(orderFilter));
+      if (q) list = list.filter((b) => `${b.baslik} ${b.firma_ad} ${b.id}`.toLowerCase().includes(q));
       sendJson(res, 200, paginate(list, url));
       return true;
     }
-    const belgeDownloadMatch = /^\/belgeler\/(\d+)\/download\/$/.exec(path);
+    const belgeDownloadMatch = /^\/(?:belgeler|documents)\/(\d+)\/download\/$/.exec(path);
     if (belgeDownloadMatch && method === "GET") {
       const doc = belgeler.find((b) => b.id === Number(belgeDownloadMatch[1]));
       if (!doc) {
@@ -2017,7 +2443,52 @@ function createMockState() {
       }
     }
 
-    // Stock
+    // Warehouses & Stock
+    if (path === "/supplier/warehouses/") {
+      if (method === "GET") {
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const filtered = q
+          ? warehousesSeed.filter((w) => `${w.kod} ${w.ad}`.toLowerCase().includes(q))
+          : warehousesSeed;
+        sendJson(res, 200, paginate(filtered, url));
+        return true;
+      }
+      if (method === "POST") {
+        const body = await readJsonBody(req);
+        const w = {
+          id: genId(),
+          kod: String(body.kod || "DEPO").toUpperCase(),
+          ad: String(body.ad || "Yeni Depo"),
+          sahip_tipi: "PLATFORM",
+          sahip_firma_id: Number(body.sahip_firma_id || 1),
+          sahip_firma_ad: opsFirmalar.find((f) => f.id === Number(body.sahip_firma_id || 1))?.ad || "Platform",
+          aktif: body.aktif !== false,
+          olusturma_tarihi: nowIso(),
+        };
+        warehousesSeed.push(w);
+        sendJson(res, 201, w);
+        return true;
+      }
+    }
+    const whDetailMatch = /^\/supplier\/warehouses\/(\d+)\/$/.exec(path);
+    if (whDetailMatch) {
+      const idx = warehousesSeed.findIndex((w) => w.id === Number(whDetailMatch[1]));
+      if (idx === -1) {
+        sendJson(res, 404, { status: 404, title: "Depo bulunamadı" });
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        Object.assign(warehousesSeed[idx], body);
+        sendJson(res, 200, warehousesSeed[idx]);
+        return true;
+      }
+      if (method === "DELETE") {
+        const [rem] = warehousesSeed.splice(idx, 1);
+        sendJson(res, 200, { deleted: true, id: rem.id });
+        return true;
+      }
+    }
     if (path === "/supplier/stock/" && method === "GET") {
       sendJson(res, 200, paginate(stockBalances, url));
       return true;
@@ -2133,44 +2604,47 @@ function createMockState() {
       return true;
     }
     if (path === "/ops/finance/cari/" && method === "GET") {
-      sendJson(
-        res,
-        200,
-        paginate(
-          [
-            {
-              id: 1,
-              firma_id: 2,
-              karsi_firma_id: 1,
-              para_birimi: "TRY",
-              bakiye: "53100.00",
-              kredi_limiti: "1000000.00",
-              guncelleme_tarihi: nowIso(),
-            },
-            {
-              id: 2,
-              firma_id: 1,
-              karsi_firma_id: null,
-              para_birimi: "USD",
-              bakiye: "12500.00",
-              kredi_limiti: "250000.00",
-              guncelleme_tarihi: nowIso(),
-            },
-          ],
-          url
-        )
-      );
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const filtered = q
+        ? opsCariList.filter((c) => `${c.firma_ad} ${c.karsi_firma_ad} ${c.para_birimi}`.toLowerCase().includes(q))
+        : opsCariList;
+      sendJson(res, 200, paginate(filtered, url));
       return true;
     }
+    const opsCariDetailMatch = /^\/ops\/finance\/cari\/(\d+)\/$/.exec(path);
+    if (opsCariDetailMatch) {
+      const target = opsCariList.find((c) => c.id === Number(opsCariDetailMatch[1]));
+      if (!target) {
+        sendJson(res, 404, { status: 404, title: "Cari hesap bulunamadı" });
+        return true;
+      }
+      if (method === "GET") {
+        sendJson(res, 200, target);
+        return true;
+      }
+      if (method === "PATCH") {
+        const body = await readJsonBody(req);
+        if (body.kredi_limiti !== undefined) {
+          target.kredi_limiti = String(body.kredi_limiti);
+          target.guncelleme_tarihi = nowIso();
+        }
+        sendJson(res, 200, target);
+        return true;
+      }
+    }
     if (path === "/ops/finance/ledger/" && method === "GET") {
-      sendJson(
-        res,
-        200,
-        paginate(
-          ledgerEntries.map((e) => ({ firma_id: 1, karsi_firma_id: 2, ...e })),
-          url
-        )
-      );
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const rows = ledgerEntries.map((e) => ({
+        firma_id: 2,
+        firma_ad: "Anadolu Kuyumculuk Ltd.",
+        karsi_firma_id: 1,
+        karsi_firma_ad: "TaraGold Platform A.Ş.",
+        ...e,
+      }));
+      const filtered = q
+        ? rows.filter((e) => `${e.hareket_tipi} ${e.firma_ad} ${e.referans_tip}`.toLowerCase().includes(q))
+        : rows;
+      sendJson(res, 200, paginate(filtered, url));
       return true;
     }
     if (path === "/ops/finance/payments/" && method === "GET") {
@@ -2233,17 +2707,25 @@ function createMockState() {
 
     // Logistics & Returns
     if ((path === "/ops/shipments/" || path === "/shipments/") && method === "GET") {
-      sendJson(res, 200, paginate(shipments, url));
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+      let list = shipments;
+      if (d) list = list.filter((s) => s.durum === d);
+      if (q) list = list.filter((s) => `${s.tasiyici || ""} ${s.kargo_firma || ""} ${s.takip_no || ""} ${s.alici_firma_ad || ""}`.toLowerCase().includes(q));
+      sendJson(res, 200, paginate(list, url));
       return true;
     }
     if (path === "/ops/shipments/" && method === "POST") {
       const body = await readJsonBody(req);
+      const ord = orders.find((o) => o.id === Number(body.order_id || 201));
       const s = {
         id: genId(),
         order_id: Number(body.order_id || 201),
+        alici_firma_ad: ord?.alici_firma_ad || "Anadolu Kuyumculuk Ltd.",
         durum: "TASLAK",
         teslim_modeli: String(body.teslim_modeli || "PLATFORM_QC"),
         sevk_yonu: String(body.sevk_yonu || "PLATFORM_TO_ALICI"),
+        tasiyici: String(body.tasiyici || ""),
         kargo_firma: "",
         takip_no: String(body.takip_no || ""),
         notlar: String(body.notlar || ""),
@@ -2306,7 +2788,12 @@ function createMockState() {
     }
     if (path === "/returns/") {
       if (method === "GET") {
-        sendJson(res, 200, paginate(returnsList, url));
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+        let list = returnsList;
+        if (d) list = list.filter((r) => r.durum === d);
+        if (q) list = list.filter((r) => `${r.sebep || ""} ${r.iade_sebebi || ""} ${r.alici_firma_ad || ""}`.toLowerCase().includes(q));
+        sendJson(res, 200, paginate(list, url));
         return true;
       }
       if (method === "POST") {
@@ -2314,9 +2801,12 @@ function createMockState() {
         const r = {
           id: genId(),
           order_id: Number(body.order_id || 201),
+          alici_firma_ad: orders.find((o) => o.id === Number(body.order_id || 201))?.alici_firma_ad || "Anadolu Kuyumculuk Ltd.",
           shipment_id: Number(body.shipment_id || 601),
           durum: "TASLAK",
-          sebep: String(body.sebep || ""),
+          sebep: String(body.sebep || body.iade_sebebi || ""),
+          iade_sebebi: String(body.iade_sebebi || body.sebep || ""),
+          mahsup_tutari: body.mahsup_tutari ?? null,
           notlar: String(body.notlar || ""),
           stok_iade_yapildi: false,
           finans_mahsup_yapildi: false,
@@ -2325,6 +2815,7 @@ function createMockState() {
             ? body.lines.map((l: any, idx: number) => ({
                 id: idx + 1,
                 order_line_id: Number(l.order_line_id || 1),
+                varyant_sku: "TG-BLZ-22-001-62",
                 miktar: String(l.miktar || "1"),
               }))
             : [],
@@ -2382,7 +2873,12 @@ function createMockState() {
     // Quality (QC)
     if (path === "/ops/inspections/") {
       if (method === "GET") {
-        sendJson(res, 200, paginate(inspections, url));
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const d = (url.searchParams.get("durum") || "").trim().toUpperCase();
+        let list = inspections;
+        if (d) list = list.filter((i) => i.durum === d);
+        if (q) list = list.filter((i) => `${i.notlar || ""} ${i.alici_firma_ad || ""} ${i.durum}`.toLowerCase().includes(q));
+        sendJson(res, 200, paginate(list, url));
         return true;
       }
       if (method === "POST") {
@@ -2391,6 +2887,7 @@ function createMockState() {
           id: genId(),
           order_id: Number(body.order_id || 201),
           order_line_id: body.order_line_id ? Number(body.order_line_id) : null,
+          alici_firma_ad: orders.find((o) => o.id === Number(body.order_id || 201))?.alici_firma_ad || "Anadolu Kuyumculuk Ltd.",
           durum: "TASLAK",
           shipment_blok: true,
           notlar: String(body.notlar || ""),
@@ -2525,7 +3022,13 @@ function createMockState() {
     }
     if (path === "/ops/firmalar/") {
       if (method === "GET") {
-        sendJson(res, 200, paginate(opsFirmalar, url));
+        const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+        const tip = (url.searchParams.get("tip") || "").trim().toLowerCase();
+        let list = opsFirmalar;
+        if (tip === "alici") list = list.filter((f) => f.alici_mi);
+        if (tip === "tedarikci") list = list.filter((f) => f.tedarikci_mi);
+        if (q) list = list.filter((f) => `${f.ad} ${f.firma_kodu} ${f.unvan || ""}`.toLowerCase().includes(q));
+        sendJson(res, 200, paginate(list, url));
         return true;
       }
       if (method === "POST") {
@@ -2546,11 +3049,12 @@ function createMockState() {
     }
     const opsFirmaDetailMatch = /^\/ops\/firmalar\/(\d+)\/$/.exec(path);
     if (opsFirmaDetailMatch) {
-      const f = opsFirmalar.find((x) => x.id === Number(opsFirmaDetailMatch[1]));
-      if (!f) {
+      const fIdx = opsFirmalar.findIndex((x) => x.id === Number(opsFirmaDetailMatch[1]));
+      if (fIdx === -1) {
         sendJson(res, 404, { status: 404, title: "Firma bulunamadı" });
         return true;
       }
+      const f = opsFirmalar[fIdx];
       if (method === "GET") {
         sendJson(res, 200, f);
         return true;
@@ -2559,6 +3063,11 @@ function createMockState() {
         const body = await readJsonBody(req);
         Object.assign(f, body);
         sendJson(res, 200, f);
+        return true;
+      }
+      if (method === "DELETE") {
+        opsFirmalar.splice(fIdx, 1);
+        sendJson(res, 204, null);
         return true;
       }
     }
@@ -2785,12 +3294,27 @@ function createMockState() {
       return true;
     }
     if (path === "/ops/anomalies/ciro/" && method === "GET") {
+      const esik = url.searchParams.get("esik_ciro") || "100000";
+      const esikNum = Number(esik) || 100000;
+      const ciroVal = 246150;
+      const uyarilar =
+        ciroVal >= esikNum
+          ? [
+              {
+                alici_firma_id: 2,
+                alici_firma_ad: "Anadolu Kuyumculuk Ltd.",
+                ciro_vergisiz: ciroVal.toFixed(2),
+                esik_ciro: esikNum.toFixed(2),
+                anomali: true,
+              },
+            ]
+          : [];
       sendJson(res, 200, {
-        esik_ciro: url.searchParams.get("esik_ciro") || "100000",
+        esik_ciro: esik,
         read_model: "mock",
         scope: "platform",
-        uyari_adet: 0,
-        uyarilar: [],
+        uyari_adet: uyarilar.length,
+        uyarilar,
       });
       return true;
     }
