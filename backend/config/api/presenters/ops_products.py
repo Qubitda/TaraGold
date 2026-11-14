@@ -5,6 +5,8 @@ from __future__ import annotations
 from api.masking import assert_masked
 from firmalar.role_permissions import P
 from firmalar.services.yetki_servisi import has_perm
+from urunler.services.gorsel_servisi import present_gorsel
+from urunler.services.katalog_hazirlik_servisi import urun_hazirlik_durumu
 
 
 def _allowed_actions(urun, user) -> list[str]:
@@ -47,7 +49,9 @@ def present_ops_variant(v) -> dict:
     return data
 
 
-def present_ops_product(urun, *, user, include_variants: bool = False) -> dict:
+def present_ops_product(
+    urun, *, user, include_variants: bool = False, include_media: bool = False
+) -> dict:
     varyant_count = getattr(urun, "varyant_count", None)
     if varyant_count is None:
         varyant_count = urun.varyantlar.filter(aktif=True).count()
@@ -93,7 +97,23 @@ def present_ops_product(urun, *, user, include_variants: bool = False) -> dict:
         "olusturan_firma_id": urun.olusturan_firma_id,
         "varyant_count": int(varyant_count),
         "allowed_actions": _allowed_actions(urun, user),
+        "hazirlik": urun_hazirlik_durumu(urun),
     }
+    if include_media or include_variants:
+        gorseller = list(urun.gorseller.all().order_by("sira", "pk"))
+        data["gorseller"] = [present_gorsel(g) for g in gorseller]
+        data["kapak_url"] = next(
+            (present_gorsel(g)["url"] for g in gorseller if g.kapak and not g.varyant_id),
+            "",
+        )
+    else:
+        kapak = (
+            urun.gorseller.filter(kapak=True, varyant__isnull=True)
+            .order_by("sira", "pk")
+            .first()
+        )
+        data["kapak_url"] = present_gorsel(kapak)["url"] if kapak else ""
+        data["gorseller"] = []
     if include_variants:
         data["varyantlar"] = [
             present_ops_variant(v)

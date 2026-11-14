@@ -99,10 +99,31 @@ class Command(BaseCommand):
         if not gruplar:
             self.stdout.write(self.style.ERROR("Önce çalıştır: python manage.py seed_fiyat_gruplari"))
             return
+        from django.utils.text import slugify
+
         for sira, (ad, grup_kodu) in enumerate(KATEGORILER, start=1):
-            _, olustu = Kategori.objects.get_or_create(
-                kod=kodla(ad), defaults={"ad": ad, "sira": sira, "fiyat_grubu": gruplar[grup_kodu]},
-            )
-            yeni += olustu
+            kod = kodla(ad)
+            fg = gruplar.get(grup_kodu) or next(iter(gruplar.values()), None)
+            if fg is None:
+                self.stdout.write(self.style.ERROR(f"Fiyat grubu yok: {grup_kodu}"))
+                continue
+            obj = Kategori.objects.filter(kod=kod).first()
+            if obj is None:
+                # Eski kayıtlarda slug çakışması (kod farklı) — slug ile bağla
+                obj = Kategori.objects.filter(slug=slugify(ad)).first()
+            if obj is None:
+                obj = Kategori(kod=kod, ad=ad, sira=sira, fiyat_grubu=fg)
+                obj.save()
+                yeni += 1
+            else:
+                changed = False
+                if not obj.kod:
+                    obj.kod = kod
+                    changed = True
+                if obj.fiyat_grubu_id is None:
+                    obj.fiyat_grubu = fg
+                    changed = True
+                if changed:
+                    obj.save()
 
         self.stdout.write(self.style.SUCCESS(f"Tamam. {yeni} yeni kayıt eklendi."))

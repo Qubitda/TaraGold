@@ -68,6 +68,10 @@ export default defineConfig(({ mode }) => {
                 target: djangoTarget,
                 changeOrigin: true,
               },
+              "/media": {
+                target: djangoTarget,
+                changeOrigin: true,
+              },
             },
           }
         : {}),

@@ -24,6 +24,7 @@ from .referanslar import (
 )
 from .olcu import OlcuDegeri
 from .urun import Urun
+from .urun_gorsel import UrunGorsel
 from .urun_kanal import UrunKanal
 from .urun_tasi import UrunTasi
 from .varyant import Varyant
@@ -46,6 +47,7 @@ __all__ = [
     "TasTipi",
     "Teknik",
     "Urun",
+    "UrunGorsel",
     "UrunKanal",
     "UrunTasi",
     "Varyant",

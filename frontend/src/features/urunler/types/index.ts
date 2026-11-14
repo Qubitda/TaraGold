@@ -23,6 +23,54 @@ export interface BuyerCatalogItem {
   termin_gun?: number | null;
   yayin_durumu: string;
   allowed_actions: string[];
+  kapak_url?: string;
+}
+
+export interface ProductMediaItem {
+  id: number;
+  urun_id?: number;
+  varyant_id?: number | null;
+  url: string;
+  tip: string;
+  sira: number;
+  kapak: boolean;
+  alt_metin?: string;
+}
+
+export interface ProductReadiness {
+  tamamlanan: number;
+  toplam: number;
+  yuzde: number;
+  hazir: boolean;
+  eksikler: string[];
+  kontroller: Array<{
+    kod: string;
+    etiket: string;
+    ok: boolean;
+    zorunlu: boolean;
+  }>;
+  aktif_varyant_sayisi?: number;
+}
+
+export interface PricePreviewResponse {
+  available: boolean;
+  varyant_id: number;
+  urun_id: number;
+  fiyat_tipi: string;
+  gram?: string | null;
+  ek_bedel?: string;
+  sabit_fiyat?: string | null;
+  reason_code?: string;
+  detail?: string;
+  hint?: string;
+  aciklama?: Record<string, string>;
+  teklif?: {
+    id: number;
+    fiyat_modeli: string;
+    birim_fiyat?: string | null;
+    para_birimi?: string;
+    versiyon?: number;
+  };
 }
 
 export interface BuyerCatalogDetail {
@@ -42,6 +90,12 @@ export interface BuyerCatalogDetail {
   renk_ekseni?: boolean;
   allowed_actions: string[];
   varyantlar: BuyerCatalogVariant[];
+  koleksiyon?: string;
+  teknikler?: string[];
+  stiller?: string[];
+  ozel_gunler?: string[];
+  kapak_url?: string;
+  gorseller?: ProductMediaItem[];
 }
 
 export interface BuyerCatalogPage {
@@ -117,6 +171,9 @@ export interface OpsProduct {
   kanallar?: Array<{ kanal_id: number; kod: string; ad: string; aktif: boolean }>;
   allowed_actions?: string[];
   varyantlar?: OpsProductVariant[];
+  hazirlik?: ProductReadiness;
+  gorseller?: ProductMediaItem[];
+  kapak_url?: string;
 }
 
 export interface OpsProductPage {

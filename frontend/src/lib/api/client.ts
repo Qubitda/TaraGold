@@ -154,9 +154,19 @@ export async function apiFetch<T>(
 
   const isMutating = method !== "GET" && method !== "HEAD";
 
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
   if (isMutating) {
-    if (!headers["Content-Type"] && options.body !== undefined) {
+    if (
+      !isFormData &&
+      !headers["Content-Type"] &&
+      options.body !== undefined
+    ) {
       headers["Content-Type"] = "application/json";
+    }
+    if (isFormData && headers["Content-Type"]) {
+      delete headers["Content-Type"];
     }
     headers["X-CSRFToken"] = await ensureCsrfToken();
 
@@ -180,8 +190,8 @@ export async function apiFetch<T>(
     body:
       options.body === undefined
         ? undefined
-        : typeof options.body === "string"
-          ? options.body
+        : isFormData || typeof options.body === "string"
+          ? (options.body as BodyInit)
           : JSON.stringify(options.body),
   });
 

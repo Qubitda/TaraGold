@@ -17,6 +17,9 @@ import type {
   OpsProductVariant,
   OpsProductVariantCreateRequest,
   OpsProductVariantUpdateRequest,
+  PricePreviewResponse,
+  ProductMediaItem,
+  ProductReadiness,
   TaslarPage,
 } from "../types";
 
@@ -216,5 +219,68 @@ export const urunlerService = {
       body: {},
       idempotencyKey: newIdempotencyKey(),
     });
+  },
+  bulkAddOpsVariants(
+    productId: number | string,
+    satirlar: OpsProductVariantCreateRequest[]
+  ): Promise<{
+    count: number;
+    results: OpsProductVariant[];
+    hazirlik?: ProductReadiness;
+  }> {
+    return apiFetch(`/ops/products/${productId}/variants/bulk/`, {
+      method: "POST",
+      body: { satirlar },
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  getOpsProductReadiness(id: number | string): Promise<ProductReadiness> {
+    return apiFetch<ProductReadiness>(`/ops/products/${id}/readiness/`);
+  },
+  getOpsProductMedia(
+    id: number | string
+  ): Promise<{ count: number; results: ProductMediaItem[] }> {
+    return apiFetch(`/ops/products/${id}/media/`);
+  },
+  uploadOpsProductMedia(
+    id: number | string,
+    file: File,
+    opts?: { kapak?: boolean; tip?: string; alt_metin?: string }
+  ): Promise<ProductMediaItem> {
+    const fd = new FormData();
+    fd.append("dosya", file);
+    if (opts?.kapak) fd.append("kapak", "true");
+    if (opts?.tip) fd.append("tip", opts.tip);
+    if (opts?.alt_metin) fd.append("alt_metin", opts.alt_metin);
+    return apiFetch(`/ops/products/${id}/media/`, {
+      method: "POST",
+      body: fd,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  setOpsProductMediaCover(
+    productId: number | string,
+    mediaId: number | string
+  ): Promise<ProductMediaItem> {
+    return apiFetch(`/ops/products/${productId}/media/${mediaId}/`, {
+      method: "POST",
+      body: { action: "set_cover" },
+    });
+  },
+  deleteOpsProductMedia(
+    productId: number | string,
+    mediaId: number | string
+  ): Promise<{ deleted: boolean; id: number }> {
+    return apiFetch(`/ops/products/${productId}/media/${mediaId}/`, {
+      method: "DELETE",
+    });
+  },
+  getOpsPricePreview(
+    productId: number | string,
+    variantId: number | string
+  ): Promise<PricePreviewResponse> {
+    return apiFetch(
+      `/ops/products/${productId}/variants/${variantId}/price-preview/`
+    );
   },
 };

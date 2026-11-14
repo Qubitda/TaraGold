@@ -171,4 +171,33 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 ---
 
-*Güncelleme: 2026-11-13 — Tüm FAZ 3–5 GAP’leri (F3-02, F3-05, F3-06, F4-01..05, F5-01, F5-02) backend + frontend olarak UYGULANDI.*
+# FAZ 6 — Katalog ticari deneyim (ADR-0037)
+
+## GAP-F6-01 — Ürün galerisi + kapak — **UYGULANDI** (2026-11-14)
+
+| | |
+|--|--|
+| **İhtiyaç** | Ürün/varyant görselleri, kapak, sıralama |
+| **Uygulama** | `UrunGorsel` + `GET/POST /ops/products/{id}/media/` (+ reorder/cover/delete); alıcı `kapak_url` / `gorseller` |
+| **Ekran** | Katalog → Ops ürün detay → Hazırlık (P0) |
+
+## GAP-F6-02 — Bulk varyant + yayın checklist — **UYGULANDI** (2026-11-14)
+
+| | |
+|--|--|
+| **İhtiyaç** | Renk×ölçü matrisi; onaya göndermede kapak+varyant |
+| **Uygulama** | `POST …/variants/bulk/`, `GET …/readiness/`, `onaya_gonder` checklist |
+| **Ekran** | Hazırlık (P0) paneli |
+
+## GAP-F6-03 — Ops fiyat önizleme (motor rewrite yok) — **UYGULANDI** (2026-11-14)
+
+| | |
+|--|--|
+| **İhtiyaç** | Gram/sabit açıklama + teklif durumu; sahte fiyat yok |
+| **Uygulama** | `GET …/variants/{vid}/price-preview/` |
+| **Ekran** | Hazırlık → Fiyat önizleme |
+| **Not** | Katalog `UrunTasi.bedel` ≠ quote `TeklifTasMaliyeti` (K-011) |
+
+---
+
+*Güncelleme: 2026-11-14 — ADR-0037 P0 (GAP-F6-01..03) eklendi.*

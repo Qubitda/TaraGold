@@ -149,6 +149,17 @@ def BuyerCatalogItemPresenter(urun) -> dict:
     if varyant_count is None:
         varyant_count = urun.varyantlar.filter(aktif=True).count()
     kat = getattr(urun, "kategori", None)
+    kapak = (
+        urun.gorseller.filter(kapak=True, varyant__isnull=True)
+        .order_by("sira", "pk")
+        .first()
+    )
+    kapak_url = ""
+    if kapak and kapak.dosya:
+        try:
+            kapak_url = kapak.dosya.url
+        except ValueError:
+            kapak_url = ""
     data = {
         "id": urun.pk,
         "ad": urun.ad,
@@ -161,6 +172,7 @@ def BuyerCatalogItemPresenter(urun) -> dict:
         "fiyat_tipi": urun.fiyat_tipi,
         "yayin_durumu": urun.yayin_durumu,
         "varyant_count": int(varyant_count),
+        "kapak_url": kapak_url,
         "allowed_actions": ["quote"],
     }
     assert_masked(data)

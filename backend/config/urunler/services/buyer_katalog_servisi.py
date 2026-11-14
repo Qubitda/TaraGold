@@ -30,6 +30,17 @@ def liste(*, q: str = "", limit: int = 50) -> list[dict]:
         ).order_by("ad", "pk")
     rows = []
     for u in qs[: max(1, min(limit, 100))]:
+        kapak = (
+            u.gorseller.filter(kapak=True, varyant__isnull=True)
+            .order_by("sira", "pk")
+            .first()
+        )
+        kapak_url = ""
+        if kapak and kapak.dosya:
+            try:
+                kapak_url = kapak.dosya.url
+            except ValueError:
+                kapak_url = ""
         row = {
             "id": u.pk,
             "ad": u.ad,
@@ -38,6 +49,7 @@ def liste(*, q: str = "", limit: int = 50) -> list[dict]:
             "ayar": getattr(u.ayar, "ayar_kodu", "") or "",
             "fiyat_tipi": u.fiyat_tipi,
             "varyant_count": u.varyantlar.filter(aktif=True).count(),
+            "kapak_url": kapak_url,
         }
         assert_masked(row)
         rows.append(row)
@@ -64,6 +76,26 @@ def detay(*, urun_id: int) -> dict:
         }
         assert_masked(item)
         varyantlar.append(item)
+    gorseller = []
+    for g in u.gorseller.order_by("sira", "pk"):
+        url = ""
+        if g.dosya:
+            try:
+                url = g.dosya.url
+            except ValueError:
+                url = ""
+        gorseller.append(
+            {
+                "id": g.pk,
+                "url": url,
+                "tip": g.tip,
+                "sira": g.sira,
+                "kapak": bool(g.kapak),
+                "alt_metin": g.alt_metin or "",
+                "varyant_id": g.varyant_id,
+            }
+        )
+    kapak_url = next((g["url"] for g in gorseller if g["kapak"] and not g["varyant_id"]), "")
     data = {
         "id": u.pk,
         "ad": u.ad,
@@ -82,6 +114,8 @@ def detay(*, urun_id: int) -> dict:
         "stiller": list(u.stiller.values_list("ad", flat=True)),
         "ozel_gunler": list(u.ozel_gunler.values_list("ad", flat=True)),
         "varyantlar": varyantlar,
+        "gorseller": gorseller,
+        "kapak_url": kapak_url,
     }
     assert_masked(data)
     return data

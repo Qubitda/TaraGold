@@ -25,14 +25,10 @@ def _kilitle(urun):
 
 
 def _gonderime_hazir_mi(urun):
-    varyantlar = list(urun.varyantlar.filter(aktif=True))
-    if not varyantlar:
-        raise ValidationError("En az bir aktif varyant girilmeden onaya gönderilemez.")
-    for v in varyantlar:
-        try:
-            v.full_clean()
-        except ValidationError as e:
-            raise ValidationError(f"Varyant {v.sku or v.pk}: " + "; ".join(e.messages))
+    # ADR-0037: varyant + kapak görseli checklist
+    from urunler.services.katalog_hazirlik_servisi import assert_gonderime_hazir
+
+    assert_gonderime_hazir(urun)
 
 
 def _taslak_kopya(urun, **degisiklikler):

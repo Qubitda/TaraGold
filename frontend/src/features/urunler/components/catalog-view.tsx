@@ -43,6 +43,7 @@ import {
 } from "@/components/crud";
 import { CategoryEntityModal, CategoriesPanel } from "./categories-panel";
 import { CatalogRefsPanel } from "./catalog-refs-panel";
+import { ProductP0Panel } from "./product-p0-panel";
 import { VariantCompareModal } from "./variant-compare-modal";
 import {
   Table,
@@ -79,7 +80,7 @@ import {
 
 type ViewMode = "table" | "cards";
 type Scope = "buyer" | "monturler" | "taslar" | "ops" | "kategoriler" | "referanslar";
-type DetailTab = "general" | "tech" | "variants" | "channels";
+type DetailTab = "general" | "tech" | "variants" | "prepare" | "channels";
 
 const PAGE_SIZE = 20;
 
@@ -1316,8 +1317,16 @@ export function CatalogView() {
                     }
                     className="rounded-[8px] border border-border bg-card p-4 text-left hover:bg-muted/40 transition-colors space-y-3"
                   >
-                    <div className="flex h-20 items-center justify-center rounded-[6px] border border-dashed border-border bg-muted/30">
-                      <Gem className="h-7 w-7 text-muted-foreground opacity-40" />
+                    <div className="flex h-20 items-center justify-center rounded-[6px] border border-dashed border-border bg-muted/30 overflow-hidden">
+                      {(item as BuyerCatalogItem).kapak_url ? (
+                        <img
+                          src={(item as BuyerCatalogItem).kapak_url}
+                          alt={item.ad}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Gem className="h-7 w-7 text-muted-foreground opacity-40" />
+                      )}
                     </div>
                     <div>
                       <div className="font-mono text-[10px] text-muted-foreground">
@@ -1368,6 +1377,7 @@ export function CatalogView() {
                     ["general", "Genel Bilgiler"],
                     ["tech", "Özellikler"],
                     ["variants", "Varyantlar"],
+                    opsDetail ? ["prepare", "Hazırlık (P0)"] : null,
                     opsDetail ? ["channels", "Satış Kanalları"] : null,
                   ].filter(Boolean) as Array<[DetailTab, string]>
                 ).map(([id, label]) => (
@@ -1419,8 +1429,47 @@ export function CatalogView() {
                       {buyerDetail?.aciklama || opsDetail?.aciklama || "—"}
                     </p>
                   </div>
+                  {(buyerDetail?.kapak_url ||
+                    opsDetail?.kapak_url ||
+                    (buyerDetail?.gorseller?.length ?? 0) > 0) && (
+                    <div className="col-span-2 flex flex-wrap gap-2">
+                      {(buyerDetail?.gorseller?.length
+                        ? buyerDetail.gorseller
+                        : opsDetail?.gorseller?.length
+                          ? opsDetail.gorseller
+                          : buyerDetail?.kapak_url || opsDetail?.kapak_url
+                            ? [
+                                {
+                                  id: 0,
+                                  url: buyerDetail?.kapak_url || opsDetail?.kapak_url || "",
+                                  tip: "kapak",
+                                  sira: 0,
+                                  kapak: true,
+                                },
+                              ]
+                            : []
+                      ).map((g) =>
+                        g.url ? (
+                          <img
+                            key={g.id || g.url}
+                            src={g.url}
+                            alt={g.alt_metin || activeDetail.ad}
+                            className="h-24 w-24 rounded object-cover border border-border"
+                          />
+                        ) : null
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
+              {detailTab === "prepare" && opsDetail ? (
+                <ProductP0Panel
+                  product={opsDetail}
+                  refs={refsQ.data}
+                  onChanged={() => void openOpsDetail(opsDetail.id)}
+                />
+              ) : null}
 
               {detailTab === "tech" && (
                 <div className="space-y-3">
@@ -1967,6 +2016,14 @@ export function CatalogView() {
           <div className="text-xs font-semibold text-foreground">
             Vitrin & Tasarım Özellikleri
           </div>
+          {(refsQ.data?.koleksiyonlar?.length ?? 0) === 0 &&
+          (refsQ.data?.renkler?.length ?? 0) === 0 ? (
+            <p className="text-xs text-amber-700 rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2">
+              Referans listeleri boş. Referanslar sekmesinden ekleyin veya backend’de{" "}
+              <code className="font-mono">seed_urunler</code> çalıştırın. Kayıt sonrası ürün
+              detayındaki Hazırlık (P0) sekmesinden varyant matrisi ve kapak yükleyin.
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">

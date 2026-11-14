@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(next);
       setMfaPending(Boolean(opts?.mfaPending));
       setError(null);
+      setLoading(false);
     },
     []
   );
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
     const onExpired = (event: Event) => {

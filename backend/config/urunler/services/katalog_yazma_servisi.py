@@ -501,6 +501,55 @@ def varyant_guncelle(
         return varyant
 
 
+def varyant_toplu_ekle(
+    *,
+    actor,
+    urun: Urun,
+    satirlar: list[dict],
+) -> list[Varyant]:
+    """Renk×ölçü matrisi — atomic; stok otomatik açılmaz (ADR-0037)."""
+    _require_platform_submit(actor, action="urun.varyant_toplu_ekle", urun=urun)
+    urun.refresh_from_db()
+    if urun.olusturan_firma_id != actor.firma_id:
+        raise PermissionDenied("Başka firmaya ait ürüne varyant eklenemez.")
+    if urun.onay_durumu not in ("taslak", "reddedildi"):
+        raise ValidationError("Yalnızca taslak/reddedildi ürüne varyant eklenir.")
+    if not isinstance(satirlar, (list, tuple)) or not satirlar:
+        raise ValidationError({"satirlar": "En az bir satır gerekli."})
+    if len(satirlar) > 200:
+        raise ValidationError({"satirlar": "En fazla 200 satır."})
+
+    created: list[Varyant] = []
+    with transaction.atomic():
+        for i, row in enumerate(satirlar):
+            if not isinstance(row, dict):
+                raise ValidationError({"satirlar": f"Satır {i}: nesne beklenir."})
+            try:
+                v = varyant_ekle(
+                    actor=actor,
+                    urun=urun,
+                    gram=row.get("gram"),
+                    renk_id=row.get("renk_id"),
+                    beden_id=row.get("beden_id"),
+                    ek_bedel=row.get("ek_bedel"),
+                    sabit_fiyat=row.get("sabit_fiyat"),
+                    tedarikci_sku=row.get("tedarikci_sku") or "",
+                    benzersiz_parca=bool(row.get("benzersiz_parca") or False),
+                )
+            except ValidationError as exc:
+                raise ValidationError({"satirlar": {str(i): getattr(exc, "message_dict", exc.messages)}}) from exc
+            created.append(v)
+        record_audit(
+            actor=actor,
+            action="urun.varyant_toplu_ekle",
+            entity_type="Urun",
+            entity_id=urun.pk,
+            success=True,
+            detail={"adet": len(created)},
+        )
+    return created
+
+
 def varyant_sil(*, actor, varyant: Varyant) -> None:
     urun = varyant.urun
     _require_platform_submit(actor, action="urun.varyant_sil", urun=urun)
