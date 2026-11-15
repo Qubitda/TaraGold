@@ -1,10 +1,10 @@
 """Piyasa panosu saf hesap — Django yok.
 
-Katman 1 (pano / GoldXT sağ panel):
-  ham = ölçek×PB formülü (GRAM/ONS/KG × TRY/USD)
-  alış = ham − TL  veya  ham × (1 − %/100)
-  satış = ham + TL  veya  ham × (1 + %/100)
-  nihai = yuvarla(...)
+Katman 1 (pano, ADR-0039):
+  ham = ölçek×PB formülü (GRAM/ONS/KG × TRY/USD) veya ayrı bid/ask ham
+  nihai_alis  = ham_alis  + marj (TL)  veya  ham_alis  × (1 + marj/100) (%)
+  nihai_satis = ham_satis + marj (TL)  veya  ham_satis × (1 + marj/100) (%)
+  Marj işaretli (negatif izinli). Doğrulama: nihai_alis > 0 ve nihai_satis ≥ nihai_alis.
 
 Katman 2 (kullanıcı ekleri, isteğe bağlı): baz birimin üstüne ek; bazı değiştirmez.
 """
@@ -76,28 +76,57 @@ def uygula_pano_marj(
     alis_marj=0,
     satis_marj=0,
 ) -> Decimal:
-    """GoldXT `applyMarginResult`: alış marjı düşer, satış marjı ekler (değerler ≥0)."""
+    """ADR-0039: marj iki tarafa da eklenir; işaretli (negatif izinli).
+
+    TL:   nihai = ham + marj
+    %:    nihai = ham × (1 + marj/100)
+    """
     if taraf not in TARAFLAR:
         raise ValueError(f"Geçersiz taraf: {taraf!r}")
     if marj_modu not in MARJ_MODLARI:
         raise ValueError(f"Geçersiz marj modu: {marj_modu!r}")
     ham = _d(ham)
-    alis_m = _d(alis_marj)
-    satis_m = _d(satis_marj)
-    if alis_m < 0 or satis_m < 0:
-        raise ValueError("Alış/satış marjı negatif olamaz.")
-    if taraf == ALIS:
-        if marj_modu == TL:
-            return ham - alis_m
-        if alis_m >= _YUZ:
-            raise ValueError("Alış yüzde marjı 100'den küçük olmalı.")
-        return ham * (_YUZ - alis_m) / _YUZ
-    # SATIS
+    marj = _d(alis_marj if taraf == ALIS else satis_marj)
     if marj_modu == TL:
-        return ham + satis_m
-    if satis_m >= _YUZ:
-        raise ValueError("Satış yüzde marjı 100'den küçük olmalı.")
-    return ham * (_YUZ + satis_m) / _YUZ
+        return ham + marj
+    # YUZDE — ham × (1 + marj/100); marj ≤ -100 yasak (sıfır/negatif çarpan)
+    if marj <= -_YUZ:
+        raise ValueError("Yüzde marjı -100'den büyük olmalı.")
+    return ham * (_YUZ + marj) / _YUZ
+
+
+def dogrula_nihai_cift(nihai_alis, nihai_satis) -> None:
+    """Kayıt/önizleme kapısı: alış > 0 ve satış ≥ alış."""
+    alis = _d(nihai_alis)
+    satis = _d(nihai_satis)
+    if alis <= 0:
+        raise ValueError("Nihai alış sıfırdan büyük olmalı.")
+    if satis < alis:
+        raise ValueError("Nihai satış, nihai alıştan küçük olamaz.")
+
+
+def gram_try_from_ons(
+    *,
+    ons_bid,
+    ons_ask,
+    usdtry_bid,
+    usdtry_ask,
+    troy_oz_gram=TROY_OZ_GRAM,
+) -> dict[str, Decimal]:
+    """En kötü makas: gram_alis = ons_bid/oz × usdtry_bid; gram_satis = ons_ask/oz × usdtry_ask."""
+    oz = _d(troy_oz_gram)
+    if oz <= 0:
+        raise ValueError("troy_oz_gram pozitif olmalı.")
+    bid_ons, ask_ons = _d(ons_bid), _d(ons_ask)
+    bid_fx, ask_fx = _d(usdtry_bid), _d(usdtry_ask)
+    if bid_ons <= 0 or ask_ons <= 0 or bid_fx <= 0 or ask_fx <= 0:
+        raise ValueError("Ons ve USDTRY bid/ask pozitif olmalı.")
+    if bid_ons > ask_ons or bid_fx > ask_fx:
+        raise ValueError("Ters makas (bid > ask) reddedildi.")
+    return {
+        "gram_alis": bid_ons / oz * bid_fx,
+        "gram_satis": ask_ons / oz * ask_fx,
+    }
 
 
 def hesapla_ham(
@@ -177,8 +206,10 @@ def hesapla_taraf(
         satis_marj=satis_marj,
     )
     nihai = yuvarla(marjli, yuvarlama_adimi, yuvarlama_yontemi)
-    if nihai <= 0:
-        raise ValueError("Nihai fiyat ≤ 0; marj/yuvarlama kontrol edin.")
+    if taraf == ALIS and nihai <= 0:
+        raise ValueError("Nihai alış ≤ 0; marj/yuvarlama kontrol edin.")
+    if taraf == SATIS and nihai <= 0:
+        raise ValueError("Nihai satış ≤ 0; marj/yuvarlama kontrol edin.")
 
     return {
         "taraf": taraf,
@@ -187,6 +218,35 @@ def hesapla_taraf(
         "ham": _q(ham, hassasiyet),
         "marjli": _q(marjli, hassasiyet),
         "nihai": _q(nihai, hassasiyet),
+    }
+
+
+def hesapla_cift(
+    *,
+    ham_alis,
+    ham_satis,
+    marj_modu: str = YUZDE,
+    alis_marj=0,
+    satis_marj=0,
+    yuvarlama_adimi=0,
+    yuvarlama_yontemi: str = YAKIN,
+    hassasiyet: Decimal = HASSASIYET,
+) -> dict[str, Any]:
+    """Ham bid/ask → işaretli marj → yuvarlama → nihai çift + doğrulama."""
+    alis_m = uygula_pano_marj(
+        ham_alis, taraf=ALIS, marj_modu=marj_modu, alis_marj=alis_marj
+    )
+    satis_m = uygula_pano_marj(
+        ham_satis, taraf=SATIS, marj_modu=marj_modu, satis_marj=satis_marj
+    )
+    nihai_alis = yuvarla(alis_m, yuvarlama_adimi, yuvarlama_yontemi)
+    nihai_satis = yuvarla(satis_m, yuvarlama_adimi, yuvarlama_yontemi)
+    dogrula_nihai_cift(nihai_alis, nihai_satis)
+    return {
+        "ham_alis": _q(_d(ham_alis), hassasiyet),
+        "ham_satis": _q(_d(ham_satis), hassasiyet),
+        "nihai_alis": _q(nihai_alis, hassasiyet),
+        "nihai_satis": _q(nihai_satis, hassasiyet),
     }
 
 

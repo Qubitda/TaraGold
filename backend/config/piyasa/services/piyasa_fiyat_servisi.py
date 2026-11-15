@@ -60,6 +60,11 @@ def _usd_try_for(taraf: str, *, now) -> Decimal | None:
     return goz.kur
 
 
+def _urun_marj_tipi(urun: PiyasaUrun) -> str:
+    tip = getattr(urun, "marj_tipi", None) or get_marj_modu()
+    return str(tip).upper()
+
+
 def _taraf_hesap(urun: PiyasaUrun, taraf: str, *, now, marj_modu: str) -> dict[str, Any]:
     taraf_kur = _TARAFA_KUR[taraf]
     detay = kur_servisi.resolve_metal_kuru_detay(
@@ -99,18 +104,26 @@ def _taraf_hesap(urun: PiyasaUrun, taraf: str, *, now, marj_modu: str) -> dict[s
 
 def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) -> dict[str, Any]:
     now = now or timezone.now()
-    modu = marj_modu or get_marj_modu()
+    modu = marj_modu or _urun_marj_tipi(urun)
     out: dict[str, Any] = {
         "ok": True,
         "kod": urun.kod,
         "ad": urun.ad,
+        "bolum": getattr(urun, "bolum", "") or "",
         "grup": urun.grup,
         "varyant_etiket": urun.varyant_etiket or "",
         "olcek": urun.olcek,
         "cikti_pb": urun.cikti_pb,
         "marj_modu": modu,
+        "marj_tipi": modu,
         "alis_marj": urun.alis_marj,
         "satis_marj": urun.satis_marj,
+        "alis_goster": getattr(urun, "alis_goster", True),
+        "satis_goster": getattr(urun, "satis_goster", True),
+        "aliciya_alis_goster": getattr(urun, "aliciya_alis_goster", True),
+        "aliciya_goster": getattr(urun, "aliciya_goster", True),
+        "ticker_da_goster": getattr(urun, "ticker_da_goster", False),
+        "ondalik": getattr(urun, "ondalik", 2),
         "alis": None,
         "satis": None,
         "alis_detay": None,
@@ -130,6 +143,8 @@ def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) ->
             healths.append(det["feed_health"])
             if det["banner"]:
                 banners.append(det["banner"])
+        if out["alis"] is not None and out["satis"] is not None:
+            hesap.dogrula_nihai_cift(out["alis"], out["satis"])
         out["feed_health"] = healths[0] if healths else ""
         out["banner"] = " | ".join(dict.fromkeys(banners))
     except (kur_servisi.KurYokError, kur_servisi.KurStaleError, ValidationError, ValueError) as exc:
@@ -147,11 +162,13 @@ def baz_fiyat(urun_kod: str, *, now=None) -> dict[str, Any]:
         raise ValidationError(sonuc["hata"] or "Piyasa fiyatı çözülemedi.")
     return {
         "kod": urun.kod,
+        "bolum": sonuc.get("bolum") or "",
         "grup": urun.grup,
         "varyant_etiket": urun.varyant_etiket or "",
         "olcek": urun.olcek,
         "cikti_pb": urun.cikti_pb,
         "marj_modu": sonuc["marj_modu"],
+        "marj_tipi": sonuc.get("marj_tipi") or sonuc["marj_modu"],
         "alis": sonuc["alis"],
         "satis": sonuc["satis"],
         "guncelleme": sonuc["guncelleme"],
@@ -164,12 +181,12 @@ def baz_fiyat(urun_kod: str, *, now=None) -> dict[str, Any]:
 
 def pano_ozeti(*, only_aktif: bool = True, now=None) -> list[dict[str, Any]]:
     qs = PiyasaUrun.objects.select_related("metal", "ayar").order_by(
-        "grup", "sira", "kod"
+        "bolum", "sira", "kod"
     )
     if only_aktif:
         qs = qs.filter(aktif=True)
-    modu = get_marj_modu()
-    return [hesapla_urun(u, now=now, marj_modu=modu) for u in qs]
+    # Kalem bazında marj_tipi; get_marj_modu yalnız geriye uyum fallback
+    return [hesapla_urun(u, now=now) for u in qs]
 
 
 def darphane_iscilik_listesi(*, only_aktif: bool = True) -> list[dict[str, Any]]:

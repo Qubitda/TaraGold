@@ -92,12 +92,16 @@ class PiyasaFiyatTests(TestCase):
         cls.has = PiyasaUrun.objects.create(
             kod="has",
             ad="Has",
+            bolum=PiyasaUrun.Bolum.ALTIN,
             grup=PiyasaUrun.Grup.HAS,
             metal=cls.metal,
             gram=Decimal("1"),
-            alis_marj=Decimal("5"),
+            marj_tipi=PiyasaUrun.MarjTipi.YUZDE,
+            # ADR-0039: eski %5 alış düşürme ≡ alis_marj=-5
+            alis_marj=Decimal("-5"),
             satis_marj=Decimal("2"),
             yuvarlama_adimi=Decimal("10"),
+            ticker_da_goster=True,
             sira=1,
         )
         cls.a22 = PiyasaUrun.objects.create(
@@ -129,17 +133,28 @@ class PiyasaFiyatTests(TestCase):
         self.assertEqual(baz["grup"], PiyasaUrun.Grup.HAS)
         self.assertEqual(baz["marj_modu"], "YUZDE")
 
-    def test_global_marj_modu_tl(self):
-        piyasa_fiyat_servisi.set_marj_modu("TL")
-        self.has.alis_marj = Decimal("25")
+    def test_kalem_marj_tipi_tl_isaretli(self):
+        self.has.marj_tipi = PiyasaUrun.MarjTipi.TL
+        # Eski 5990-25 ≡ yeni alis_marj=-25; satış +30
+        self.has.alis_marj = Decimal("-25")
         self.has.satis_marj = Decimal("30")
         self.has.yuvarlama_adimi = Decimal("0")
         self.has.save()
         baz = piyasa_fiyat_servisi.baz_fiyat("has")
-        # alış 5990-25, satış 6000+30
         self.assertEqual(baz["alis"], Decimal("5965.00"))
         self.assertEqual(baz["satis"], Decimal("6030.00"))
-        self.assertEqual(baz["marj_modu"], "TL")
+        self.assertEqual(baz["marj_tipi"], "TL")
+
+    def test_isaretli_arti_marj_iki_taraf(self):
+        self.has.marj_tipi = PiyasaUrun.MarjTipi.TL
+        self.has.alis_marj = Decimal("50")
+        self.has.satis_marj = Decimal("50")
+        self.has.yuvarlama_adimi = Decimal("0")
+        self.has.save()
+        baz = piyasa_fiyat_servisi.baz_fiyat("has")
+        # ham alış 5990 / satış 6000 → 6040 / 6050
+        self.assertEqual(baz["alis"], Decimal("6040.00"))
+        self.assertEqual(baz["satis"], Decimal("6050.00"))
 
     def test_baz_fiyat_22ayar_milyem(self):
         baz = piyasa_fiyat_servisi.baz_fiyat("22ayar")
@@ -183,7 +198,8 @@ class PiyasaFiyatTests(TestCase):
             kur_tipi=KurTipi.ALIS,
             zaman=now,
             alinma_zamani=now,
-            kur=Decimal("33.9000"),
+            # Aynı kur: ayrı ALIS/SATIS FX makası USD çıktıda alış>satış üretebilir
+            kur=Decimal("34.0000"),
             kaynak="api",
         )
         PiyasaUrun.objects.create(

@@ -75,19 +75,25 @@ class DarphaneIscilikAdmin(_PiyasaPermMixin, admin.ModelAdmin):
 
 @admin.register(PiyasaUrun)
 class PiyasaUrunAdmin(_PiyasaPermMixin, admin.ModelAdmin):
-    """Ürün + alış/satış marj değerleri. Marj modu global politikadan."""
+    """Ürün + işaretli alış/satış marjı (ADR-0039, kalem bazında tip)."""
 
     list_display = (
         "kod",
         "ad",
+        "bolum",
         "grup",
         "olcek",
         "cikti_pb",
         "varyant_etiket",
         "metal",
         "ayar",
+        "marj_tipi",
         "alis_marj",
         "satis_marj",
+        "alis_goster",
+        "satis_goster",
+        "aliciya_alis_goster",
+        "ticker_da_goster",
         "yuvarlama_adimi",
         "aktif",
         "sira",
@@ -95,18 +101,50 @@ class PiyasaUrunAdmin(_PiyasaPermMixin, admin.ModelAdmin):
         "baz_satis",
         "feed",
     )
-    list_filter = ("aktif", "grup", "olcek", "cikti_pb", "metal", "varyant_etiket")
+    list_filter = (
+        "aktif",
+        "bolum",
+        "grup",
+        "marj_tipi",
+        "ticker_da_goster",
+        "aliciya_alis_goster",
+        "olcek",
+        "cikti_pb",
+        "metal",
+        "varyant_etiket",
+    )
     search_fields = ("kod", "ad", "metal__kod", "ayar__ayar_kodu")
-    list_editable = ("sira", "aktif", "alis_marj", "satis_marj", "grup")
+    list_editable = (
+        "sira",
+        "aktif",
+        "alis_marj",
+        "satis_marj",
+        "marj_tipi",
+        "ticker_da_goster",
+        "aliciya_alis_goster",
+    )
     autocomplete_fields = ("metal", "ayar")
     readonly_fields = ("olusturma", "guncelleme")
-    ordering = ("grup", "sira", "kod")
+    ordering = ("bolum", "sira", "kod")
     fieldsets = (
-        (None, {"fields": ("kod", "ad", "aktif", "sira", "grup", "varyant_etiket")}),
+        (
+            None,
+            {
+                "fields": (
+                    "kod",
+                    "ad",
+                    "aktif",
+                    "sira",
+                    "bolum",
+                    "grup",
+                    "varyant_etiket",
+                )
+            },
+        ),
         (
             "Tanımlar (mevcut tablolar — burada yeni metal/ayar açılmaz)",
             {
-                "fields": ("metal", "ayar", "olcek", "cikti_pb", "gram"),
+                "fields": ("metal", "ayar", "olcek", "cikti_pb", "gram", "ondalik"),
                 "description": (
                     "Metal → Tanımlar / Kıymetli metaller. "
                     "Ayar → Tanımlar / Milyem tablosu. "
@@ -115,13 +153,25 @@ class PiyasaUrunAdmin(_PiyasaPermMixin, admin.ModelAdmin):
             },
         ),
         (
-            "Marj değerleri (mod: Piyasa marj politikası — global TL|%)",
+            "Marj (ADR-0039 — iki tarafa işaretli ekleme)",
             {
-                "fields": ("alis_marj", "satis_marj"),
+                "fields": ("marj_tipi", "alis_marj", "satis_marj"),
                 "description": (
-                    "Alış marjı düşülür, satış marjı eklenir. "
-                    "Birim (TL/%) tek yerden: Piyasa marj politikası."
+                    "nihai = ham + marj (TL) veya ham×(1+marj/100) (%). "
+                    "Negatif izinli. nihai_satis ≥ nihai_alis zorunlu."
                 ),
+            },
+        ),
+        (
+            "Görünürlük",
+            {
+                "fields": (
+                    "alis_goster",
+                    "satis_goster",
+                    "aliciya_goster",
+                    "aliciya_alis_goster",
+                    "ticker_da_goster",
+                )
             },
         ),
         ("Yuvarlama", {"fields": ("yuvarlama_adimi", "yuvarlama_yontemi")}),
