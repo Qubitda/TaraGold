@@ -280,7 +280,16 @@ def resolve_metal_kuru_detay(
         raise KurYokError(
             f"Metal kuru yok (sağlayıcı={saglayici.kod}, tip={kur_tipi})."
         )
-    if not gozlem_stale_mi(gozlem, now=now):
+    # ADR-0039: çok bayat → gizle (LKG yok, ödeme snapshot da reddedilir)
+    if gozlem_gizli_mi(gozlem, now=now):
+        banner = (
+            f"Kur çok bayat; fiyat gizlendi (gözlem=#{gozlem.pk}, "
+            f"hide eşiği aşıldı)."
+        )
+        set_feed_health(health=FeedHealth.FEED_FAIL, banner=banner)
+        raise KurYokError(banner)
+
+    if not gozlem_gecikmeli_mi(gozlem, now=now):
         set_feed_health(health=FeedHealth.FEED_OK, banner="")
         return MetalKurResolve(
             gozlem=gozlem,
@@ -323,7 +332,11 @@ def resolve_doviz_kuru(para_birimi: str, *, taraf: str, now=None) -> DovizKuru:
         raise KurYokError(
             f"Döviz kuru yok (sağlayıcı={saglayici.kod}, tip={kur_tipi}, {para_birimi})."
         )
-    if gozlem_stale_mi(gozlem, now=now):
+    if gozlem_gizli_mi(gozlem, now=now):
+        raise KurYokError(
+            f"Döviz kuru çok bayat; kullanım yok (id={gozlem.pk})."
+        )
+    if gozlem_gecikmeli_mi(gozlem, now=now):
         raise KurStaleError(
             f"Döviz kuru stale (id={gozlem.pk}, max={saglayici.max_gecikme_saniye}s)."
         )
@@ -509,3 +522,72 @@ def feed_metal_kuru_kaydet(
     obj.full_clean()
     obj.save()
     return obj
+
+
+def feed_doviz_kuru_kaydet(
+    *,
+    saglayici: KurSaglayici,
+    para_birimi: str,
+    kur_alis: Decimal,
+    kur_satis: Decimal,
+    zaman,
+    alinma_zamani=None,
+    kaynak: str = "api",
+) -> tuple[DovizKuru, DovizKuru]:
+    """Bid/ask döviz gözlemi (ADR-0039). kaynak=api (websocket etiketi DovizKuru choices'ta yok)."""
+    if not saglayici.aktif:
+        raise ValidationError("Yalnız aktif kur sağlayıcısına feed yazılır (fallback yok).")
+    if kaynak == "manuel":
+        raise ValidationError("Feed yolu manuel giriş için kullanılamaz.")
+    if para_birimi not in dict(DovizKuru.PARA_BIRIMI):
+        raise ValidationError({"para_birimi": "Geçersiz para birimi."})
+    alinma_zamani = alinma_zamani or timezone.now()
+    _assert_ingest_fresh(
+        zaman=zaman,
+        alinma_zamani=alinma_zamani,
+        max_gecikme_saniye=saglayici.max_gecikme_saniye,
+    )
+    # Unique (para, tip, zaman) — mikrosaniye kaydır
+    t_alis = zaman
+    t_satis = zaman
+    if t_alis == t_satis:
+        t_satis = zaman + timedelta(microseconds=1)
+    rows = []
+    for tip, kur, t in (
+        (KurTipi.ALIS, kur_alis, t_alis),
+        (KurTipi.SATIS, kur_satis, t_satis),
+    ):
+        obj = DovizKuru(
+            para_birimi=para_birimi,
+            saglayici=saglayici,
+            kur_tipi=tip,
+            zaman=t,
+            alinma_zamani=alinma_zamani,
+            kur=kur,
+            kaynak="api",
+        )
+        obj.full_clean()
+        obj.save()
+        rows.append(obj)
+    return rows[0], rows[1]
+
+
+def gozlem_gizli_mi(gozlem, *, now=None) -> bool:
+    """ADR-0039: hide eşiği (varsayılan 300s) — fiyat yok / ödeme snapshot red."""
+    from django.conf import settings
+
+    now = now or timezone.now()
+    hide_s = int(getattr(settings, "PIYASA_FEED_HIDE_SECONDS", 300))
+    if hide_s <= 0:
+        return False
+    return (now - gozlem.zaman).total_seconds() > hide_s
+
+
+def gozlem_gecikmeli_mi(gozlem, *, now=None) -> bool:
+    """ADR-0039 stale eşiği (varsayılan 30s) veya sağlayıcı max_gecikme."""
+    from django.conf import settings
+
+    now = now or timezone.now()
+    stale_s = int(getattr(settings, "PIYASA_FEED_STALE_SECONDS", 30))
+    max_g = min(stale_s, gozlem.saglayici.max_gecikme_saniye)
+    return gozlem_stale_mi(gozlem, now=now, max_gecikme_saniye=max_g)

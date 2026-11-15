@@ -410,6 +410,43 @@ PAYMENT_WEBHOOK_IP_ALLOWLIST = env.list(
     "PAYMENT_WEBHOOK_IP_ALLOWLIST", default=[]
 )
 
+# --- ADR-0039 piyasa feed (Binance bookTicker; anahtarsız public) ------------
+# Bayatlık: stale → LKG+banner; hide → fiyat yok / ödeme snapshot red.
+PIYASA_FEED_STALE_SECONDS = env.int("PIYASA_FEED_STALE_SECONDS", default=30)
+PIYASA_FEED_HIDE_SECONDS = env.int("PIYASA_FEED_HIDE_SECONDS", default=300)
+PIYASA_ANOMALY_PCT = Decimal(env("PIYASA_ANOMALY_PCT", default="2"))
+PIYASA_FEED_THROTTLE_SECONDS = env.int("PIYASA_FEED_THROTTLE_SECONDS", default=5)
+PIYASA_FEED_THROTTLE_PCT = Decimal(env("PIYASA_FEED_THROTTLE_PCT", default="0.05"))
+PIYASA_METAL_KOD = env("PIYASA_METAL_KOD", default="ALTIN")
+PIYASA_GUMUS_KOD = env("PIYASA_GUMUS_KOD", default="GUMUS")
+# Sembol haritası ayardan; kod gömme yok (ADR-0039 §3).
+PIYASA_BINANCE = {
+    "futures_rest_book": env(
+        "BINANCE_FUTURES_BOOK_URL",
+        default="https://fapi.binance.com/fapi/v1/ticker/bookTicker",
+    ),
+    "spot_rest_book": env(
+        "BINANCE_SPOT_BOOK_URL",
+        default="https://api.binance.com/api/v3/ticker/bookTicker",
+    ),
+    "futures_ws": env(
+        "BINANCE_FUTURES_WS",
+        default="wss://fstream.binance.com/stream",
+    ),
+    "spot_ws": env(
+        "BINANCE_SPOT_WS",
+        default="wss://stream.binance.com:9443/stream",
+    ),
+    "symbols": {
+        "XAUUSDT": {"market": "futures", "role": "ons_au"},
+        "XAGUSDT": {"market": "futures", "role": "ons_ag"},
+        "USDTTRY": {"market": "spot", "role": "usdtry"},
+        "EURUSDT": {"market": "spot", "role": "eurusdt"},
+        "PAXGUSDT": {"market": "spot", "role": "ons_au_backup"},
+        "XAUTUSDT": {"market": "spot", "role": "ons_au_backup2"},
+    },
+}
+
 # --- F8-003 Sentry (DSN boş → no-op) ----------------------------------------
 SENTRY_DSN = env("SENTRY_DSN", default="")
 SENTRY_ENVIRONMENT = env("SENTRY_ENVIRONMENT", default="development")
