@@ -45,8 +45,6 @@ export const fiyatlamaKeys = {
     [...fiyatlamaKeys.all, "quote", String(id)] as const,
   lock: (id: number | string) =>
     [...fiyatlamaKeys.all, "lock", String(id)] as const,
-  supplierOffers: (params?: Record<string, string | undefined>) =>
-    [...fiyatlamaKeys.all, "supplier-offers", params ?? {}] as const,
 };
 
 export function useQuotesListQuery(
@@ -148,19 +146,6 @@ export function useCreatePriceLockMutation() {
       rememberLockId(lock.id);
       void qc.invalidateQueries({ queryKey: fiyatlamaKeys.all });
     },
-  });
-}
-
-
-
-export function useSupplierOffersQuery(
-  params?: Record<string, string | undefined>,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: fiyatlamaKeys.supplierOffers(params),
-    queryFn: () => fiyatlamaService.getSupplierOffers(params),
-    enabled,
   });
 }
 

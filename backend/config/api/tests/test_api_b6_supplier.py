@@ -1,19 +1,16 @@
-"""API-B6 — tedarikçi teklif/stok yazma."""
+"""API-B6 — tedarikçi stok yazma (teklif uçları 410)."""
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from decimal import Decimal
-
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from api.masking import assert_masked
-from fiyatlama.models import TedarikciTeklif
 from siparis.tests.test_checkout_f4_040 import CheckoutFixtureMixin
 from stok.models import StockBalance
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class ApiB6SupplierTests(CheckoutFixtureMixin, APITestCase):
     @classmethod
     def setUpTestData(cls):
@@ -22,107 +19,28 @@ class ApiB6SupplierTests(CheckoutFixtureMixin, APITestCase):
     def setUp(self):
         self.api = APIClient()
 
-    def _idem(self, key):
-        return {"HTTP_IDEMPOTENCY_KEY": key}
-
-    def _taslak_teklif(self):
-        bas = date.today()
-        bit = bas + timedelta(days=30)
-        return TedarikciTeklif.objects.create(
-            varyant=self.varyant,
-            tedarikci=self.ted,
-            tedarikci_kodu="B6T",
-            fiyat_modeli=TedarikciTeklif.FiyatModeli.METAL_BAZLI,
-            gram=Decimal("1.250"),
-            durum=TedarikciTeklif.Durum.TASLAK,
-            gecerlilik_baslangic=bas,
-            gecerlilik_bitis=bit,
-        )
-
-    def test_offer_submit_version_stock_adjust(self):
-        taslak = self._taslak_teklif()
+    def test_offers_gone_and_stock_adjust(self):
         self.api.force_authenticate(user=self.ted_user)
 
-        detail = self.api.get(
-            reverse("api-supplier-offer-detail", kwargs={"pk": taslak.pk})
-        )
-        self.assertEqual(detail.status_code, 200, detail.content)
-        body = detail.json()
-        self.assertIn("submit", body["allowed_actions"])
-        self.assertNotIn("alici", str(body).lower())
-        assert_masked(body)
-
-        submit = self.api.post(
-            reverse("api-supplier-offer-submit", kwargs={"pk": taslak.pk}),
-            {},
-            format="json",
-            **self._idem("b6-sub-1"),
-        )
-        self.assertEqual(submit.status_code, 200, submit.content)
-        self.assertEqual(
-            submit.json()["durum"], TedarikciTeklif.Durum.ONAY_BEKLIYOR
-        )
-        again = self.api.post(
-            reverse("api-supplier-offer-submit", kwargs={"pk": taslak.pk}),
-            {},
-            format="json",
-            **self._idem("b6-sub-1"),
-        )
-        self.assertEqual(again.status_code, 200)
-        self.assertEqual(again.json()["id"], submit.json()["id"])
-
-        ver = self.api.post(
-            reverse(
-                "api-supplier-offer-versions", kwargs={"pk": self.teklif.pk}
-            ),
-            {"gram": "2.600"},
-            format="json",
-            **self._idem("b6-ver-1"),
-        )
-        self.assertEqual(ver.status_code, 201, ver.content)
-        self.assertEqual(ver.json()["durum"], TedarikciTeklif.Durum.ONAY_BEKLIYOR)
-        self.assertEqual(ver.json()["versiyon"], self.teklif.versiyon + 1)
+        gone = self.api.get(reverse("api-supplier-offers"))
+        self.assertEqual(gone.status_code, 410)
 
         before = StockBalance.objects.get(
-            warehouse=self.wh, teklif=self.teklif
+            warehouse=self.wh, varyant=self.varyant
         ).on_hand
         adj = self.api.post(
             reverse("api-supplier-stock-adjust"),
             {
                 "warehouse_id": self.wh.pk,
-                "teklif_id": self.teklif.pk,
+                "varyant_id": self.varyant.pk,
                 "miktar": "5",
                 "neden": "B6 stok duzeltme",
             },
             format="json",
-            **self._idem("b6-adj-1"),
+            HTTP_IDEMPOTENCY_KEY="b6-adj-1",
         )
         self.assertEqual(adj.status_code, 201, adj.content)
-        assert_masked(adj.json())
         after = StockBalance.objects.get(
-            warehouse=self.wh, teklif=self.teklif
+            warehouse=self.wh, varyant=self.varyant
         ).on_hand
-        self.assertEqual(after, before + Decimal("5"))
-
-        stock = self.api.get(reverse("api-supplier-stock"))
-        self.assertEqual(stock.status_code, 200)
-        row = stock.json()["results"][0]
-        self.assertIn("teklif_id", row)
-        assert_masked(row)
-
-    def test_buyer_forbidden_supplier_surfaces(self):
-        self.api.force_authenticate(user=self.buyer)
-        forb = self.api.get(reverse("api-supplier-offers"))
-        self.assertEqual(forb.status_code, 403)
-        forb3 = self.api.post(
-            reverse("api-supplier-stock-adjust"),
-            {
-                "warehouse_id": self.wh.pk,
-                "teklif_id": self.teklif.pk,
-                "miktar": "1",
-                "neden": "buyer deneme",
-            },
-            format="json",
-            **self._idem("b6-buyer-adj"),
-        )
-        self.assertEqual(forb3.status_code, 403)
+        self.assertEqual(after - before, 5)

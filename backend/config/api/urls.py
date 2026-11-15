@@ -1,6 +1,7 @@
 from django.urls import path
 
 from api.schema_views import EnrichedOpenAPISchemaView
+from api.views.ops_varyant_fiyat import OpsVaryantFiyatListView, OpsVaryantFiyatUpsertView
 from api.views import (
     ApprovalApproveView,
     ApprovalDetailView,
@@ -848,6 +849,16 @@ api_urlpatterns = [
         "firma/kullanicilar/<int:user_id>/",
         FirmaKullaniciRolView.as_view(),
         name="api-firma-kullanici-rol",
+    ),
+    path(
+        "ops/varyant-fiyat/",
+        OpsVaryantFiyatListView.as_view(),
+        name="api-ops-varyant-fiyat-list",
+    ),
+    path(
+        "ops/varyant-fiyat/upsert/",
+        OpsVaryantFiyatUpsertView.as_view(),
+        name="api-ops-varyant-fiyat-upsert",
     ),
     path(
         "ops/products/",

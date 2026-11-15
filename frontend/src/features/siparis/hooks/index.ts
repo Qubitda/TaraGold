@@ -86,6 +86,9 @@ export function useCheckoutMutation() {
       teslimat_adresi_id?: number;
       fatura_adresi_id?: number;
       siparis_notu?: string;
+      checkoutIdempotencyKey?: string;
+      orderIdempotencyKey?: string;
+      existingCheckoutId?: number;
     }) => siparisService.checkout(data),
     onSuccess: () => invalidateCommerce(qc),
   });

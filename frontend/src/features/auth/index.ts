@@ -9,7 +9,6 @@ export {
   AcceptInvitePage,
 } from "./components/account-recovery-views";
 export { SessionPanel } from "./components/session-panel";
-export { DashboardCounters } from "./components/dashboard-counters";
 export {
   AuthProvider,
   RequireAuth,

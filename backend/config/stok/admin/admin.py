@@ -55,11 +55,11 @@ class StockMovementAdmin(_StokReadOnlyAdmin):
         "miktar",
         "birim",
         "warehouse",
-        "teklif",
+        "varyant",
         "olusturma_tarihi",
     )
     list_filter = ("tip", "birim")
-    list_select_related = ("warehouse", "teklif", "varyant")
+    list_select_related = ("warehouse", "varyant")
     readonly_fields = [f.name for f in StockMovement._meta.fields]
 
     def get_queryset(self, request):
@@ -75,14 +75,14 @@ class StockBalanceAdmin(_StokReadOnlyAdmin):
     list_display = (
         "id",
         "warehouse",
-        "teklif",
+        "varyant",
         "birim",
         "on_hand",
         "reserved",
         "blocked",
     )
     list_filter = ("birim",)
-    list_select_related = ("warehouse", "teklif", "varyant")
+    list_select_related = ("warehouse", "varyant")
     readonly_fields = [f.name for f in StockBalance._meta.fields]
 
     def get_queryset(self, request):
@@ -101,12 +101,12 @@ class StockReservationAdmin(_StokReadOnlyAdmin):
         "miktar",
         "birim",
         "warehouse",
-        "teklif",
+        "varyant",
         "alici_firma",
         "gecerlilik_sonu",
     )
     list_filter = ("durum", "birim")
-    list_select_related = ("warehouse", "teklif", "alici_firma", "varyant")
+    list_select_related = ("warehouse", "alici_firma", "varyant")
     readonly_fields = [f.name for f in StockReservation._meta.fields]
 
     def get_queryset(self, request):

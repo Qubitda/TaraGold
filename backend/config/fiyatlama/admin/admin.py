@@ -532,8 +532,8 @@ class PriceQuoteAdmin(admin.ModelAdmin):
     )
     # Platform maliyet kırılımı / tedarikçi izleri
     _internal_fields = (
-        "teklif",
-        "teklif_versiyon",
+        "varyant_fiyat",
+        "fiyat_kaynagi_versiyon",
         "fiyat_modeli",
         "alici_sozlesme",
         "alici_sozlesme_versiyon",

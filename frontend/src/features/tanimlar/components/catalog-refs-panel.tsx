@@ -171,7 +171,7 @@ export function CatalogRefsPanel({
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogRefItem | null>(null);
   const [form, setForm] = useState<RefFormState>(() =>
-    emptyRefForm(DEFAULT_OLCU_TIPLERI[0].kod)
+    emptyRefForm(DEFAULT_OLCU_TIPLERI[0]?.kod ?? "yuzuk_no")
   );
   const [dirty, setDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);

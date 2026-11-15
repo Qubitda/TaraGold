@@ -131,8 +131,7 @@ export function StockManagementView() {
     const wh = searchParams.get("warehouse_id");
     if (wh) setWarehouseFilter(wh);
     if (searchParams.get("adjust") === "1") {
-      const varyantRaw =
-        searchParams.get("varyant_id") || searchParams.get("teklif_id");
+      const varyantRaw = searchParams.get("varyant_id");
       adjustForm.reset({
         warehouse_id: wh ? Number(wh) : undefined,
         varyant_id: varyantRaw ? Number(varyantRaw) : undefined,
@@ -180,23 +179,15 @@ export function StockManagementView() {
     setAdjustOpen(true);
   };
 
-  /** Özellik kırılımı için fiyat satırını bul veya oluştur (UI’da teklif denmez). */
+  /** Özellik kırılımı için VaryantFiyat bul veya oluştur. */
   const ensureOfferForVariant = async (
     varyantId: number,
     birimFiyat?: string
   ): Promise<number> => {
-    const fromBal = balances.find(
-      (b) => b.varyant_id === varyantId && b.teklif_id
-    );
-    if (fromBal?.teklif_id) return Number(fromBal.teklif_id);
-
-    const page = await fiyatlamaService.getSupplierOffers({ page_size: "100" });
-    const rows = (page.results ?? []).filter((o) => o.varyant_id === varyantId);
-    const existing =
-      rows.find((o) => o.durum === "YAYINDA") ||
-      rows.find((o) => o.durum === "ONAYLANDI") ||
-      rows[0];
-    if (existing) return existing.id;
+    const listed = await fiyatlamaService.listVaryantFiyat({
+      varyant_id: String(varyantId),
+    });
+    if (listed.results[0]) return listed.results[0].id;
 
     const price = (birimFiyat || "").trim();
     if (!price || Number.isNaN(Number(price)) || Number(price) <= 0) {
@@ -204,12 +195,11 @@ export function StockManagementView() {
         "Bu özellik kırılımının henüz fiyatı yok. Birim fiyat alanını doldurun."
       );
     }
-    const created = await fiyatlamaService.createSupplierOffer({
+    const created = await fiyatlamaService.upsertVaryantFiyat({
       varyant_id: varyantId,
       fiyat_modeli: "SABIT_PARCA",
       birim_fiyat: price,
       para_birimi: "TRY",
-      temin_tipi: "HAZIR",
     });
     return created.id;
   };
@@ -241,13 +231,10 @@ export function StockManagementView() {
   const onAdjustSubmit = adjustForm.handleSubmit(async (data) => {
     setAdjustError(null);
     try {
-      const teklifId = await ensureOfferForVariant(
-        Number(data.varyant_id),
-        data.birim_fiyat
-      );
+      await ensureOfferForVariant(Number(data.varyant_id), data.birim_fiyat);
       await adjustMut.mutateAsync({
         warehouse_id: Number(data.warehouse_id),
-        teklif_id: teklifId,
+        varyant_id: Number(data.varyant_id),
         miktar: data.miktar.trim(),
         neden: data.neden.trim(),
       });
@@ -407,7 +394,7 @@ export function StockManagementView() {
             <TableBody>
               {balances.map((b) => (
                 <TableRow
-                  key={`${b.warehouse_id ?? "w"}-${b.teklif_id ?? "t"}-${b.varyant_id}`}
+                  key={`${b.warehouse_id ?? "w"}-${b.varyant_id}-${b.birim ?? "u"}`}
                 >
                   <TableCell className="text-xs">
                     <div className="font-medium text-foreground">

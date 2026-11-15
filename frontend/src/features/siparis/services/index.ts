@@ -35,11 +35,14 @@ export const siparisService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  createCheckout(data?: {
-    teslimat_adresi_id?: number;
-    fatura_adresi_id?: number;
-    siparis_notu?: string;
-  }): Promise<CheckoutResult & { id?: number }> {
+  createCheckout(
+    data?: {
+      teslimat_adresi_id?: number;
+      fatura_adresi_id?: number;
+      siparis_notu?: string;
+    },
+    idempotencyKey?: string
+  ): Promise<CheckoutResult & { id?: number }> {
     return apiFetch<CheckoutResult & { id?: number }>("/checkouts/", {
       method: "POST",
       body: {
@@ -47,31 +50,40 @@ export const siparisService = {
         fatura_adresi_id: data?.fatura_adresi_id,
         siparis_notu: data?.siparis_notu || "",
       },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: idempotencyKey || newIdempotencyKey(),
     });
   },
-  createOrderFromCheckout(checkoutId: number): Promise<BuyerOrder> {
+  createOrderFromCheckout(
+    checkoutId: number,
+    idempotencyKey?: string
+  ): Promise<BuyerOrder> {
     return apiFetch<BuyerOrder>("/orders/from-checkout/", {
       method: "POST",
       body: { checkout_id: checkoutId },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: idempotencyKey || newIdempotencyKey(),
     });
   },
-  /** Checkout + order oluşturma zinciri. */
+  /** Checkout + order zinciri — anahtar/checkout_id deneme boyunca sabit tutulabilir. */
   async checkout(data?: {
     teslimat_adresi_id?: number;
     fatura_adresi_id?: number;
     siparis_notu?: string;
+    checkoutIdempotencyKey?: string;
+    orderIdempotencyKey?: string;
+    existingCheckoutId?: number;
   }): Promise<BuyerOrder> {
-    const result = await this.createCheckout(data);
-    if (result.order_id) {
-      return this.getOrderDetail(result.order_id);
+    let checkoutId = data?.existingCheckoutId;
+    if (!checkoutId) {
+      const result = await this.createCheckout(data, data?.checkoutIdempotencyKey);
+      if (result.order_id) {
+        return this.getOrderDetail(result.order_id);
+      }
+      checkoutId = result.checkout_id ?? result.id;
     }
-    const checkoutId = result.checkout_id ?? result.id;
     if (!checkoutId) {
       throw new Error("Checkout id alınamadı.");
     }
-    return this.createOrderFromCheckout(checkoutId);
+    return this.createOrderFromCheckout(checkoutId, data?.orderIdempotencyKey);
   },
   requoteCartLine(lineId: number): Promise<BuyerCart> {
     return apiFetch<{ cart: BuyerCart }>(`/carts/me/lines/${lineId}/`, {

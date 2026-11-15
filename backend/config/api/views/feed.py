@@ -18,20 +18,9 @@ from api.pagination import apply_ordering, paginate_queryset
 from firmalar.models import AliciKanalErisimi
 from firmalar.services.api_anahtar_servisi import dogrula_raw
 from firmalar.services.kanal_gorunurluk_servisi import filter_buyer_catalog_queryset
-from fiyatlama.models import FiyatSozlesmesi, TedarikciTeklif
-from fiyatlama.models.sozlesme_cozumleme import CokluSozlesmeHatasi, SozlesmeYokHatasi, cozumle
-from fiyatlama.services import fiyat_motoru
-from fiyatlama.services.pricing_service import (
-    _cevir_try_hedefe,
-    _d,
-    _tas_toplami_try,
-    sec_teklif,
-)
-from piyasa.services.marj_cozumleme import coz_marj_kurali, to_motor_marj
+from fiyatlama.services import pricing_service
 from stok.models import StockBalance
-from tanimlar.models import KurTaraf, SatisKanali
-from tanimlar.services import kur_servisi
-from tanimlar.services.kaynak_resolve import etkin_kaynak
+from tanimlar.models import SatisKanali
 from urunler.models import Urun
 
 
@@ -134,97 +123,15 @@ def _compute_net_feed_price(
     varyant = urun.varyantlar.filter(aktif=True).order_by("pk").first()
     if varyant is None:
         return None
-    now = timezone.now()
-    bugun = timezone.localdate(now) if timezone.is_aware(now) else now.date()
-    ayar = getattr(urun, "ayar", None)
-    metal = getattr(ayar, "metal", None) if ayar else None
-    milyem = getattr(ayar, "milyem", None) if ayar else None
-
     try:
-        kaynak = etkin_kaynak(urun=urun)
-        metal_alici = None
-        metal_tedarikci = None
-        if metal is not None and getattr(metal, "gram_bazli", False):
-            metal_alici = kur_servisi.resolve_metal_kuru(
-                metal, taraf=KurTaraf.ALICI, now=now, etkin_kaynak=kaynak
-            )
-            metal_tedarikci = kur_servisi.resolve_metal_kuru(
-                metal, taraf=KurTaraf.TEDARIKCI, now=now, etkin_kaynak=kaynak
-            )
-        teklif = sec_teklif(
-            varyant,
-            bugun=bugun,
-            now=now,
-            metal_saf_try=(
-                _d(metal_tedarikci.saf_birim_fiyat) if metal_tedarikci else None
-            ),
-        )
-        alici_kalem = cozumle(
-            firma=alici_firma,
-            kontrat_tipi=FiyatSozlesmesi.KontratTipi.ALICI,
-            tarih=bugun,
-            metal=metal,
-            ayar=ayar,
+        pq = pricing_service.quote(
+            alici_firma=alici_firma,
             satis_kanali=kanal,
+            varyant=varyant,
+            para_birimi=para_birimi,
         )
-        gram = teklif.gram if teklif.gram is not None else varyant.gram
-        if gram is None and teklif.fiyat_modeli != TedarikciTeklif.FiyatModeli.SABIT_PARCA:
-            return None
-        tas_try, _ = _tas_toplami_try(teklif, now=now)
-        ek_try = _d(varyant.ek_bedel)
-        tas_hedef, _ = _cevir_try_hedefe(tas_try, hedef_pb=para_birimi, now=now)
-        ek_hedef, _ = _cevir_try_hedefe(ek_try, hedef_pb=para_birimi, now=now)
-        saf_birim_hedef = None
-        if teklif.fiyat_modeli == TedarikciTeklif.FiyatModeli.METAL_BAZLI:
-            if metal_alici is None or milyem is None:
-                return None
-            saf_birim_hedef, _ = _cevir_try_hedefe(
-                _d(metal_alici.saf_birim_fiyat), hedef_pb=para_birimi, now=now
-            )
-        iscilik = (
-            _d(teklif.iscilik_override)
-            if teklif.iscilik_override is not None
-            else _d(alici_kalem.iscilik)
-        )
-        iscilik_hedef, _ = _cevir_try_hedefe(iscilik, hedef_pb=para_birimi, now=now)
-        marj_kurali = coz_marj_kurali(
-            satis_kanali=kanal,
-            kategori=getattr(urun, "kategori", None),
-        )
-        eff_marj_tipi = alici_kalem.marj_tipi
-        eff_marj_degeri = alici_kalem.marj_degeri
-        if marj_kurali is not None and (
-            marj_kurali.kapsam != "TUMU"
-            or _d(marj_kurali.deger) > Decimal("0")
-            or _d(alici_kalem.marj_degeri) <= Decimal("0")
-        ):
-            eff_marj_tipi, eff_marj_degeri = to_motor_marj(marj_kurali)
-
-        sonuc = fiyat_motoru.hesapla_teklif_kalemleri(
-            fiyat_modeli=teklif.fiyat_modeli,
-            hedef_para_birimi=para_birimi,
-            gram=gram,
-            milyem=milyem,
-            saf_birim_fiyat=saf_birim_hedef,
-            iscilik=iscilik_hedef,
-            islcilik_dahil_mi=bool(alici_kalem.islcilik_dahil_mi),
-            birim_fiyat=teklif.birim_fiyat,
-            birim_fiyat_pb=teklif.para_birimi,
-            marj_tipi=eff_marj_tipi,
-            marj_degeri=eff_marj_degeri,
-            tas_bedeli=tas_hedef,
-            ek_bedel=ek_hedef,
-            taraf=KurTaraf.ALICI,
-            now=now,
-        )
-        return str(sonuc["toplam_vergisiz"])
-    except (
-        DjangoValidationError,
-        SozlesmeYokHatasi,
-        CokluSozlesmeHatasi,
-        ValueError,
-        LookupError,
-    ):
+        return str(pq.toplam_vergisiz)
+    except Exception:  # noqa: BLE001 — feed: fiyat yoksa null
         return None
 
 

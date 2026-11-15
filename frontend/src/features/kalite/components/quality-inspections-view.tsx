@@ -230,7 +230,7 @@ export function QualityInspectionsView() {
       setLoadingMeasureLines(true);
       const opts = await syncLinesForOrder(item.order_id);
       setMeasureLines(opts);
-      if (!item.order_line_id && opts.length === 1) {
+      if (!item.order_line_id && opts.length === 1 && opts[0]) {
         measureForm.setValue("order_line_id", Number(opts[0].value));
       }
       setLoadingMeasureLines(false);

@@ -22,16 +22,16 @@ from siparis.services.cart_servisi import (
     al_veya_olustur_sepet,
     satir_ekle,
 )
-from siparis.services.checkout_servisi import _resolve_warehouse_for_teklif
+from siparis.services.checkout_servisi import _resolve_warehouse_for_fiyat
 from stok.models import StockBalance
-from stok.services.birim import birim_from_teklif
+from stok.services.birim import birim_from_fiyat_modeli
 
 
-def _assert_atp(*, teklif, miktar: Decimal, birim: str) -> None:
+def _assert_atp(*, varyant_fiyat, varyant, miktar: Decimal, birim: str) -> None:
     """Fail-closed: yeterli available yoksa sepete aktarım yok."""
-    warehouse = _resolve_warehouse_for_teklif(teklif)
+    warehouse = _resolve_warehouse_for_fiyat(varyant_fiyat)
     bal = StockBalance.objects.filter(
-        warehouse=warehouse, teklif=teklif, birim=birim
+        warehouse=warehouse, varyant=varyant, birim=birim
     ).first()
     available = bal.available if bal is not None else Decimal("0")
     if available < miktar:
@@ -84,7 +84,7 @@ def sepete_aktar(
         order.lines.select_related(
             "varyant",
             "price_lock__quote__satis_kanali",
-            "price_lock__quote__teklif",
+            "price_lock__quote__varyant_fiyat",
         ).order_by("pk")
     )
     if not lines:
@@ -107,12 +107,20 @@ def sepete_aktar(
                 para_birimi=old_quote.para_birimi or "TRY",
                 now=now,
             )
-            birim = birim_from_teklif(new_quote.teklif)
+            vf = new_quote.varyant_fiyat
+            if vf is None:
+                raise ValidationError("Güncel quote fiyat kaynağı yok.")
+            birim = birim_from_fiyat_modeli(vf.fiyat_modeli)
             if birim != line.birim:
                 raise ValidationError(
-                    f"Birim uyumsuz: sipariş={line.birim}, güncel teklif={birim}."
+                    f"Birim uyumsuz: sipariş={line.birim}, güncel={birim}."
                 )
-            _assert_atp(teklif=new_quote.teklif, miktar=miktar, birim=birim)
+            _assert_atp(
+                varyant_fiyat=vf,
+                varyant=varyant,
+                miktar=miktar,
+                birim=birim,
+            )
             prepared.append((new_quote, miktar))
     except (ValidationError, PermissionDenied) as exc:
         reason = str(exc)

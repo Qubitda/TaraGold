@@ -1,9 +1,9 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# TaraGold frontend (Vite SPA)
 
-## This is NOT the Next.js you know
+Normatif runtime: Vite + React Router + TanStack Query — [ADR-0031](../docs/decisions/ADR-0031-vite-spa-portal.md).
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- Paket: `frontend/package.json` + `package-lock.json` (npm).
+- API: Django `/api/v1` via Vite proxy (`DJANGO_ORIGIN`). Staging/prod: `USE_MOCK` yasak.
+- Offline mock: yalnız `USE_MOCK=true` → `tools/mock-api-plugin.ts` (dinamik import).
+- Sayfa girişleri: `src/app/(portal)/…` — React Router `Routes` ile bağlanır (Next.js App Router değil).
+- Kurallar: kök [`AGENTS.md`](../AGENTS.md) + [`docs/MASTER.md`](../docs/MASTER.md) §2/§12.

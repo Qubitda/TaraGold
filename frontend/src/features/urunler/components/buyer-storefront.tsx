@@ -3,6 +3,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Gem, ShoppingCart, Eye } from "lucide-react";
 import type { BuyerCatalogDetail, BuyerCatalogItem } from "../types";
+import {
+  isQuoteExpired,
+  QuoteCountdown,
+} from "@/components/commerce/quote-countdown";
 import { formatGram, formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +17,9 @@ export type CardPriceState = {
   currency?: string;
   quoteId?: number;
   gram?: string | null;
+  expiresAt?: string | null;
+  adding?: boolean;
+  added?: boolean;
   error?: string;
 };
 
@@ -21,7 +28,9 @@ type QuoteLineState = {
   price?: string;
   currency?: string;
   quoteId?: number;
+  expiresAt?: string | null;
   error?: string;
+  adding?: boolean;
   added?: boolean;
 };
 
@@ -141,8 +150,13 @@ export function BuyerCatalogGrid({
                     Fiyat hesaplanıyor…
                   </span>
                 ) : price?.price ? (
-                  <div className="text-sm font-semibold font-mono tabular-nums tracking-tight">
-                    {formatMoney(price.price, price.currency || "TRY")}
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-semibold font-mono tabular-nums tracking-tight">
+                      {formatMoney(price.price, price.currency || "TRY")}
+                    </div>
+                    {price.expiresAt ? (
+                      <QuoteCountdown expiresAt={price.expiresAt} />
+                    ) : null}
                   </div>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
@@ -171,14 +185,21 @@ export function BuyerCatalogGrid({
                     !canQuote ||
                     !channelSelected ||
                     !price?.quoteId ||
-                    !price?.price
+                    !price?.price ||
+                    Boolean(price?.adding) ||
+                    Boolean(price?.added) ||
+                    isQuoteExpired(price?.expiresAt)
                   }
                   onClick={() => {
                     if (price?.quoteId) onAddToCart(item, price.quoteId);
                   }}
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
-                  Sipariş Ver
+                  {price?.added
+                    ? "Eklendi"
+                    : price?.adding
+                      ? "Ekleniyor…"
+                      : "Sepete Ekle"}
                 </Button>
               </div>
             </div>
@@ -410,15 +431,22 @@ export function BuyerProductDetailView({
                   <div className="text-2xl font-semibold font-mono tabular-nums tracking-tight">
                     {formatMoney(st.price, st.currency || "TRY")}
                   </div>
+                  {st.expiresAt ? (
+                    <QuoteCountdown expiresAt={st.expiresAt} />
+                  ) : null}
                   {st.added ? (
                     <Badge variant="success" className="gap-1 text-[11px]">
                       <Check className="h-3 w-3" />
-                      Siparişe eklendi
+                      Sepete eklendi
                     </Badge>
                   ) : (
                     <Button
                       className="w-full h-10 gap-2"
-                      disabled={!st.quoteId}
+                      disabled={
+                        !st.quoteId ||
+                        Boolean(st.adding) ||
+                        isQuoteExpired(st.expiresAt)
+                      }
                       onClick={() => {
                         if (selectedVariantId && st.quoteId) {
                           onAddToCart(selectedVariantId, st.quoteId);
@@ -426,7 +454,7 @@ export function BuyerProductDetailView({
                       }}
                     >
                       <ShoppingCart className="h-4 w-4" />
-                      Sipariş Ver
+                      {st.adding ? "Ekleniyor…" : "Sepete Ekle"}
                     </Button>
                   )}
                 </>

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { loginSchema, type LoginInput } from "../schemas/login";
 import { authService } from "../services/auth-service";
@@ -47,14 +47,26 @@ function formatAuthError(err: unknown): string {
   return "Giriş sırasında sunucu bağlantı hatası oluştu.";
 }
 
+function safeReturnPath(raw: string | null | undefined): string {
+  if (!raw) return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  const pathOnly = raw.split("?")[0] || "";
+  if (pathOnly === "/login" || pathOnly === "/reset-password" || pathOnly === "/invite") {
+    return "/";
+  }
+  return raw;
+}
+
 export function LoginForm() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { setSessionUser, refresh } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<"credentials" | "mfa">("credentials");
   const [mfaHint, setMfaHint] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const returnTo = safeReturnPath(searchParams.get("next"));
 
   const {
     register,
@@ -81,7 +93,7 @@ export function LoginForm() {
         return;
       }
       setSessionUser(me, { mfaPending: false });
-      navigate("/", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
       setServerError(formatAuthError(err));
     }
@@ -92,7 +104,7 @@ export function LoginForm() {
     try {
       const me = await authService.verifyMfa(data.code);
       setSessionUser(me, { mfaPending: false });
-      navigate("/", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
       setServerError(formatAuthError(err));
     }
@@ -106,7 +118,7 @@ export function LoginForm() {
       setMfaHint(res.detail || "Doğrulama kodu yeniden gönderildi.");
       if (res.mfa_ok) {
         await refresh();
-        navigate("/", { replace: true });
+        navigate(returnTo, { replace: true });
       }
     } catch (err) {
       setServerError(formatAuthError(err));

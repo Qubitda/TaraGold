@@ -22,11 +22,6 @@ class StockReservation(models.Model):
         on_delete=models.PROTECT,
         related_name="reservations",
     )
-    teklif = models.ForeignKey(
-        "fiyatlama.TedarikciTeklif",
-        on_delete=models.PROTECT,
-        related_name="stock_reservations",
-    )
     varyant = models.ForeignKey(
         "urunler.Varyant",
         on_delete=models.PROTECT,
@@ -63,7 +58,7 @@ class StockReservation(models.Model):
         verbose_name_plural = "Stok rezervasyonları"
         ordering = ["-olusturma_tarihi", "-pk"]
         indexes = [
-            models.Index(fields=["warehouse", "teklif", "durum"]),
+            models.Index(fields=["warehouse", "varyant", "durum"]),
             models.Index(fields=["durum", "gecerlilik_sonu"]),
             models.Index(fields=["alici_firma", "-olusturma_tarihi"]),
         ]
@@ -102,11 +97,6 @@ class StockReservation(models.Model):
 
     def clean(self):
         super().clean()
-        if self.teklif_id and self.varyant_id:
-            if self.teklif.varyant_id != self.varyant_id:
-                raise ValidationError(
-                    {"varyant": "varyant, teklif.varyant ile eşit olmalı."}
-                )
         if self.miktar is not None and self.miktar <= 0:
             raise ValidationError({"miktar": "Miktar pozitif olmalı."})
 

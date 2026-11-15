@@ -47,16 +47,10 @@ class StockMovement(models.Model):
         on_delete=models.PROTECT,
         related_name="movements",
     )
-    teklif = models.ForeignKey(
-        "fiyatlama.TedarikciTeklif",
-        on_delete=models.PROTECT,
-        related_name="stock_movements",
-    )
     varyant = models.ForeignKey(
         "urunler.Varyant",
         on_delete=models.PROTECT,
         related_name="stock_movements",
-        help_text="Denormalize: teklif.varyant ile eşit olmalı.",
     )
     birim = models.CharField(max_length=8, choices=StokBirimi.CHOICES)
     # İşaretli miktar: giriş +, çıkış − (DUZELTME her iki yön)
@@ -79,8 +73,8 @@ class StockMovement(models.Model):
         verbose_name_plural = "Stok hareketleri"
         ordering = ["-olusturma_tarihi", "-pk"]
         indexes = [
-            models.Index(fields=["warehouse", "teklif", "-olusturma_tarihi"]),
-            models.Index(fields=["teklif", "-olusturma_tarihi"]),
+            models.Index(fields=["warehouse", "varyant", "-olusturma_tarihi"]),
+            models.Index(fields=["varyant", "-olusturma_tarihi"]),
             models.Index(fields=["tip", "-olusturma_tarihi"]),
         ]
         constraints = [
@@ -113,11 +107,6 @@ class StockMovement(models.Model):
 
     def clean(self):
         super().clean()
-        if self.teklif_id and self.varyant_id:
-            if self.teklif.varyant_id != self.varyant_id:
-                raise ValidationError(
-                    {"varyant": "varyant, teklif.varyant ile eşit olmalı."}
-                )
         if self.miktar == 0:
             raise ValidationError({"miktar": "Miktar sıfır olamaz."})
 

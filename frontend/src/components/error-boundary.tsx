@@ -13,19 +13,19 @@ interface State {
 
 /** Vite SPA hata sınırı — Next.js error.tsx yerine. */
 export class AppErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
     if (import.meta.env.DEV) {
       console.error("[AppErrorBoundary]", error, info.componentStack);
     }
   }
 
-  render() {
+  override render() {
     if (!this.state.error) return this.props.children;
 
     return (

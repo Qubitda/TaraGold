@@ -7,25 +7,25 @@ from django.utils import timezone
 
 from api.presenters.buyer import BuyerQuotePresenter
 from firmalar.services.yetki_servisi import can_view_all_tenants
-from fiyatlama.models import TedarikciTeklif
+from fiyatlama.models import VaryantFiyat
 from fiyatlama.services.pricing_service import quote as create_quote
 from tanimlar.models import SatisKanali
 from urunler.models import Varyant
 
 _GRAM_MODELLER = frozenset(
     {
-        TedarikciTeklif.FiyatModeli.METAL_BAZLI,
-        TedarikciTeklif.FiyatModeli.GRAM_BIRIM,
+        VaryantFiyat.FiyatModeli.METAL_BAZLI,
+        VaryantFiyat.FiyatModeli.GRAM_BIRIM,
     }
 )
-_SABIT_MODELLER = frozenset({TedarikciTeklif.FiyatModeli.SABIT_PARCA})
+_SABIT_MODELLER = frozenset({VaryantFiyat.FiyatModeli.SABIT_PARCA})
 
 
-def _fiyat_tipi_uyumlu(*, urun_fiyat_tipi: str, teklif_modeli: str) -> bool:
+def _fiyat_tipi_uyumlu(*, urun_fiyat_tipi: str, fiyat_modeli: str) -> bool:
     tip = (urun_fiyat_tipi or "gram").strip().lower()
     if tip == "sabit":
-        return teklif_modeli in _SABIT_MODELLER
-    return teklif_modeli in _GRAM_MODELLER
+        return fiyat_modeli in _SABIT_MODELLER
+    return fiyat_modeli in _GRAM_MODELLER
 
 
 def alici_varyant_fiyati(
@@ -104,8 +104,8 @@ def alici_varyant_fiyati(
         low = msg.lower()
         if "sözleşme" in low or "sozlesme" in low:
             code = "sozlesme_yok"
-        elif "teklif" in low:
-            code = "teklif_yok"
+        elif "fiyat" in low or "teklif" in low:
+            code = "fiyat_yok"
         elif "kur" in low or "sağlayıcı" in low or "saglayici" in low:
             code = "kur_yok"
         elif "gram" in low:
@@ -124,14 +124,16 @@ def alici_varyant_fiyati(
             "detail": str(exc),
         }
 
-    teklif_modeli = getattr(getattr(q, "teklif", None), "fiyat_modeli", "") or ""
+    fiyat_modeli = (
+        getattr(getattr(q, "varyant_fiyat", None), "fiyat_modeli", "") or ""
+    )
     uyari = None
-    if teklif_modeli and not _fiyat_tipi_uyumlu(
-        urun_fiyat_tipi=urun.fiyat_tipi, teklif_modeli=teklif_modeli
+    if fiyat_modeli and not _fiyat_tipi_uyumlu(
+        urun_fiyat_tipi=urun.fiyat_tipi, fiyat_modeli=fiyat_modeli
     ):
         uyari = (
-            f"Ürün fiyat tipi '{urun.fiyat_tipi}' ile teklif modeli "
-            f"'{teklif_modeli}' uyumsuz; gösterilen fiyat teklif motorundan."
+            f"Ürün fiyat tipi '{urun.fiyat_tipi}' ile fiyat modeli "
+            f"'{fiyat_modeli}' uyumsuz."
         )
 
     presented = BuyerQuotePresenter(q)

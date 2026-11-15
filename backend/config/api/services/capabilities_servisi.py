@@ -43,7 +43,13 @@ def capabilities_for(user) -> dict[str, bool]:
         "can_approve": has_perm(user, P["manage_approval"]),
         "can_manage_org": has_perm(user, P["manage_org"]),
         "can_lock_quote": has_perm(user, P["lock_quote"]) or buyer or ops,
-        "can_manage_offers": supplier or has_perm(user, P["manage_own_teklif"]),
+        # Stok & Fiyat yetkisi (eski teklif cap adı FE uyumu için korunur)
+        "can_manage_offers": (
+            supplier
+            or ops
+            or has_perm(user, "fiyatlama.manage_varyant_fiyat")
+            or has_perm(user, P["manage_own_teklif"])
+        ),
         "can_view_supplier_stock": supplier or ops,
         "can_view_ops": ops,
         "can_view_ops_finance": ops,

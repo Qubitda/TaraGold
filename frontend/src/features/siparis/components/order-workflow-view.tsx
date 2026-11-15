@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { BuyerOrder } from "../types";
 import { formatDateTime, formatMoney } from "@/lib/format";
@@ -9,7 +9,6 @@ import {
   siparisKeys,
   useCancelOrderMutation,
   useCartQuery,
-  useCheckoutMutation,
   useMarkSupplierHazirMutation,
   useOrderDetailQuery,
   useOrdersPageQuery,
@@ -21,7 +20,10 @@ import {
 } from "../hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { QuoteCountdown, isQuoteExpired } from "@/components/commerce/quote-countdown";
+import { calibrateServerClock, useServerClock } from "@/hooks/use-server-clock";
+import { newIdempotencyKey } from "@/lib/api/client";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
+import { isPositiveDecimal } from "@/lib/parse-decimal";
 import { ConfirmDialog, EntityModal, ListPage, RowActions } from "@/components/crud";
 import { Input } from "@/components/ui/input";
 import {
@@ -103,7 +105,6 @@ export function OrderWorkflowView() {
 
   const removeLineMutation = useRemoveCartLineMutation();
   const updateLineMutation = useUpdateCartLineMutation();
-  const checkoutMutation = useCheckoutMutation();
   const requoteMutation = useRequoteCartLineMutation();
   const cancelMutation = useCancelOrderMutation();
   const reorderMutation = useReorderOrderMutation();
@@ -154,10 +155,16 @@ export function OrderWorkflowView() {
     undefined
   );
   const [orderNotes, setOrderNotes] = useState("");
+  const checkoutAttemptRef = useRef<{
+    checkoutKey: string;
+    orderKey: string;
+    checkoutId?: number;
+  } | null>(null);
 
   const [selectedOrder, setSelectedOrder] = useState<BuyerOrder | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
+  const serverClock = useServerClock();
 
   const routeIdNum =
     routeOrderId && Number.isFinite(Number(routeOrderId))
@@ -226,12 +233,26 @@ export function OrderWorkflowView() {
   }, [cartQuery.error, ordersQuery.error, orderDetailQuery.error]);
 
   useEffect(() => {
+    if (cart?.server_now) calibrateServerClock(cart.server_now);
+  }, [cart?.server_now]);
+
+  useEffect(() => {
     if (!cart?.lines) return;
-    const next: Record<number, string> = {};
-    for (const line of cart.lines) {
-      next[line.id] = line.miktar;
-    }
-    setLineDrafts(next);
+    setLineDrafts((prev) => {
+      const next: Record<number, string> = {};
+      const liveIds = new Set(cart.lines.map((l) => l.id));
+      for (const line of cart.lines) {
+        // Kaydedilmemiş taslakları koru; yalnızca yeni satırlara sunucu değeri yaz
+        next[line.id] =
+          prev[line.id] !== undefined ? prev[line.id]! : line.miktar;
+      }
+      // Silinen satırları düş
+      for (const id of Object.keys(prev)) {
+        const n = Number(id);
+        if (!liveIds.has(n)) continue;
+      }
+      return next;
+    });
   }, [cart?.lines]);
 
   useEffect(() => {
@@ -245,25 +266,69 @@ export function OrderWorkflowView() {
   }, [routeIdNum, orderDetailQuery.data]);
 
   const cartHasExpiredQuote = Boolean(
-    cart?.lines?.some((l) => isQuoteExpired(l.gecerlilik_sonu))
+    cart?.lines?.some((l) =>
+      isQuoteExpired(l.gecerlilik_sonu, serverClock.nowMs())
+    )
   );
 
   const handleConfirmCheckout = async () => {
-    if (cartHasExpiredQuote) {
+    if (
+      cart?.lines?.some((l) =>
+        isQuoteExpired(l.gecerlilik_sonu, serverClock.nowMs())
+      )
+    ) {
       const msg =
-        "Süresi dolmuş fiyat satırı var. Miktarı güncelleyin veya satırı kaldırıp yeniden Sipariş Verin.";
+        "Süresi dolmuş fiyat satırı var. Miktarı güncelleyin veya satırı kaldırıp yeniden Sepete Ekleyin.";
       setError(msg);
       actionToast.error("Sipariş tamamlanamadı", msg);
       return;
     }
+    if (!checkoutAttemptRef.current) {
+      checkoutAttemptRef.current = {
+        checkoutKey: newIdempotencyKey(),
+        orderKey: newIdempotencyKey(),
+      };
+    }
+    const attempt = checkoutAttemptRef.current;
     setIsSubmittingCheckout(true);
     setError(null);
     try {
-      const createdOrder = await checkoutMutation.mutateAsync({
-        teslimat_adresi_id: selectedDeliveryAddr ?? undefined,
-        fatura_adresi_id: selectedInvoiceAddr ?? undefined,
-        siparis_notu: orderNotes.trim(),
-      });
+      let checkoutId = attempt.checkoutId;
+      if (!checkoutId) {
+        const checkoutResult = await siparisService.createCheckout(
+          {
+            teslimat_adresi_id: selectedDeliveryAddr ?? undefined,
+            fatura_adresi_id: selectedInvoiceAddr ?? undefined,
+            siparis_notu: orderNotes.trim(),
+          },
+          attempt.checkoutKey
+        );
+        if (checkoutResult.order_id) {
+          const createdOrder = await siparisService.getOrderDetail(
+            checkoutResult.order_id
+          );
+          checkoutAttemptRef.current = null;
+          void queryClient.invalidateQueries({ queryKey: siparisKeys.all });
+          setCheckoutModalOpen(false);
+          setOrderNotes("");
+          await refreshData();
+          setActiveTab("orders");
+          setSelectedOrder(createdOrder);
+          setOrderDetailOpen(true);
+          navigate(`/siparis/${createdOrder.id}?tab=orders`, { replace: true });
+          actionToast.success("Sipariş oluşturuldu");
+          return;
+        }
+        checkoutId = checkoutResult.checkout_id ?? checkoutResult.id;
+        if (!checkoutId) throw new Error("Checkout id alınamadı.");
+        attempt.checkoutId = checkoutId;
+      }
+      const createdOrder = await siparisService.createOrderFromCheckout(
+        checkoutId,
+        attempt.orderKey
+      );
+      checkoutAttemptRef.current = null;
+      void queryClient.invalidateQueries({ queryKey: siparisKeys.all });
       setCheckoutModalOpen(false);
       setOrderNotes("");
       await refreshData();
@@ -294,7 +359,7 @@ export function OrderWorkflowView() {
 
   const handleSaveLineQty = async (lineId: number) => {
     const miktar = (lineDrafts[lineId] || "").trim();
-    if (!miktar || Number(miktar) <= 0) {
+    if (!isPositiveDecimal(miktar)) {
       setError("Lütfen sıfırdan büyük geçerli bir miktar girin.");
       return;
     }
@@ -302,6 +367,7 @@ export function OrderWorkflowView() {
     setError(null);
     try {
       await updateLineMutation.mutateAsync({ lineId, miktar });
+      setLineDrafts((prev) => ({ ...prev, [lineId]: miktar }));
       actionToast.success("Miktar güncellendi");
     } catch (err) {
       setError(mapCommerceError(err, "Miktar güncellenemedi."));

@@ -83,7 +83,25 @@ class Command(BaseCommand):
             warnings.append("MFA_ENFORCE_PLATFORM=False (platform/act-as tek faktör).")
 
         # Elle kargo / elle tahsilat (ADR-0036: sanal pos & kargo entegrasyonu yok)
+        payment = (getattr(settings, "PAYMENT_PROVIDER", None) or "fake").strip().lower()
+        carrier = (getattr(settings, "CARRIER_PROVIDER", None) or "fake").strip().lower()
+        allow_fake_setting = bool(getattr(settings, "ALLOW_FAKE_PROVIDERS", False))
+        using_fake = payment == "fake" or carrier == "fake"
         infos.append("Ödeme/kargo: elle tahsilat & elle takip no (entegrasyon yok).")
+        if using_fake:
+            if allow_fake or allow_fake_setting:
+                infos.append(
+                    f"Fake provider bilinçli "
+                    f"(PAYMENT={payment}, CARRIER={carrier}, "
+                    f"ALLOW_FAKE={allow_fake_setting}, --allow-fake={allow_fake})."
+                )
+            elif debug:
+                infos.append("Fake provider (DEBUG); staging'de ALLOW_FAKE_PROVIDERS=1 önerilir.")
+            else:
+                errors.append(
+                    "Fake PAYMENT/CARRIER provider + ALLOW_FAKE_PROVIDERS=0 "
+                    "(--allow-fake veya ALLOW_FAKE_PROVIDERS=1 gerekli)."
+                )
 
         # SMTP / email
         email_backend = str(getattr(settings, "EMAIL_BACKEND", "") or "")

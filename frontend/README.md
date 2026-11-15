@@ -24,14 +24,22 @@ npm run generate:api   # ../docs/api/openapi-v1.json → src/lib/api/schema.d.ts
 ## Test / lint
 
 ```bash
-npm run lint           # eslint + tsc
+npm run typecheck      # tsc --noEmit (strict)
+npm run lint           # eslint
+npm run build          # typecheck + vite build
 npm test               # vitest
-npm run test:e2e       # playwright (dev sunucu)
+npm run test:e2e       # playwright — Vite:3000 + Django (API mock yasak)
 ```
+
+E2E önkoşul: Django `runserver`, `CSRF_TRUSTED_ORIGINS=http://127.0.0.1:3000`,
+`DJANGO_ORIGIN` proxy, `USE_MOCK` kapalı, `seed_demo_portals`.
+Kimlik: `E2E_USERNAME` / `E2E_PASSWORD` (varsayılan `demo_alici` / `DemoPortal1!`).
+`page.route` ile `/api` mock **yasak**. Workers=1 (tek demo kullanıcı / sepet çakışması).
 
 ## Yerel çalıştırma
 
-Paket: **npm** (`package-lock.json`). `bun.lock` yok / commit edilmez.
+Paket: **npm** (`package-lock.json`). `bun.lock` / `yarn.lock` / `pnpm-lock.yaml` commit edilmez.  
+Node: **≥22.12** (`engines`).
 
 1. Backend: `backend/config` → `runserver` (PG).
 2. Django `.env`: `CSRF_TRUSTED_ORIGINS=http://127.0.0.1:3000`
@@ -40,8 +48,14 @@ Paket: **npm** (`package-lock.json`). `bun.lock` yok / commit edilmez.
    cp .env.example .env.local   # DJANGO_ORIGIN=http://127.0.0.1:8000
    npm install
    npm run dev                  # http://127.0.0.1:3000 → /api proxy
-   npm run dev:lan              # yalnız bilinçli LAN (0.0.0.0)
+   npm run dev:lan              # yalnız bilinçli LAN (--host 0.0.0.0)
    ```
+
+## Offline mock (opsiyonel)
+
+`tools/mock-api-plugin.ts` yalnız `USE_MOCK=true` iken dinamik yüklenir (statik import yok).  
+Staging/production/`--mode staging` build’de `USE_MOCK=true` **fail-fast**.  
+Günlük geliştirme ve E2E: mock **kapalı**, Django zorunlu.
 
 ## PWA / cache
 
@@ -54,5 +68,5 @@ Paket: **npm** (`package-lock.json`). `bun.lock` yok / commit edilmez.
 ## Yasak
 
 - `next/*` import / shim
-- Sahte endpoint / mock KPI
-- AI Studio kalıntıları (`GEMINI_*`, `metadata.json`, `DISABLE_HMR`)
+- Sahte endpoint / mock KPI (prod yolu; offline `USE_MOCK` hariç)
+- AI Studio kalıntıları (`GEMINI_*`, `metadata.json`, `DISABLE_HMR`, `experimentalDecorators`)

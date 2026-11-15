@@ -20,11 +20,10 @@ from firmalar.services.audit_servisi import (
     record_audit_durable,
 )
 from firmalar.services.yetki_servisi import has_perm, is_platform_firm_user
-from fiyatlama.models import TedarikciTeklif
 from stok.models import StockMovement, StockReservation, Warehouse
-from stok.services.birim import assert_ayni_birim, birim_from_teklif
+from stok.services.birim import assert_ayni_birim, birim_from_fiyat_modeli
 from stok.services.ledger_servisi import (
-    assert_teklif_warehouse,
+    assert_tedarikci_warehouse,
     get_or_create_balance_locked,
     save_balance_fields,
 )
@@ -75,7 +74,7 @@ def _return_or_reject_existing(res: StockReservation, *, now) -> StockReservatio
 def _sweep_expired_on_balance(
     *,
     warehouse: Warehouse,
-    teklif: TedarikciTeklif,
+    varyant,
     birim: str,
     now,
 ) -> int:
@@ -87,7 +86,7 @@ def _sweep_expired_on_balance(
         StockReservation.objects.select_for_update()
         .filter(
             warehouse=warehouse,
-            teklif=teklif,
+            varyant=varyant,
             birim=birim,
             durum=StockReservation.Durum.AKTIF,
             gecerlilik_sonu__lte=now,
@@ -99,7 +98,7 @@ def _sweep_expired_on_balance(
     for pk in stale_ids:
         locked = (
             StockReservation.objects.select_for_update()
-            .select_related("warehouse", "teklif")
+            .select_related("warehouse", "varyant")
             .filter(pk=pk, durum=StockReservation.Durum.AKTIF)
             .first()
         )
@@ -107,7 +106,7 @@ def _sweep_expired_on_balance(
             continue
         bal = get_or_create_balance_locked(
             warehouse=locked.warehouse,
-            teklif=locked.teklif,
+            varyant=locked.varyant,
             birim=locked.birim,
         )
         if bal.reserved < locked.miktar:
@@ -145,7 +144,9 @@ def olustur_rezervasyon(
     *,
     actor,
     warehouse: Warehouse,
-    teklif: TedarikciTeklif,
+    varyant,
+    fiyat_modeli: str,
+    tedarikci_id: int,
     miktar: Decimal,
     alici_firma,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
@@ -160,8 +161,8 @@ def olustur_rezervasyon(
         raise ValidationError("TTL pozitif olmalı.")
 
     key = (idempotency_key or "").strip() or None
-    birim = birim_from_teklif(teklif)
-    assert_teklif_warehouse(warehouse, teklif)
+    birim = birim_from_fiyat_modeli(fiyat_modeli)
+    assert_tedarikci_warehouse(warehouse, tedarikci_id)
 
     try:
         _assert_can_reserve(actor, warehouse, alici_firma)
@@ -173,7 +174,7 @@ def olustur_rezervasyon(
             entity_id="",
             success=False,
             reason=str(exc),
-            detail={"warehouse_id": warehouse.pk, "teklif_id": teklif.pk},
+            detail={"warehouse_id": warehouse.pk, "varyant_id": varyant.pk},
         )
         raise
 
@@ -187,12 +188,12 @@ def olustur_rezervasyon(
     try:
         with domain_atomic():
             bal = get_or_create_balance_locked(
-                warehouse=warehouse, teklif=teklif, birim=birim
+                warehouse=warehouse, varyant=varyant, birim=birim
             )
             assert_ayni_birim(bal.birim, birim, context="reservation")
             # F4-022: TTL dolmuş AKTIF hold'lar available'ı şişirmesin
             _sweep_expired_on_balance(
-                warehouse=warehouse, teklif=teklif, birim=birim, now=now
+                warehouse=warehouse, varyant=varyant, birim=birim, now=now
             )
             bal.refresh_from_db()
             if bal.available < miktar:
@@ -204,8 +205,7 @@ def olustur_rezervasyon(
 
             res = StockReservation(
                 warehouse=warehouse,
-                teklif=teklif,
-                varyant_id=teklif.varyant_id,
+                varyant=varyant,
                 birim=birim,
                 miktar=miktar,
                 durum=StockReservation.Durum.AKTIF,
@@ -225,7 +225,7 @@ def olustur_rezervasyon(
                     "miktar": str(miktar),
                     "birim": birim,
                     "warehouse_id": warehouse.pk,
-                    "teklif_id": teklif.pk,
+                    "varyant_id": varyant.pk,
                     "available_after": str(bal.available),
                     "gecerlilik_sonu": res.gecerlilik_sonu.isoformat(),
                     "idempotency_key": key,
@@ -249,7 +249,7 @@ def olustur_rezervasyon(
             entity_id="",
             success=False,
             reason=str(exc),
-            detail={"warehouse_id": warehouse.pk, "teklif_id": teklif.pk},
+            detail={"warehouse_id": warehouse.pk, "varyant_id": varyant.pk},
         )
         raise
 
@@ -266,7 +266,7 @@ def _close_aktif_hold(
     with domain_atomic():
         locked = (
             StockReservation.objects.select_for_update()
-            .select_related("warehouse", "teklif")
+            .select_related("warehouse", "varyant")
             .filter(pk=res.pk, durum=StockReservation.Durum.AKTIF)
             .first()
         )
@@ -276,7 +276,7 @@ def _close_aktif_hold(
 
         bal = get_or_create_balance_locked(
             warehouse=locked.warehouse,
-            teklif=locked.teklif,
+            varyant=locked.varyant,
             birim=locked.birim,
         )
         if bal.reserved < locked.miktar:
@@ -398,7 +398,7 @@ def tuket_rezervasyon(
     with domain_atomic():
         locked = (
             StockReservation.objects.select_for_update()
-            .select_related("warehouse", "teklif")
+            .select_related("warehouse", "varyant")
             .filter(pk=res.pk, durum=StockReservation.Durum.AKTIF)
             .first()
         )
@@ -410,7 +410,7 @@ def tuket_rezervasyon(
 
         bal = get_or_create_balance_locked(
             warehouse=locked.warehouse,
-            teklif=locked.teklif,
+            varyant=locked.varyant,
             birim=locked.birim,
         )
         if bal.reserved < locked.miktar:
@@ -424,8 +424,7 @@ def tuket_rezervasyon(
 
         mv = StockMovement(
             warehouse=locked.warehouse,
-            teklif=locked.teklif,
-            varyant_id=locked.varyant_id,
+            varyant=locked.varyant,
             birim=locked.birim,
             miktar=-locked.miktar,
             tip=StockMovement.Tip.SATIS,

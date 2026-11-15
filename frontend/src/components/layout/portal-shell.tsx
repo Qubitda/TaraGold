@@ -9,6 +9,7 @@ import { RequireAuth, useAuth } from "@/features/auth";
 import { authService } from "@/features/auth/services/auth-service";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
+import { clearClientSession } from "@/lib/session-clear";
 import { useToast } from "@/components/ui/toast";
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
@@ -22,8 +23,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     setStoppingActAs(true);
     try {
       await authService.stopActAs();
+      clearClientSession(queryClient);
       await refresh();
-      await queryClient.invalidateQueries();
       toast.success("Vekil oturum sonlandırıldı", "Asıl yönetici oturumuna dönüldü.");
     } catch (err) {
       const msg =

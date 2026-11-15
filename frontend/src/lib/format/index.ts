@@ -10,15 +10,20 @@ export function formatMoney(
   locale = "tr-TR"
 ): string {
   if (value === null || value === undefined) return "—";
+  if (typeof value === "string" && value.trim() === "") return "—";
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return String(value);
+  if (!Number.isFinite(n)) return "—";
 
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currency || "TRY",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `${n.toFixed(2)} ${currency || ""}`.trim();
+  }
 }
 
 export function formatGram(
@@ -27,13 +32,18 @@ export function formatGram(
   digits = 3
 ): string {
   if (value === null || value === undefined) return "—";
+  if (typeof value === "string" && value.trim() === "") return "—";
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return String(value);
+  if (!Number.isFinite(n)) return "—";
 
-  return `${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits,
-  }).format(n)} g`;
+  try {
+    return `${new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
+    }).format(n)} g`;
+  } catch {
+    return `${n} g`;
+  }
 }
 
 export function formatDateTime(
@@ -45,11 +55,15 @@ export function formatDateTime(
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
 
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone,
-  }).format(d);
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone,
+    }).format(d);
+  } catch {
+    return iso;
+  }
 }
 
 export function formatPercent(
@@ -58,11 +72,32 @@ export function formatPercent(
   digits = 2
 ): string {
   if (value === null || value === undefined) return "—";
+  if (typeof value === "string" && value.trim() === "") return "—";
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return String(value);
+  if (!Number.isFinite(n)) return "—";
 
-  return `%${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits,
-  }).format(n)}`;
+  try {
+    return `%${new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits,
+    }).format(n)}`;
+  } catch {
+    return `%${n}`;
+  }
+}
+
+/** Quote/lock gösterimi — toplam öncelikli; yoksa null (UI "—"). */
+export function pickDisplayPrice(parts: {
+  toplam?: string | null;
+  gram_basi?: string | null;
+  birim?: string | null;
+}): string | null {
+  for (const v of [parts.toplam, parts.gram_basi, parts.birim]) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (!s || s === "undefined" || s === "null") continue;
+    const n = Number(s);
+    if (Number.isFinite(n)) return s;
+  }
+  return null;
 }

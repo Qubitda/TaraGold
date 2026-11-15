@@ -16,11 +16,6 @@ class StockBalance(models.Model):
         on_delete=models.PROTECT,
         related_name="balances",
     )
-    teklif = models.ForeignKey(
-        "fiyatlama.TedarikciTeklif",
-        on_delete=models.PROTECT,
-        related_name="stock_balances",
-    )
     varyant = models.ForeignKey(
         "urunler.Varyant",
         on_delete=models.PROTECT,
@@ -46,8 +41,8 @@ class StockBalance(models.Model):
         verbose_name_plural = "Stok bakiyeleri"
         constraints = [
             models.UniqueConstraint(
-                fields=["warehouse", "teklif", "birim"],
-                name="stockbalance_wh_teklif_birim_uniq",
+                fields=["warehouse", "varyant", "birim"],
+                name="stockbalance_wh_varyant_birim_uniq",
             ),
             models.CheckConstraint(
                 condition=models.Q(birim__in=["ADET", "GRAM", "KARAT"]),
@@ -67,12 +62,11 @@ class StockBalance(models.Model):
         ]
         indexes = [
             models.Index(fields=["warehouse", "varyant"]),
-            models.Index(fields=["teklif"]),
         ]
 
     def __str__(self) -> str:
         return (
-            f"SB W{self.warehouse_id} T{self.teklif_id} "
+            f"SB W{self.warehouse_id} V{self.varyant_id} "
             f"{self.on_hand} {self.birim}"
         )
 

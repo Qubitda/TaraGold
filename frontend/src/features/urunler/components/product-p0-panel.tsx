@@ -93,6 +93,7 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        if (!file) continue;
         setUploadProgress(`${i + 1}/${files.length}: ${file.name}`);
         try {
           await urunlerService.uploadOpsProductMedia(product.id, file, {

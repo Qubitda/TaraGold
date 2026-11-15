@@ -26,6 +26,10 @@ import {
 } from "@/features/firmalar/services/ops-firmalar";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { formatDateTime } from "@/lib/format";
+import { isPositiveDecimal } from "@/lib/parse-decimal";
+import { dashboardKeys } from "@/features/dashboard";
+import { finansKeys } from "@/features/finans";
+import { siparisKeys } from "@/features/siparis";
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   ONAY_BEKLIYOR: "Onay Bekliyor",
@@ -103,6 +107,9 @@ export function OpsOnayHavuzu() {
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["ops-onay-havuzu"] });
+    void qc.invalidateQueries({ queryKey: siparisKeys.all });
+    void qc.invalidateQueries({ queryKey: finansKeys.all });
+    void qc.invalidateQueries({ queryKey: dashboardKeys.all });
   };
 
   const onayM = useMutation({
@@ -581,7 +588,7 @@ export function OpsOnayHavuzu() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!tahsilatTarget) return;
-          if (!tutar.trim() || Number(tutar) <= 0) {
+          if (!isPositiveDecimal(tutar)) {
             setTahsilatError("Geçerli ve sıfırdan büyük bir tutar girin.");
             return;
           }

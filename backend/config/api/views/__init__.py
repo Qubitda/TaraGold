@@ -196,16 +196,16 @@ from .returns import (
 from .piyasa_pano import PiyasaPanoView
 from .sales_channels import SalesChannelListView
 from .shipment import ShipmentDetailView, ShipmentListView, ShipmentPodView
-from .supplier_offer_import import (
-    SupplierOfferImportCommitView,
-    SupplierOfferImportPreviewView,
-)
-from .supplier import (
+from .supplier_offers_gone import (
     SupplierOfferDeactivateView,
     SupplierOfferDetailView,
+    SupplierOfferImportCommitView,
+    SupplierOfferImportPreviewView,
     SupplierOfferListView,
     SupplierOfferSubmitView,
     SupplierOfferVersionView,
+)
+from .supplier import (
     SupplierStockAdjustView,
     SupplierStockSummaryView,
     SupplierVariantListView,

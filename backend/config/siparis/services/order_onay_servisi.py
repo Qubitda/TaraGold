@@ -48,10 +48,19 @@ def _set_durum(locked: Order, yeni: str) -> None:
 def _ensure_hazirlama_emirleri(locked: Order) -> list[HazirlamaEmri]:
     """Sipariş satırlarındaki tedarikçiler başına HazirlamaEmri açar/döndürür."""
     by_supplier: dict[int, str] = {}
-    for line in locked.lines.select_related("stock_reservation__teklif"):
+    for line in locked.lines.select_related(
+        "stock_reservation__varyant",
+        "price_lock__quote__varyant_fiyat",
+    ):
         res = getattr(line, "stock_reservation", None)
-        teklif = getattr(res, "teklif", None) if res is not None else None
-        ted_id = getattr(teklif, "tedarikci_id", None) if teklif is not None else None
+        vf = None
+        lock = getattr(line, "price_lock", None)
+        if lock is not None and getattr(lock, "quote", None) is not None:
+            vf = lock.quote.varyant_fiyat
+        ted_id = getattr(vf, "tedarikci_id", None) if vf is not None else None
+        if not ted_id and res is not None:
+            # platform warehouse sahibi
+            ted_id = getattr(res.warehouse, "sahip_firma_id", None)
         if not ted_id:
             continue
         tm = getattr(line, "teslim_modeli", HazirlamaEmri.TeslimModeli.PLATFORM_QC)
@@ -151,7 +160,7 @@ def onayla(*, actor, order: Order) -> Order:
     with domain_atomic():
         locked = (
             Order.objects.select_for_update()
-            .prefetch_related("lines__stock_reservation__teklif")
+            .prefetch_related("lines__stock_reservation__varyant")
             .get(pk=order.pk)
         )
         if locked.durum in (
@@ -249,21 +258,25 @@ def tedarikci_hazir_isaretle(*, actor, order: Order) -> Order:
     with domain_atomic():
         locked = (
             Order.objects.select_for_update()
-            .prefetch_related("lines__stock_reservation__teklif")
+            .prefetch_related("lines__stock_reservation__varyant")
             .get(pk=order.pk)
         )
         if locked.durum not in (Order.Durum.HAZIRLANIYOR, Order.Durum.HAZIR):
             raise ValidationError(f"Hazır işaretlenemez; durum={locked.durum}")
-        matching_lines = [
-            line
-            for line in locked.lines.all()
-            if getattr(
-                getattr(line.stock_reservation, "teklif", None),
-                "tedarikci_id",
-                None,
-            )
-            == firma.pk
-        ]
+        matching_lines = []
+        for line in locked.lines.select_related(
+            "price_lock__quote__varyant_fiyat", "stock_reservation__warehouse"
+        ):
+            vf = getattr(getattr(getattr(line, "price_lock", None), "quote", None), "varyant_fiyat", None)
+            ted = getattr(vf, "tedarikci_id", None)
+            if ted is None:
+                ted = getattr(
+                    getattr(getattr(line, "stock_reservation", None), "warehouse", None),
+                    "sahip_firma_id",
+                    None,
+                )
+            if ted == firma.pk:
+                matching_lines.append(line)
         if not matching_lines:
             raise PermissionDenied("Bu siparişte satırınız yok.")
 
@@ -323,11 +336,14 @@ def present_hazirlama_emri(
     """Tedarikçiye maskeli DTO — yalnız ilgili tedarikçinin satırları, alıcı kimliği yok."""
     lines = []
     qs = order.lines.select_related(
-        "varyant", "varyant__urun", "stock_reservation__teklif"
+        "varyant",
+        "varyant__urun",
+        "stock_reservation__varyant",
+        "price_lock__quote__varyant_fiyat",
     )
     if tedarikci_firma_id is not None:
         qs = qs.filter(
-            stock_reservation__teklif__tedarikci_id=tedarikci_firma_id
+            price_lock__quote__varyant_fiyat__tedarikci_id=tedarikci_firma_id
         )
     for line in qs:
         lines.append(

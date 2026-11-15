@@ -602,7 +602,6 @@ SUPPLIER_OFFER = _obj(
 SUPPLIER_STOCK = _obj(
     {
         "warehouse_id": _int(),
-        "teklif_id": _int(),
         "varyant_id": _int(),
         "birim": _str(),
         "on_hand": _str(),
@@ -652,7 +651,6 @@ SUPPLIER_MOVEMENT = _obj(
     {
         "id": _int(),
         "warehouse_id": _int(),
-        "teklif_id": _int(),
         "varyant_id": _int(),
         "birim": _str(),
         "miktar": _str(),
@@ -974,19 +972,19 @@ RESPONSE_BINDINGS: dict[str, _R] = {
     "/api/v1/approvals/{id}/approve/": {"post": ("200", "Approval")},
     "/api/v1/approvals/{id}/reject/": {"post": ("200", "Approval")},
     "/api/v1/supplier/offers/": {
-        "get": ("200", "SupplierOfferPage"),
-        "post": ("201", "SupplierOffer"),
+        "get": ("410", "ProblemDetail"),
+        "post": ("410", "ProblemDetail"),
     },
     "/api/v1/supplier/offers/import/preview/": {
-        "post": ("200", "SupplierOfferImportPreview")
+        "post": ("410", "ProblemDetail")
     },
     "/api/v1/supplier/offers/import/commit/": {
-        "post": ("201", "SupplierOfferImportCommitResult")
+        "post": ("410", "ProblemDetail")
     },
-    "/api/v1/supplier/offers/{id}/": {"get": ("200", "SupplierOffer")},
-    "/api/v1/supplier/offers/{id}/submit/": {"post": ("200", "SupplierOffer")},
-    "/api/v1/supplier/offers/{id}/deactivate/": {"post": ("200", "SupplierOffer")},
-    "/api/v1/supplier/offers/{id}/versions/": {"post": ("201", "SupplierOffer")},
+    "/api/v1/supplier/offers/{id}/": {"get": ("410", "ProblemDetail")},
+    "/api/v1/supplier/offers/{id}/submit/": {"post": ("410", "ProblemDetail")},
+    "/api/v1/supplier/offers/{id}/deactivate/": {"post": ("410", "ProblemDetail")},
+    "/api/v1/supplier/offers/{id}/versions/": {"post": ("410", "ProblemDetail")},
     "/api/v1/ops/products/": {
         "get": ("200", "OpsProductPage"),
         "post": ("201", "OpsProduct"),

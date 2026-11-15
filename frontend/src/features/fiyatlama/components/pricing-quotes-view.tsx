@@ -116,7 +116,7 @@ export function PricingQuotesView() {
       const detail = await urunlerService.getProductDetail(pid);
       const vars = detail.varyantlar ?? [];
       setProductVariants(vars);
-      if (vars.length > 0) setSelectedVariantId(String(vars[0].id));
+      if (vars[0]) setSelectedVariantId(String(vars[0].id));
     } catch (err) {
       actionToast.error("Ürün seçenekleri alınamadı", err);
     }
@@ -288,7 +288,11 @@ export function PricingQuotesView() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums font-medium">
-                      {formatMoney(q.toplam_vergisiz || q.birim_fiyat, q.para_birimi)}
+                      {formatMoney(
+                        q.toplam_vergisiz ||
+                          (q.birim_fiyat ? q.birim_fiyat : null),
+                        q.para_birimi
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge

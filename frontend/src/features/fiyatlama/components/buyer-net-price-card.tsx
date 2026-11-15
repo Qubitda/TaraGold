@@ -31,7 +31,10 @@ export function BuyerNetPriceCard({ quote }: { quote: PriceQuote }) {
         <div>
           <dt className="text-muted-foreground">Net toplam</dt>
           <dd className="text-right font-mono tabular-nums font-semibold text-foreground">
-            {formatMoney(quote.toplam_vergisiz || quote.birim_fiyat, quote.para_birimi)}
+            {formatMoney(
+              quote.toplam_vergisiz || (quote.birim_fiyat ? quote.birim_fiyat : null),
+              quote.para_birimi
+            )}
           </dd>
         </div>
         <div>

@@ -8,9 +8,11 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "@/lib/api/client";
 import type { MeResponse } from "@/lib/api/types";
+import { clearClientSession } from "@/lib/session-clear";
 import { authService } from "../services/auth-service";
 import { DomainLoading } from "@/components/route-states";
 
@@ -29,9 +31,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PUBLIC_PATHS = new Set(["/login", "/reset-password", "/invite"]);
 
+function safeReturnPath(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  if (PUBLIC_PATHS.has(raw.split("?")[0] || "")) return null;
+  return raw;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,11 +91,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // oturum zaten düşmüş olabilir
     }
+    clearClientSession(queryClient);
     setUser(null);
     setMfaPending(false);
     setError(null);
     navigate("/login", { replace: true });
-  }, [navigate]);
+  }, [navigate, queryClient]);
 
   useEffect(() => {
     void refresh();
@@ -96,37 +107,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const detail = (event as CustomEvent).detail as
         | { code?: string; status?: number }
         | undefined;
+      clearClientSession(queryClient);
       if (detail?.code === "mfa_required") {
         setUser(null);
         setMfaPending(true);
         if (!PUBLIC_PATHS.has(pathname)) {
-          navigate("/login", { replace: true });
+          const next = encodeURIComponent(`${pathname}${search}`);
+          navigate(`/login?next=${next}`, { replace: true });
         }
         return;
       }
       setUser(null);
       setMfaPending(false);
       if (!PUBLIC_PATHS.has(pathname)) {
-        navigate("/login", { replace: true });
+        const next = encodeURIComponent(`${pathname}${search}`);
+        navigate(`/login?next=${next}`, { replace: true });
       }
     };
     window.addEventListener("taragold:auth-expired", onExpired);
     return () => window.removeEventListener("taragold:auth-expired", onExpired);
-  }, [pathname, navigate]);
+  }, [pathname, search, navigate, queryClient]);
 
   useEffect(() => {
     if (loading) return;
     const isPublic = PUBLIC_PATHS.has(pathname);
 
     if ((!user || mfaPending) && !isPublic) {
-      navigate("/login", { replace: true });
+      const next = encodeURIComponent(`${pathname}${search}`);
+      navigate(`/login?next=${next}`, { replace: true });
       return;
     }
 
     if (user && !mfaPending && isPublic) {
-      navigate("/", { replace: true });
+      const params = new URLSearchParams(search);
+      const dest = safeReturnPath(params.get("next")) || "/";
+      navigate(dest, { replace: true });
     }
-  }, [loading, user, mfaPending, pathname, navigate]);
+  }, [loading, user, mfaPending, pathname, search, navigate]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

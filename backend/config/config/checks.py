@@ -41,8 +41,33 @@ def check_shared_cache_for_throttle(app_configs, **kwargs):
 
 @register()
 def check_fake_providers_in_prod(app_configs, **kwargs):
-    """ADR-0036: Sanal POS ve kargo API entegrasyonu yok (elle takip/tahsilat)."""
-    return []
+    """DEBUG=False: fake ödeme/kargo yalnız ALLOW_FAKE_PROVIDERS=1 ile bilinçli.
+
+    Canlı POS/carrier yok (elle tahsilat/takip). Staging'de fake açık kalabilir;
+    prod-ish'te izinsiz fake → Error.
+    """
+    if getattr(settings, "DEBUG", False) or _running_tests():
+        return []
+    payment = (getattr(settings, "PAYMENT_PROVIDER", None) or "fake").strip().lower()
+    carrier = (getattr(settings, "CARRIER_PROVIDER", None) or "fake").strip().lower()
+    using_fake = payment == "fake" or carrier == "fake"
+    if not using_fake:
+        return []
+    if getattr(settings, "ALLOW_FAKE_PROVIDERS", False):
+        return [
+            Warning(
+                "ALLOW_FAKE_PROVIDERS=1: fake ödeme/kargo bilinçli açık "
+                "(canlı POS/carrier yok; elle tahsilat/takip).",
+                id="taragold.W002",
+            )
+        ]
+    return [
+        Error(
+            "PAYMENT_PROVIDER/CARRIER_PROVIDER=fake iken ALLOW_FAKE_PROVIDERS=0 "
+            "(DEBUG=False). Staging için ALLOW_FAKE_PROVIDERS=1 ayarlayın.",
+            id="taragold.E002",
+        )
+    ]
 
 
 @register()

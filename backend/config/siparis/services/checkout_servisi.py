@@ -40,10 +40,12 @@ class CheckoutResult:
     lines: tuple[CheckoutLineResult, ...]
 
 
-def _resolve_warehouse_for_teklif(teklif) -> Warehouse:
+def _resolve_warehouse_for_fiyat(varyant_fiyat) -> Warehouse:
+    if varyant_fiyat is None:
+        raise ValidationError("Quote fiyat kaynağı yok; checkout yapılamaz.")
     wh = (
         Warehouse.objects.filter(
-            sahip_firma_id=teklif.tedarikci_id,
+            sahip_firma_id=varyant_fiyat.tedarikci_id,
             sahip_tipi=Warehouse.SahipTipi.TEDARIKCI,
             aktif=True,
         )
@@ -52,9 +54,13 @@ def _resolve_warehouse_for_teklif(teklif) -> Warehouse:
     )
     if wh is None:
         raise ValidationError(
-            "Teklif tedarikçisinin aktif deposu yok; checkout yapılamaz."
+            "Tedarikçinin aktif deposu yok; checkout yapılamaz."
         )
     return wh
+
+
+# Geriye dönük alias
+_resolve_warehouse_for_teklif = _resolve_warehouse_for_fiyat
 
 
 def _record_failed_attempt(
@@ -186,7 +192,7 @@ def checkout(
     lines_qs = list(
         CartLine.objects.select_related(
             "price_quote",
-            "price_quote__teklif",
+            "price_quote__varyant_fiyat",
             "price_quote__varyant",
             "price_quote__varyant__urun",
         ).filter(cart=cart)
@@ -229,11 +235,16 @@ def checkout(
                         "PriceLock geçersiz/süresi dolmuş; checkout fail."
                     )
 
-                warehouse = _resolve_warehouse_for_teklif(quote.teklif)
+                vf = quote.varyant_fiyat
+                if vf is None:
+                    raise ValidationError("Quote varyant fiyatı yok; checkout fail.")
+                warehouse = _resolve_warehouse_for_fiyat(vf)
                 res = olustur_rezervasyon(
                     actor=actor,
                     warehouse=warehouse,
-                    teklif=quote.teklif,
+                    varyant=quote.varyant,
+                    fiyat_modeli=vf.fiyat_modeli,
+                    tedarikci_id=vf.tedarikci_id,
                     miktar=cl.miktar,
                     alici_firma=alici_firma,
                     now=now,

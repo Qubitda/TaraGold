@@ -20,7 +20,6 @@ import {
   useSupplierWarehousesQuery,
 } from "@/features/stok/hooks";
 import { fiyatlamaService } from "@/features/fiyatlama/services";
-import type { SupplierOffer } from "@/features/fiyatlama/types";
 import { urunlerService } from "../services";
 import type {
   OpsProduct,
@@ -41,22 +40,28 @@ type Props = {
 type VariantRow = {
   id: number;
   sku: string;
-  /** Renk · boy · gram vb. — kullanıcının gördüğü özellik kırılımı */
   ozellik: string;
+};
+
+type VaryantFiyatRow = {
+  id: number;
+  varyant_id: number;
+  birim_fiyat: string | null;
 };
 
 /**
  * Ürün Stok & Fiyat — tek ekran.
  * Her özellik kırılımı (varyant) için ayrı fiyat ve/veya adet.
- * Ledger’ın teklif anahtarı arka planda; UI’da “teklif” yok.
  */
 export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
   const [stockData, setStockData] = useState<OpsProductStockResponse | null>(
     null
   );
   const [stockLoading, setStockLoading] = useState(false);
-  const [offers, setOffers] = useState<SupplierOffer[]>([]);
-  const [offersLoading, setOffersLoading] = useState(false);
+  const [pricesByVaryant, setPricesByVaryant] = useState<
+    Record<number, VaryantFiyatRow>
+  >({});
+  const [pricesLoading, setPricesLoading] = useState(false);
 
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [prices, setPrices] = useState<Record<string, string>>({});
@@ -89,9 +94,6 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
     [product.varyantlar]
   );
 
-  const searchHint =
-    product.platform_kodu || product.ad || String(product.id);
-
   const reloadStock = useCallback(async () => {
     setStockLoading(true);
     try {
@@ -103,27 +105,37 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
     }
   }, [product.id]);
 
-  const reloadOffers = useCallback(async () => {
-    setOffersLoading(true);
+  const reloadPrices = useCallback(async () => {
+    setPricesLoading(true);
     try {
-      const page = await fiyatlamaService.getSupplierOffers({
-        page_size: "100",
-        q: searchHint,
-      });
-      const vids = new Set(variants.map((v) => v.id));
-      const rows = (page.results ?? []).filter((t) => vids.has(t.varyant_id));
-      setOffers(rows.length ? rows : page.results ?? []);
+      const next: Record<number, VaryantFiyatRow> = {};
+      await Promise.all(
+        variants.map(async (v) => {
+          const listed = await fiyatlamaService.listVaryantFiyat({
+            varyant_id: String(v.id),
+          });
+          const row = listed.results[0];
+          if (row) {
+            next[v.id] = {
+              id: row.id,
+              varyant_id: row.varyant_id,
+              birim_fiyat: row.birim_fiyat,
+            };
+          }
+        })
+      );
+      setPricesByVaryant(next);
     } catch {
-      setOffers([]);
+      setPricesByVaryant({});
     } finally {
-      setOffersLoading(false);
+      setPricesLoading(false);
     }
-  }, [searchHint, variants]);
+  }, [variants]);
 
   useEffect(() => {
     void reloadStock();
-    void reloadOffers();
-  }, [reloadStock, reloadOffers, product.guncelleme_zamani]);
+    void reloadPrices();
+  }, [reloadStock, reloadPrices, product.guncelleme_zamani]);
 
   useEffect(() => {
     if (warehouseId) return;
@@ -159,24 +171,6 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
     [stockData, warehouseId]
   );
 
-  const resolveOffer = useCallback(
-    (varyantId: number, bal?: OpsProductStockRow): SupplierOffer | null => {
-      if (bal?.teklif_id) {
-        const fromBal = offers.find((o) => o.id === bal.teklif_id);
-        if (fromBal) return fromBal;
-      }
-      const forVar = offers.filter((o) => o.varyant_id === varyantId);
-      if (!forVar.length) return null;
-      return (
-        forVar.find((o) => o.durum === "YAYINDA") ||
-        forVar.find((o) => o.durum === "ONAYLANDI") ||
-        forVar[0]
-      );
-    },
-    [offers]
-  );
-
-  // Depo / teklif değişince satır değerlerini doldur
   useEffect(() => {
     const nextPrices: Record<string, string> = {};
     const nextTargets: Record<string, string> = {};
@@ -187,65 +181,40 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
               r.varyant_id === v.id && String(r.warehouse_id) === warehouseId
           )
         : undefined;
-      const offer = resolveOffer(v.id, bal);
-      nextPrices[String(v.id)] = offer?.birim_fiyat
-        ? String(offer.birim_fiyat)
-        : "";
+      const vf = pricesByVaryant[v.id];
+      nextPrices[String(v.id)] = vf?.birim_fiyat ? String(vf.birim_fiyat) : "";
       nextTargets[String(v.id)] = bal ? String(bal.on_hand) : "";
     }
     setPrices(nextPrices);
     setTargets(nextTargets);
-  }, [warehouseId, stockData, variants, offers, resolveOffer]);
+  }, [warehouseId, stockData, variants, pricesByVaryant]);
 
   const upsertPrice = async (
     varyantId: number,
-    priceRaw: string,
-    existing: SupplierOffer | null
+    priceRaw: string
   ): Promise<number | null> => {
     const price = priceRaw.trim();
     if (!price) {
-      return existing?.id ?? null;
+      return pricesByVaryant[varyantId]?.id ?? null;
     }
     if (Number.isNaN(Number(price)) || Number(price) <= 0) {
       throw new Error("Birim fiyat pozitif bir sayı olmalı.");
     }
 
-    if (!existing) {
-      const created = await fiyatlamaService.createSupplierOffer({
-        varyant_id: varyantId,
-        fiyat_modeli: "SABIT_PARCA",
-        birim_fiyat: price,
-        para_birimi: "TRY",
-        temin_tipi: "HAZIR",
-      });
-      setOffers((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
-      return created.id;
-    }
-
-    const current = existing.birim_fiyat ? String(existing.birim_fiyat) : "";
-    if (current === price) return existing.id;
-
-    if (existing.durum === "YAYINDA") {
-      const versioned = await fiyatlamaService.createSupplierOfferVersion(
-        existing.id,
-        { birim_fiyat: price, fiyat_modeli: "SABIT_PARCA" }
-      );
-      setOffers((prev) => [
-        versioned,
-        ...prev.filter((o) => o.id !== versioned.id),
-      ]);
-      return versioned.id;
-    }
-
-    // Taslak / diğer: yeni fiyat satırı (eskiyi bozmadan)
-    const created = await fiyatlamaService.createSupplierOffer({
+    const created = await fiyatlamaService.upsertVaryantFiyat({
       varyant_id: varyantId,
       fiyat_modeli: "SABIT_PARCA",
       birim_fiyat: price,
-      para_birimi: existing.para_birimi || "TRY",
-      temin_tipi: "HAZIR",
+      para_birimi: "TRY",
     });
-    setOffers((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
+    setPricesByVaryant((prev) => ({
+      ...prev,
+      [varyantId]: {
+        id: created.id,
+        varyant_id: created.varyant_id,
+        birim_fiyat: created.birim_fiyat,
+      },
+    }));
     return created.id;
   };
 
@@ -270,7 +239,6 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
     }
 
     const bal = balanceFor(varyantId);
-    const existing = resolveOffer(varyantId, bal);
     const label =
       variants.find((v) => v.id === varyantId)?.ozellik ||
       variants.find((v) => v.id === varyantId)?.sku ||
@@ -278,10 +246,16 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
 
     setSavingVid(varyantId);
     try {
-      let offerId = await upsertPrice(varyantId, priceRaw, existing);
+      let fiyatId = await upsertPrice(varyantId, priceRaw);
 
       if (hasQty) {
-        if (!offerId) {
+        if (!fiyatId) {
+          const listed = await fiyatlamaService.listVaryantFiyat({
+            varyant_id: String(varyantId),
+          });
+          fiyatId = listed.results[0]?.id ?? null;
+        }
+        if (!fiyatId) {
           throw new Error(
             "Stok için bu özellik kırılımına bir fiyat yazın (aynı satırda)."
           );
@@ -292,7 +266,7 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
         if (delta !== 0) {
           await adjustMut.mutateAsync({
             warehouse_id: Number(warehouseId),
-            teklif_id: offerId,
+            varyant_id: varyantId,
             miktar: String(delta),
             neden: "Ürün stok güncelleme",
           });
@@ -304,7 +278,7 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
       if (hasQty) bits.push(`adet ${qtyRaw}`);
       onToast.success(`${label}: ${bits.join(" · ")} kaydedildi`);
       await reloadStock();
-      await reloadOffers();
+      await reloadPrices();
     } catch (err) {
       setFormError(mapCommerceError(err, "Kayıt başarısız."));
       onToast.error("Kayıt başarısız", err);
@@ -387,11 +361,11 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
               className="h-8 text-xs gap-1 shrink-0 ml-auto"
               onClick={() => {
                 void reloadStock();
-                void reloadOffers();
+                void reloadPrices();
               }}
-              disabled={stockLoading || offersLoading}
+              disabled={stockLoading || pricesLoading}
             >
-              {stockLoading || offersLoading ? (
+              {stockLoading || pricesLoading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -460,7 +434,7 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
             </p>
           ) : null}
 
-          {stockLoading && !stockData && offersLoading ? (
+          {stockLoading && !stockData && pricesLoading ? (
             <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
             <div className="overflow-x-auto min-w-0">

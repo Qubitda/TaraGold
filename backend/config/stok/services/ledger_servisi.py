@@ -1,4 +1,4 @@
-"""Stok ledger yazımı — Movement + Balance (ADR-0011 F4-A3/A4/A13)."""
+"""Stok ledger yazımı — Movement + Balance (varyant anahtarı; teklif yok)."""
 
 from __future__ import annotations
 
@@ -13,16 +13,15 @@ from firmalar.services.audit_servisi import (
     record_audit_durable,
 )
 from firmalar.services.yetki_servisi import has_perm, is_platform_firm_user
-from fiyatlama.models import TedarikciTeklif
 from stok.models import StockBalance, StockMovement, Warehouse
-from stok.services.birim import assert_ayni_birim, birim_from_teklif
+from stok.services.birim import assert_ayni_birim, birim_from_fiyat_modeli
 
 
-def assert_teklif_warehouse(warehouse: Warehouse, teklif: TedarikciTeklif) -> None:
+def assert_tedarikci_warehouse(warehouse: Warehouse, tedarikci_id: int) -> None:
     if warehouse.sahip_tipi == Warehouse.SahipTipi.TEDARIKCI:
-        if teklif.tedarikci_id != warehouse.sahip_firma_id:
+        if tedarikci_id != warehouse.sahip_firma_id:
             raise ValidationError(
-                "Tedarikçi deposuna yalnız kendi teklifi yazılır (konsinye yok)."
+                "Tedarikçi deposuna yalnız kendi stoğu yazılır (konsinye yok)."
             )
 
 
@@ -56,27 +55,21 @@ def _apply_on_hand_delta(balance: StockBalance, delta: Decimal) -> None:
 def get_or_create_balance_locked(
     *,
     warehouse: Warehouse,
-    teklif: TedarikciTeklif,
+    varyant,
     birim: str,
 ) -> StockBalance:
-    """Balance satır kilidi — reservation/ledger ortak (select_for_update).
-
-    Eşzamanlı ilk oluşturmada UniqueConstraint yarışını IntegrityError →
-    yeniden kilitleyerek çözer.
-    """
     from django.db import IntegrityError
 
     bal = (
         StockBalance.objects.select_for_update()
-        .filter(warehouse=warehouse, teklif=teklif, birim=birim)
+        .filter(warehouse=warehouse, varyant=varyant, birim=birim)
         .first()
     )
     if bal is not None:
         return bal
     bal = StockBalance(
         warehouse=warehouse,
-        teklif=teklif,
-        varyant_id=teklif.varyant_id,
+        varyant=varyant,
         birim=birim,
         on_hand=Decimal("0"),
         reserved=Decimal("0"),
@@ -87,7 +80,7 @@ def get_or_create_balance_locked(
     except IntegrityError:
         bal = (
             StockBalance.objects.select_for_update()
-            .filter(warehouse=warehouse, teklif=teklif, birim=birim)
+            .filter(warehouse=warehouse, varyant=varyant, birim=birim)
             .get()
         )
         return bal
@@ -95,7 +88,6 @@ def get_or_create_balance_locked(
 
 
 def save_balance_fields(balance: StockBalance, *, update_fields: list[str]) -> None:
-    """Ledger/reservation servisleri için kontrollü balance kaydı."""
     fields = list(update_fields)
     if "guncelleme_tarihi" not in fields:
         fields.append("guncelleme_tarihi")
@@ -110,12 +102,13 @@ def kaydet_hareket(
     *,
     actor,
     warehouse: Warehouse,
-    teklif: TedarikciTeklif,
+    varyant,
+    fiyat_modeli: str,
+    tedarikci_id: int | None = None,
     tip: str,
     miktar: Decimal,
     neden: str = "",
 ) -> StockMovement:
-    """Immutable movement yazar ve balance on_hand günceller (GIRIS/CIKIS/DUZELTME)."""
     if tip not in {
         StockMovement.Tip.GIRIS,
         StockMovement.Tip.CIKIS,
@@ -134,12 +127,13 @@ def kaydet_hareket(
     if tip == StockMovement.Tip.CIKIS and miktar >= 0:
         raise ValidationError("CIKIS miktarı negatif olmalı.")
 
-    birim = birim_from_teklif(teklif)
-    assert_teklif_warehouse(warehouse, teklif)
+    birim = birim_from_fiyat_modeli(fiyat_modeli)
+    if tedarikci_id is not None:
+        assert_tedarikci_warehouse(warehouse, tedarikci_id)
 
     with domain_atomic():
         bal = get_or_create_balance_locked(
-            warehouse=warehouse, teklif=teklif, birim=birim
+            warehouse=warehouse, varyant=varyant, birim=birim
         )
         assert_ayni_birim(bal.birim, birim, context="balance")
         _apply_on_hand_delta(bal, miktar)
@@ -147,8 +141,7 @@ def kaydet_hareket(
 
         mv = StockMovement(
             warehouse=warehouse,
-            teklif=teklif,
-            varyant_id=teklif.varyant_id,
+            varyant=varyant,
             birim=birim,
             miktar=miktar,
             tip=tip,
@@ -167,7 +160,7 @@ def kaydet_hareket(
                 "miktar": str(miktar),
                 "birim": birim,
                 "warehouse_id": warehouse.pk,
-                "teklif_id": teklif.pk,
+                "varyant_id": varyant.pk,
                 "on_hand": str(bal.on_hand),
             },
         )
@@ -178,11 +171,12 @@ def duzeltme(
     *,
     actor,
     warehouse: Warehouse,
-    teklif: TedarikciTeklif,
+    varyant,
+    fiyat_modeli: str,
+    tedarikci_id: int | None = None,
     miktar: Decimal,
     neden: str,
 ) -> StockMovement:
-    """F4-013 — signed DUZELTME; neden zorunlu."""
     neden_n = (neden or "").strip()
     if len(neden_n) < 5:
         raise ValidationError("Düzeltme nedeni en az 5 karakter olmalı.")
@@ -197,14 +191,16 @@ def duzeltme(
             entity_id="",
             success=False,
             reason=str(exc),
-            detail={"warehouse_id": warehouse.pk, "teklif_id": teklif.pk},
+            detail={"warehouse_id": warehouse.pk, "varyant_id": getattr(varyant, "pk", None)},
         )
         raise
 
     return kaydet_hareket(
         actor=actor,
         warehouse=warehouse,
-        teklif=teklif,
+        varyant=varyant,
+        fiyat_modeli=fiyat_modeli,
+        tedarikci_id=tedarikci_id,
         tip=StockMovement.Tip.DUZELTME,
         miktar=Decimal(miktar),
         neden=neden_n,

@@ -1,5 +1,5 @@
-from .tedarikci_teklif import TedarikciTeklif
-from .teklif_tas_maliyeti import TeklifTasMaliyeti
+from .varyant_fiyat import VaryantFiyat
+from .servis_bedeli_kurali import ServisBedeliKurali
 from .fiyat_sozlesmesi import FiyatSozlesmesi
 from .fiyat_sozlesmesi_kalemi import FiyatSozlesmesiKalemi
 from .price_calculation_log import PriceCalculationLog
@@ -11,8 +11,13 @@ from .contract_release import (
     ContractReleasePlan,
 )
 from .fiyat_batch import FiyatBatchIslek, FiyatBatchSatir
+# Legacy tables (belgeler FK); üretim yolu yok
+from .tedarikci_teklif import TedarikciTeklif
+from .teklif_tas_maliyeti import TeklifTasMaliyeti
 
 __all__ = [
+    "VaryantFiyat",
+    "ServisBedeliKurali",
     "TedarikciTeklif",
     "TeklifTasMaliyeti",
     "FiyatSozlesmesi",

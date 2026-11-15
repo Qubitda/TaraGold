@@ -20,6 +20,7 @@ from fiyatlama.models import (
     PriceQuote,
     PriceQuoteLine,
     TedarikciTeklif,
+    VaryantFiyat,
 )
 from fiyatlama.services import pricing_service, sozlesme_servisi
 from tanimlar.models import (
@@ -157,6 +158,7 @@ class PriceQuoteFixtureMixin:
         )
         sozlesme_servisi.aktif_yap(cls.soz, cls.finance)
 
+        # Legacy teklif satırı (belgeler FK); üretim yolu VaryantFiyat
         cls.teklif = TedarikciTeklif.objects.create(
             varyant=cls.varyant,
             tedarikci=cls.ted,
@@ -170,6 +172,16 @@ class PriceQuoteFixtureMixin:
             hedef_urun=cls.urun,
             oncelik=10,
             iscilik_override=Decimal("80.00"),
+        )
+        cls.varyant_fiyat = VaryantFiyat.objects.create(
+            varyant=cls.varyant,
+            tedarikci=cls.ted,
+            fiyat_modeli=VaryantFiyat.FiyatModeli.METAL_BAZLI,
+            gram=Decimal("2.500"),
+            durum=VaryantFiyat.Durum.AKTIF,
+            iscilik=Decimal("80.00"),
+            para_birimi="TRY",
+            olusturan=cls.finance,
         )
 
 
@@ -189,7 +201,7 @@ class PriceQuoteServiceTests(PriceQuoteFixtureMixin, TestCase):
         self.assertEqual(pq.toplam_vergisiz, Decimal("5990.00"))
         self.assertEqual(pq.para_birimi, "TRY")
         self.assertEqual(pq.belge_turu, PriceQuote.BelgeTuru.PROFORMA)
-        self.assertEqual(pq.teklif_id, self.teklif.pk)
+        self.assertEqual(pq.varyant_fiyat_id, self.varyant_fiyat.pk)
         self.assertEqual(pq.alici_sozlesme_id, self.soz.pk)
         self.assertEqual(pq.metal_kuru_alici_id, self.metal_satis.pk)
         self.assertEqual(pq.metal_kuru_tedarikci_id, self.metal_alis.pk)
@@ -197,7 +209,7 @@ class PriceQuoteServiceTests(PriceQuoteFixtureMixin, TestCase):
         self.assertEqual(pq.tedarikci_kur_tipi, KurTipi.ALIS)
         tipler = set(pq.satirlar.values_list("kalem_tipi", flat=True))
         self.assertIn("metal", tipler)
-        self.assertIn("kanal_marj", tipler)
+        self.assertIn("servis_bedeli", tipler)
         self.assertNotIn("platform_servis", tipler)
         self.assertNotIn("vergi", tipler)
         self.assertIsNone(pq.hesap_girdisi.get("platform_servis") or None)
@@ -243,9 +255,9 @@ class PriceQuoteServiceTests(PriceQuoteFixtureMixin, TestCase):
         self.assertTrue(pq.hesap_girdisi.get("feed_banner"))
         self.assertTrue(pq.hesap_girdisi.get("feed_is_lkg"))
 
-    def test_eslesme_onaysiz_quote_yok(self):
-        TedarikciTeklif.objects.filter(pk=self.teklif.pk).update(
-            eslestirme_durumu="onerildi"
+    def test_aktif_fiyat_yok(self):
+        VaryantFiyat.objects.filter(pk=self.varyant_fiyat.pk).update(
+            durum=VaryantFiyat.Durum.PASIF
         )
         with self.assertRaises(ValidationError):
             pricing_service.quote(
@@ -265,107 +277,56 @@ class PriceQuoteServiceTests(PriceQuoteFixtureMixin, TestCase):
                 varyant=self.varyant,
             )
 
-    def test_coklu_teklif_oncelik_sonra_maliyet(self):
-        bas, bit = date.today(), date.today() + timedelta(days=60)
-        # Daha yüksek öncelik — seçilmeli (maliyet daha yüksek olsa bile)
-        pahali = TedarikciTeklif.objects.create(
-            varyant=self.varyant,
-            tedarikci=self.ted,
-            tedarikci_kodu="PQ2",
-            fiyat_modeli=TedarikciTeklif.FiyatModeli.METAL_BAZLI,
-            gram=Decimal("5.000"),
-            durum=TedarikciTeklif.Durum.YAYINDA,
-            gecerlilik_baslangic=bas,
-            gecerlilik_bitis=bit,
-            eslestirme_durumu="onaylandi",
-            hedef_urun=self.urun,
-            oncelik=99,
-            iscilik_override=Decimal("0"),
-        )
+    def test_tek_aktif_varyant_fiyat(self):
         pq = pricing_service.quote(
             alici_firma=self.alici,
             satis_kanali=self.kanal,
             varyant=self.varyant,
         )
-        self.assertEqual(pq.teklif_id, pahali.pk)
-
-    def test_ayni_oncelik_dusuk_maliyet(self):
-        bas, bit = date.today(), date.today() + timedelta(days=60)
-        TedarikciTeklif.objects.filter(pk=self.teklif.pk).update(oncelik=5)
-        ucuz = TedarikciTeklif.objects.create(
-            varyant=self.varyant,
-            tedarikci=self.ted,
-            tedarikci_kodu="PQ3",
-            fiyat_modeli=TedarikciTeklif.FiyatModeli.METAL_BAZLI,
-            gram=Decimal("1.000"),
-            durum=TedarikciTeklif.Durum.YAYINDA,
-            gecerlilik_baslangic=bas,
-            gecerlilik_bitis=bit,
-            eslestirme_durumu="onaylandi",
-            hedef_urun=self.urun,
-            oncelik=5,
-            iscilik_override=Decimal("0"),
-        )
-        pq = pricing_service.quote(
-            alici_firma=self.alici,
-            satis_kanali=self.kanal,
-            varyant=self.varyant,
-        )
-        self.assertEqual(pq.teklif_id, ucuz.pk)
+        self.assertEqual(pq.varyant_fiyat_id, self.varyant_fiyat.pk)
 
     def test_gram_birim_model(self):
-        bas, bit = date.today(), date.today() + timedelta(days=60)
-        TedarikciTeklif.objects.filter(pk=self.teklif.pk).update(
-            durum=TedarikciTeklif.Durum.PASIF
+        VaryantFiyat.objects.filter(pk=self.varyant_fiyat.pk).update(
+            durum=VaryantFiyat.Durum.PASIF
         )
-        t = TedarikciTeklif.objects.create(
+        vf = VaryantFiyat.objects.create(
             varyant=self.varyant,
             tedarikci=self.ted,
-            tedarikci_kodu="PQG",
-            fiyat_modeli=TedarikciTeklif.FiyatModeli.GRAM_BIRIM,
+            fiyat_modeli=VaryantFiyat.FiyatModeli.GRAM_BIRIM,
             gram=Decimal("2.000"),
             birim_fiyat=Decimal("100.0000"),
             para_birimi="TRY",
-            durum=TedarikciTeklif.Durum.YAYINDA,
-            gecerlilik_baslangic=bas,
-            gecerlilik_bitis=bit,
-            eslestirme_durumu="onaylandi",
-            hedef_urun=self.urun,
-            oncelik=1,
+            durum=VaryantFiyat.Durum.AKTIF,
+            olusturan=self.finance,
         )
         pq = pricing_service.quote(
             alici_firma=self.alici,
             satis_kanali=self.kanal,
             varyant=self.varyant,
-            teklif_id=t.pk,
         )
-        # gram_birim=200 + marj=50 + ek=10 = 260
+        self.assertEqual(pq.varyant_fiyat_id, vf.pk)
         self.assertEqual(pq.toplam_vergisiz, Decimal("260.00"))
         self.assertIn("gram_birim", pq.satirlar.values_list("kalem_tipi", flat=True))
 
     def test_sabit_parca_model(self):
-        bas, bit = date.today(), date.today() + timedelta(days=60)
-        t = TedarikciTeklif.objects.create(
+        VaryantFiyat.objects.filter(pk=self.varyant_fiyat.pk).update(
+            durum=VaryantFiyat.Durum.PASIF
+        )
+        vf = VaryantFiyat.objects.create(
             varyant=self.varyant,
             tedarikci=self.ted,
-            tedarikci_kodu="PQS",
-            fiyat_modeli=TedarikciTeklif.FiyatModeli.SABIT_PARCA,
+            fiyat_modeli=VaryantFiyat.FiyatModeli.SABIT_PARCA,
             birim_fiyat=Decimal("1500.0000"),
             para_birimi="TRY",
-            durum=TedarikciTeklif.Durum.YAYINDA,
-            gecerlilik_baslangic=bas,
-            gecerlilik_bitis=bit,
-            eslestirme_durumu="onaylandi",
-            hedef_urun=self.urun,
-            oncelik=50,
+            durum=VaryantFiyat.Durum.AKTIF,
+            olusturan=self.finance,
         )
         pq = pricing_service.quote(
             alici_firma=self.alici,
             satis_kanali=self.kanal,
             varyant=self.varyant,
-            teklif_id=t.pk,
         )
-        # 1500 + 50 marj + 10 ek = 1560
+        self.assertEqual(pq.varyant_fiyat_id, vf.pk)
         self.assertEqual(pq.toplam_vergisiz, Decimal("1560.00"))
 
     def test_app_level_update_blocked(self):

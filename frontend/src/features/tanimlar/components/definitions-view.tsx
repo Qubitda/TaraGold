@@ -373,7 +373,7 @@ export function DefinitionsView() {
   }, [searchParams]);
 
   const activeCategory =
-    ALL_CATEGORIES.find((c) => c.id === categoryId) || ALL_CATEGORIES[0];
+    ALL_CATEGORIES.find((c) => c.id === categoryId) ?? ALL_CATEGORIES[0]!;
   const isCatalogRef = activeCategory.kind === "catalog-ref";
   const isCategories = activeCategory.kind === "categories";
   const activeKaynak = activeCategory.kaynak as OpsDefinitionKaynak;

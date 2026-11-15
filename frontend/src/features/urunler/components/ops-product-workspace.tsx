@@ -574,6 +574,7 @@ export function OpsProductWorkspace({
       const hasCover = (product.gorseller ?? []).some((g) => g.kapak);
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
+        if (!f) continue;
         if (f.size > MAX_IMAGE_BYTES) {
           onToast.error(`${f.name}: en fazla 8 MB`);
           continue;

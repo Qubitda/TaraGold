@@ -21,9 +21,20 @@ const IDEMPOTENCY_EXEMPT = [
 ];
 
 export function newIdempotencyKey(): string {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random()}`;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // RFC4122-ish fallback (HTTP LAN / eski tarayıcı)
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function unwrapResults<T>(
@@ -53,7 +64,7 @@ function readCookie(name: string): string | null {
       `(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=([^;]*)`
     )
   );
-  return match ? decodeURIComponent(match[1]) : null;
+  return match?.[1] != null ? decodeURIComponent(match[1]) : null;
 }
 
 async function parseProblem(res: Response): Promise<ProblemDetail> {
@@ -91,45 +102,54 @@ function emitCsrfFailed(message: string): void {
   );
 }
 
+let csrfInflight: Promise<string> | null = null;
+
 export async function ensureCsrfToken(): Promise<string> {
   const existing = readCookie("csrftoken");
   if (existing) return existing;
+  if (csrfInflight) return csrfInflight;
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_PREFIX}/auth/csrf/`, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    });
-  } catch {
-    const message = "CSRF isteği ağ hatası.";
-    emitCsrfFailed(message);
-    throw new ApiError({
-      status: 0,
-      title: "CSRF",
-      detail: message,
-      code: "csrf_network",
-    });
-  }
+  csrfInflight = (async () => {
+    let res: Response;
+    try {
+      res = await fetch(`${API_PREFIX}/auth/csrf/`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+    } catch {
+      const message = "CSRF isteği ağ hatası.";
+      emitCsrfFailed(message);
+      throw new ApiError({
+        status: 0,
+        title: "CSRF",
+        detail: message,
+        code: "csrf_network",
+      });
+    }
 
-  if (!res.ok) {
-    const problem = await parseProblem(res);
-    emitCsrfFailed(problem.detail || problem.title || "CSRF alınamadı.");
-    throw new ApiError(problem);
-  }
-  const data = (await res.json()) as CsrfResponse;
-  if (!data.csrf_token) {
-    const problem: ProblemDetail = {
-      status: 500,
-      title: "CSRF",
-      detail: "CSRF token yanıtta yok.",
-      code: "csrf_missing",
-    };
-    emitCsrfFailed(problem.detail!);
-    throw new ApiError(problem);
-  }
-  return data.csrf_token;
+    if (!res.ok) {
+      const problem = await parseProblem(res);
+      emitCsrfFailed(problem.detail || problem.title || "CSRF alınamadı.");
+      throw new ApiError(problem);
+    }
+    const data = (await res.json()) as CsrfResponse;
+    if (!data.csrf_token) {
+      const problem: ProblemDetail = {
+        status: 500,
+        title: "CSRF",
+        detail: "CSRF token yanıtta yok.",
+        code: "csrf_missing",
+      };
+      emitCsrfFailed(problem.detail!);
+      throw new ApiError(problem);
+    }
+    return data.csrf_token;
+  })().finally(() => {
+    csrfInflight = null;
+  });
+
+  return csrfInflight;
 }
 
 export interface ApiFetchOptions {
@@ -224,7 +244,20 @@ export async function apiFetch<T>(
     throw new ApiError(problem);
   }
 
-  return (await res.json()) as T;
+  const text = await res.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError({
+      status: res.status,
+      title: "Geçersiz JSON",
+      detail: "Sunucu yanıtı JSON değil.",
+      code: "invalid_json",
+    });
+  }
 }
 
 export function login(username: string, password: string): Promise<MeResponse> {
@@ -325,8 +358,14 @@ async function _saveBlob(res: Response, filename?: string): Promise<void> {
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition") || "";
   const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(cd);
-  const name =
-    filename || (match ? decodeURIComponent(match[1]) : `download-${Date.now()}`);
+  let name = filename || `download-${Date.now()}`;
+  if (!filename && match?.[1] != null) {
+    try {
+      name = decodeURIComponent(match[1]);
+    } catch {
+      name = match[1];
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -334,5 +373,6 @@ async function _saveBlob(res: Response, filename?: string): Promise<void> {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Safari: hemen revoke indirmeyi kesebilir
+  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }

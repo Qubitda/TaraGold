@@ -307,7 +307,7 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
                 Order.objects.select_for_update()
                 .prefetch_related(
                     "lines__stock_reservation__warehouse",
-                    "lines__stock_reservation__teklif",
+                    "lines__stock_reservation__varyant",
                 )
                 .filter(pk=order.pk)
                 .first()
@@ -352,7 +352,7 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
 
                 bal = get_or_create_balance_locked(
                     warehouse=res.warehouse,
-                    teklif=res.teklif,
+                    varyant=res.varyant,
                     birim=res.birim,
                 )
                 bal.on_hand = bal.on_hand + miktar
@@ -360,8 +360,7 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
 
                 mv = StockMovement(
                     warehouse=res.warehouse,
-                    teklif=res.teklif,
-                    varyant_id=line.varyant_id,
+                    varyant=res.varyant,
                     birim=line.birim,
                     miktar=miktar,
                     tip=StockMovement.Tip.IADE,

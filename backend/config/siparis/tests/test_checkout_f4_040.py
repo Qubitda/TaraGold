@@ -57,7 +57,9 @@ class CheckoutFixtureMixin(PriceQuoteFixtureMixin):
         ledger_servisi.kaydet_hareket(
             actor=cls.ted_user,
             warehouse=cls.wh,
-            teklif=cls.teklif,
+            varyant=cls.varyant,
+            fiyat_modeli=cls.varyant_fiyat.fiyat_modeli,
+            tedarikci_id=cls.ted.pk,
             tip=StockMovement.Tip.GIRIS,
             miktar=Decimal("100"),
         )
@@ -94,7 +96,7 @@ class CheckoutServiceTests(CheckoutFixtureMixin, TestCase):
                 durum=StockReservation.Durum.AKTIF,
             ).exists()
         )
-        bal = StockBalance.objects.get(warehouse=self.wh, teklif=self.teklif)
+        bal = StockBalance.objects.get(warehouse=self.wh, varyant=self.varyant)
         self.assertEqual(bal.reserved, Decimal("2"))
         self.assertEqual(bal.on_hand, Decimal("100"))
 

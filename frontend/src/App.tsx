@@ -32,15 +32,22 @@ import EpostaAyarlariPage from "@/app/(portal)/ayarlar/eposta/page";
 
 const queryClient = createAppQueryClient();
 
-/** Oturum düşüşü / CSRF hatalarını toast ile yüzeye çıkarır. */
+/** Oturum düşüşü / CSRF hatalarını toast ile yüzeye çıkarır (tekilleştirilmiş). */
 function GlobalFeedbackBridge() {
   const toast = useToast();
 
   useEffect(() => {
+    let lastAuthToastAt = 0;
+    let lastCsrfToastAt = 0;
+    const DEDUPE_MS = 4_000;
+
     const onExpired = (event: Event) => {
       const detail = (event as CustomEvent).detail as
         | { code?: string; status?: number }
         | undefined;
+      const now = Date.now();
+      if (now - lastAuthToastAt < DEDUPE_MS) return;
+      lastAuthToastAt = now;
       if (detail?.code === "mfa_required") {
         toast.info("Doğrulama gerekli", "Oturumu tamamlamak için MFA kodunu girin.");
         return;
@@ -51,6 +58,9 @@ function GlobalFeedbackBridge() {
       const detail = (event as CustomEvent).detail as
         | { message?: string }
         | undefined;
+      const now = Date.now();
+      if (now - lastCsrfToastAt < DEDUPE_MS) return;
+      lastCsrfToastAt = now;
       toast.error(
         "Güvenlik jetonu alınamadı",
         detail?.message || "Sayfayı yenileyip tekrar deneyin."

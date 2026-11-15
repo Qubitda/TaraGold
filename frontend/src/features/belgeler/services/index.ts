@@ -69,7 +69,7 @@ function isHttpUrl(value?: string): value is string {
 
 function guessFormat(ref?: string): string | undefined {
   if (!ref) return undefined;
-  const clean = ref.split("?")[0].toLowerCase();
+  const clean = (ref.split("?")[0] ?? "").toLowerCase();
   if (clean.endsWith(".pdf")) return "PDF";
   if (/\.(png|jpe?g|gif|webp)$/.test(clean)) return "IMAGE";
   if (/\.(txt|csv|json)$/.test(clean)) return "TEXT";

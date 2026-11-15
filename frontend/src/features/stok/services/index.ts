@@ -68,7 +68,7 @@ export const stokService = {
       method: "POST",
       body: {
         warehouse_id: data.warehouse_id,
-        teklif_id: data.teklif_id,
+        varyant_id: data.varyant_id,
         miktar: data.miktar,
         neden: data.neden || "",
       },

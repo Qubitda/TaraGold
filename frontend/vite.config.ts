@@ -1,16 +1,25 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
+import { fileURLToPath } from "node:url";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
-import { mockApiPlugin } from "./mock-api-plugin.ts";
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+const srcDir = fileURLToPath(new URL("./src", import.meta.url));
+
+export default defineConfig(async ({ mode }) => {
+  const env = loadEnv(mode, fileURLToPath(new URL(".", import.meta.url)), "");
+  // İstemci bundle'ına sızmasın diye VITE_ öneki yok (USE_MOCK).
   const useMock =
-    (process.env.VITE_USE_MOCK ?? env.VITE_USE_MOCK ?? "")
+    (process.env.USE_MOCK ?? env.USE_MOCK ?? process.env.VITE_USE_MOCK ?? env.VITE_USE_MOCK ?? "")
       .trim()
       .toLowerCase() === "true";
+  const isDeployMode = mode === "production" || mode === "staging";
+  if (useMock && isDeployMode) {
+    throw new Error(
+      "USE_MOCK=true production/staging build'de yasak. Django API kullanın."
+    );
+  }
+
   const rawDjangoOrigin = (
     process.env.DJANGO_ORIGIN ??
     env.DJANGO_ORIGIN ??
@@ -18,49 +27,68 @@ export default defineConfig(({ mode }) => {
   ).trim();
   const djangoTarget = rawDjangoOrigin || "http://127.0.0.1:8000";
 
+  const plugins = [react(), tailwindcss()] as import("vite").PluginOption[];
+  if (useMock) {
+    // Dinamik yol: tools/ tsconfig dışı (offline-only); tip çözümlemesi yapılmaz.
+    const mockPath = "./tools/mock-api-plugin.ts";
+    const mod = (await import(/* @vite-ignore */ mockPath)) as {
+      mockApiPlugin: () => import("vite").Plugin;
+    };
+    plugins.push(mod.mockApiPlugin());
+  }
+
   return {
     base: "/",
-    plugins: [
-      react(),
-      tailwindcss(),
-      ...(useMock ? [mockApiPlugin()] : []),
-    ],
+    plugins,
     resolve: {
       alias: {
-        "@": path.resolve(process.cwd(), "./src"),
+        "@": srcDir,
       },
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         output: {
-          manualChunks(id) {
-            // Vendor chunk'ları ayır — ana bundle'u küçült
-            if (id.includes("node_modules")) {
-              if (id.includes("react") || id.includes("react-dom")) {
-                return "vendor-react";
-              }
-              if (id.includes("@tanstack")) {
-                return "vendor-tanstack";
-              }
-              if (id.includes("react-router")) {
-                return "vendor-router";
-              }
-              if (id.includes("@radix-ui")) {
-                return "vendor-radix";
-              }
-              if (id.includes("lucide-react")) {
-                return "vendor-lucide";
-              }
-              return "vendor-other";
-            }
+          codeSplitting: {
+            groups: [
+              {
+                name: "vendor-react",
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)([\\/]|$)/,
+                priority: 40,
+              },
+              {
+                name: "vendor-router",
+                test: /[\\/]node_modules[\\/]react-router(-dom)?([\\/]|$)/,
+                priority: 30,
+              },
+              {
+                name: "vendor-tanstack",
+                test: /[\\/]node_modules[\\/]@tanstack[\\/]/,
+                priority: 30,
+              },
+              {
+                name: "vendor-radix",
+                test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+                priority: 20,
+              },
+              {
+                name: "vendor-lucide",
+                test: /[\\/]node_modules[\\/]lucide-react([\\/]|$)/,
+                priority: 20,
+              },
+              {
+                name: "vendor-other",
+                test: /[\\/]node_modules[\\/]/,
+                priority: 10,
+              },
+            ],
           },
         },
       },
     },
     server: {
-      host: "0.0.0.0",
+      // Varsayılan loopback; LAN için `npm run dev:lan` (--host 0.0.0.0)
+      host: "127.0.0.1",
       port: 3000,
-      allowedHosts: true,
       ...(!useMock
         ? {
             proxy: {
@@ -77,9 +105,8 @@ export default defineConfig(({ mode }) => {
         : {}),
     },
     preview: {
-      host: "0.0.0.0",
+      host: "127.0.0.1",
       port: 3000,
-      allowedHosts: true,
     },
     test: {
       environment: "jsdom",

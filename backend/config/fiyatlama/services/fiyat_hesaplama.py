@@ -1,16 +1,14 @@
 """
-Saf Python fiyat hesaplama (ADR-0008 §2.1.1, Dilim 3.4).
+Saf Python fiyat hesaplama — fiyatlandırma özeti (normatif).
 
-Django'ya bağımlı DEĞİL. Orkestrasyon: `pricing_service.quote` (Dilim 3.5).
-B-01 platform_servis kalemi kodlanmaz. B-06 vergi yok.
+Formül:
+- Has gram = Gram × Milyem
+- Ham = Has × saf_birim_fiyat
+- Satış = Ham + İşçilik + Servis bedeli + Taş + Ek
+- Kâr kırılımı = İşçilik + Servis
 
-Kurallar:
-- Tüm hesap Decimal; ara adımda yuvarlama yok.
-- Final satır + toplam_vergisiz: quantize (TRY: 0.01, HALF_UP).
-- milyem: 0–1 oran (ör. 0.585 = 14K) — /1000 uygulanmaz.
-- METAL_BAZLI: metal = gram × milyem × saf_birim_fiyat
-- GRAM_BIRIM: gram_birim = gram × birim_fiyat (metal satırı yok)
-- SABIT_PARCA: sabit_parca = birim_fiyat (gram çarpılmaz)
+Kademeli hop: her aşama çıktısı sonraki ham; `hesapla_hop` tekrarlanır.
+Birim tipleri: TRL | GRAM | YUZDE | CURRENCY (CURRENCY tutarı çağıran TRY'ye çevirir).
 """
 
 from __future__ import annotations
@@ -22,7 +20,14 @@ ISTENED_HASSASIYET = Decimal("0.01")
 ROUNDING = ROUND_HALF_UP
 
 FIYAT_MODELLERI = frozenset({"METAL_BAZLI", "GRAM_BIRIM", "SABIT_PARCA", "HEDEF_TOPLAM"})
-MARJ_TIPLERI = frozenset({"YUZDE", "TL_GR", "TL_PARCA"})
+BIRIM_TIPLERI = frozenset({"TRL", "GRAM", "YUZDE", "CURRENCY"})
+# Geriye dönük alias → özet birim
+_MARJ_TO_BIRIM = {
+    "YUZDE": "YUZDE",
+    "TL_GR": "GRAM",
+    "TL_PARCA": "TRL",
+}
+MARJ_TIPLERI = frozenset({"YUZDE", "TL_GR", "TL_PARCA"}) | BIRIM_TIPLERI
 
 
 def _d(x) -> Decimal:
@@ -45,6 +50,74 @@ def _assert_pozitif(ad: str, deger: Decimal, *, sifir_ok: bool = False) -> None:
         raise ValueError(f"{ad} sıfırdan büyük olmalıdır.")
 
 
+def normalize_birim_tipi(birim_veya_marj: str) -> str:
+    b = (birim_veya_marj or "").strip().upper()
+    if b in _MARJ_TO_BIRIM:
+        return _MARJ_TO_BIRIM[b]
+    if b not in BIRIM_TIPLERI:
+        raise ValueError(f"Geçersiz birim_tipi: {birim_veya_marj!r}")
+    return b
+
+
+def hesapla_ek_bedel(
+    *,
+    birim_tipi: str,
+    deger: Decimal,
+    ham: Decimal,
+    gram: Decimal,
+) -> Decimal:
+    """TRL/GRAM/YUZDE/CURRENCY — CURRENCY degeri zaten hedef PB'de olmalı."""
+    tip = normalize_birim_tipi(birim_tipi)
+    deger = _d(deger)
+    if deger < 0:
+        raise ValueError("deger negatif olamaz.")
+    ham = _d(ham)
+    gram = _d(gram)
+    if tip == "YUZDE":
+        return ham * (deger / Decimal("100"))
+    if tip == "GRAM":
+        _assert_pozitif("gram (GRAM birim)", gram)
+        return gram * deger
+    # TRL | CURRENCY — sabit tutar
+    return deger
+
+
+def hesapla_hop(
+    *,
+    ham: Decimal,
+    ekler: list[tuple[str, str, Decimal]],
+    gram: Decimal = Decimal("0"),
+    para_birimi: str = "TRY",
+    hassasiyet: Decimal | None = None,
+) -> dict[str, Any]:
+    """
+    Tek hop: ham + adlandırılmış ekler → yeni_ham.
+
+    ekler: [(kalem_adi, birim_tipi, deger), ...]
+    örn. [("iscilik", "TRL", 100), ("servis_bedeli", "YUZDE", 5)]
+    """
+    hassasiyet = hassasiyet or ISTENED_HASSASIYET
+    ham0 = _d(ham)
+    if ham0 < 0:
+        raise ValueError("ham negatif olamaz.")
+    kalemler: dict[str, Decimal] = {"ham": ham0}
+    toplam = ham0
+    for ad, birim, deger in ekler:
+        tutar = hesapla_ek_bedel(birim_tipi=birim, deger=deger, ham=ham0, gram=gram)
+        kalemler[ad] = tutar
+        toplam += tutar
+    return {
+        "para_birimi": para_birimi,
+        "kalemler": kalemler,
+        "kalemler_yuvarlanmis": {k: _q(v, hassasiyet=hassasiyet) for k, v in kalemler.items()},
+        "ham": ham0,
+        "yeni_ham": toplam,
+        "toplam": toplam,
+        "toplam_vergisiz": _q(toplam, hassasiyet=hassasiyet),
+        "toplam_yuvarlanmis": _q(toplam, hassasiyet=hassasiyet),
+    }
+
+
 def _marj_hesapla(
     *,
     marj_tipi: str,
@@ -54,20 +127,19 @@ def _marj_hesapla(
     iscilik: Decimal,
     islcilik_dahil_mi: bool,
 ) -> tuple[Decimal, Decimal]:
-    """Döner: (marj, yuzde_taban)."""
-    if marj_tipi not in MARJ_TIPLERI:
-        raise ValueError(f"Geçersiz marj_tipi: {marj_tipi!r}")
+    """Geriye dönük; servis = marj. Döner: (servis, yuzde_taban)."""
+    tip = normalize_birim_tipi(marj_tipi)
     marj_degeri = _d(marj_degeri)
     if marj_degeri < 0:
         raise ValueError("marj_degeri negatif olamaz.")
     yuzde_taban = Decimal("0")
-    if marj_tipi == "YUZDE":
+    if tip == "YUZDE":
         yuzde_taban = taban + (iscilik if islcilik_dahil_mi else Decimal("0"))
         marj = yuzde_taban * (marj_degeri / Decimal("100"))
-    elif marj_tipi == "TL_GR":
-        _assert_pozitif("gram (TL_GR marj)", gram)
+    elif tip == "GRAM":
+        _assert_pozitif("gram (GRAM marj)", gram)
         marj = gram * marj_degeri
-    else:  # TL_PARCA
+    else:  # TRL | CURRENCY
         marj = marj_degeri
     return marj, yuzde_taban
 
@@ -83,12 +155,6 @@ def hesapla(
     islcilik_dahil_mi: bool = False,
     tas_bedeli: Decimal = Decimal("0"),
 ) -> dict:
-    """
-    Geriye dönük METAL_BAZLI çekirdek (ek_bedel yok).
-
-    Dönen sözlük: metal_bedeli, iscilik, marj, tas_bedeli, toplam (ham) +
-    *_yuvarlanmis alanları.
-    """
     gram = _d(gram)
     milyem = _d(milyem)
     saf_birim_fiyat = _d(saf_birim_fiyat)
@@ -104,7 +170,8 @@ def hesapla(
     if tas_bedeli < 0:
         raise ValueError("tas_bedeli negatif olamaz.")
 
-    metal_bedeli = gram * milyem * saf_birim_fiyat
+    has_gram = gram * milyem
+    metal_bedeli = has_gram * saf_birim_fiyat
     marj, taban = _marj_hesapla(
         marj_tipi=marj_tipi,
         marj_degeri=marj_degeri,
@@ -116,9 +183,11 @@ def hesapla(
     toplam = metal_bedeli + iscilik + marj + tas_bedeli
 
     return {
+        "has_gram": has_gram,
         "metal_bedeli": metal_bedeli,
         "iscilik": iscilik,
         "marj": marj,
+        "servis_bedeli": marj,
         "tas_bedeli": tas_bedeli,
         "taban": taban,
         "toplam": toplam,
@@ -136,9 +205,13 @@ def _sonuc_paketle(
     taban: Decimal,
     hassasiyet: Decimal,
 ) -> dict[str, Any]:
-    """Kalemler ham; toplam_vergisiz yuvarlanmış."""
-    toplam_ham = sum(kalemler.values(), Decimal("0"))
+    # kanal_marj = servis_bedeli alias; toplama iki kez girmez
+    toplam_ham = sum(
+        (v for k, v in kalemler.items() if k != "kanal_marj"),
+        Decimal("0"),
+    )
     kalemler_yuvarlanmis = {k: _q(v, hassasiyet=hassasiyet) for k, v in kalemler.items()}
+    servis = kalemler.get("servis_bedeli", kalemler.get("kanal_marj", Decimal("0")))
     return {
         "fiyat_modeli": fiyat_modeli,
         "para_birimi": para_birimi,
@@ -148,14 +221,15 @@ def _sonuc_paketle(
         "toplam": toplam_ham,
         "toplam_vergisiz": _q(toplam_ham, hassasiyet=hassasiyet),
         "toplam_yuvarlanmis": _q(toplam_ham, hassasiyet=hassasiyet),
-        # Geriye dönük alias’lar (METAL_BAZLI testleri / eski çağrılar)
         "metal_bedeli": kalemler.get("metal", Decimal("0")),
         "iscilik": kalemler.get("iscilik", Decimal("0")),
-        "marj": kalemler.get("kanal_marj", Decimal("0")),
+        "marj": servis,
+        "servis_bedeli": servis,
         "tas_bedeli": kalemler.get("tas", Decimal("0")),
         "ek_bedel": kalemler.get("ek_bedel", Decimal("0")),
+        "kar": kalemler.get("iscilik", Decimal("0")) + servis,
         "metal_bedeli_yuvarlanmis": kalemler_yuvarlanmis.get("metal", _q(Decimal("0"))),
-        "marj_yuvarlanmis": kalemler_yuvarlanmis.get("kanal_marj", _q(Decimal("0"))),
+        "marj_yuvarlanmis": _q(servis),
     }
 
 
@@ -173,7 +247,7 @@ def hesapla_metal_bazli(
     para_birimi: str = "TRY",
     hassasiyet: Decimal | None = None,
 ) -> dict[str, Any]:
-    """ADR-0008 METAL_BAZLI — platform_servis yok (B-01)."""
+    """METAL_BAZLI — servis_bedeli kalemi üretilir (özet normatif)."""
     hassasiyet = hassasiyet or ISTENED_HASSASIYET
     ek_bedel = _d(ek_bedel)
     if ek_bedel < 0:
@@ -192,7 +266,8 @@ def hesapla_metal_bazli(
     kalemler = {
         "metal": base["metal_bedeli"],
         "iscilik": base["iscilik"],
-        "kanal_marj": base["marj"],
+        "servis_bedeli": base["servis_bedeli"],
+        "kanal_marj": base["servis_bedeli"],  # alias
         "tas": base["tas_bedeli"],
         "ek_bedel": ek_bedel,
     }
@@ -217,7 +292,6 @@ def hesapla_gram_birim(
     para_birimi: str = "TRY",
     hassasiyet: Decimal | None = None,
 ) -> dict[str, Any]:
-    """ADR-0008 GRAM_BIRIM — metal satırı yok; platform_servis yok (B-01)."""
     hassasiyet = hassasiyet or ISTENED_HASSASIYET
     gram = _d(gram)
     birim_fiyat = _d(birim_fiyat)
@@ -230,7 +304,6 @@ def hesapla_gram_birim(
         raise ValueError("tas_bedeli/ek_bedel negatif olamaz.")
 
     gram_birim = gram * birim_fiyat
-    # GRAM_BIRIM’de ayrı işçilik satırı yok; YUZDE tabanı = gram_birim
     marj, taban = _marj_hesapla(
         marj_tipi=marj_tipi,
         marj_degeri=marj_degeri,
@@ -239,9 +312,10 @@ def hesapla_gram_birim(
         iscilik=Decimal("0"),
         islcilik_dahil_mi=False,
     )
-    del islcilik_dahil_mi  # modelde işçilik satırı yok
+    del islcilik_dahil_mi
     kalemler = {
         "gram_birim": gram_birim,
+        "servis_bedeli": marj,
         "kanal_marj": marj,
         "tas": tas_bedeli,
         "ek_bedel": ek_bedel,
@@ -266,7 +340,6 @@ def hesapla_sabit_parca(
     para_birimi: str = "TRY",
     hassasiyet: Decimal | None = None,
 ) -> dict[str, Any]:
-    """ADR-0008 SABIT_PARCA — gram fiyatı çarpmaz; TL_GR marj için gram gerekir."""
     hassasiyet = hassasiyet or ISTENED_HASSASIYET
     birim_fiyat = _d(birim_fiyat)
     tas_bedeli = _d(tas_bedeli)
@@ -288,6 +361,7 @@ def hesapla_sabit_parca(
     )
     kalemler = {
         "sabit_parca": sabit_parca,
+        "servis_bedeli": marj,
         "kanal_marj": marj,
         "tas": tas_bedeli,
         "ek_bedel": ek_bedel,
@@ -308,11 +382,6 @@ def hesapla_hedef_toplam(
     para_birimi: str = "TRY",
     hassasiyet: Decimal | None = None,
 ) -> dict[str, Any]:
-    """ADR-0014 KS-6 — quote toplamı = hedef; banka/GV/işletme yok (KS-4).
-
-    Tek kalem `hedef_toplam`. Marj/metal yeniden hesaplanmaz; örtük gr satış
-    yalnız denetim için `hesap_girdisi`'ne yazılır (çağıran).
-    """
     hassasiyet = hassasiyet or ISTENED_HASSASIYET
     hedef = _d(hedef_toplam)
     gram = _d(gram)
@@ -328,8 +397,50 @@ def hesapla_hedef_toplam(
     )
 
 
+def hesapla_iki_hop(
+    *,
+    fiyat_modeli: str,
+    hop1_kwargs: dict[str, Any],
+    servis_birim: str,
+    servis_deger: Decimal,
+    gram: Decimal,
+) -> dict[str, Any]:
+    """
+    Hop1: platform satış (metal/işçilik/taş/ek; servis=0).
+    Hop2: kanal servis bedeli → alıcı fiyatı.
+    """
+    # Hop1: marj/servis sıfır — yalnız maliyet + işçilik katmanı
+    k1 = dict(hop1_kwargs)
+    k1["marj_tipi"] = "TRL"
+    k1["marj_degeri"] = Decimal("0")
+    platform = hesapla_modele_gore(fiyat_modeli, **k1)
+    platform_satis = platform["toplam"]
+    hop2 = hesapla_hop(
+        ham=platform_satis,
+        ekler=[("servis_bedeli", servis_birim, servis_deger)],
+        gram=_d(gram),
+        para_birimi=platform.get("para_birimi", "TRY"),
+    )
+    # Birleşik kalemler (alıcı görünümü)
+    kalemler = dict(platform["kalemler"])
+    kalemler["servis_bedeli"] = hop2["kalemler"]["servis_bedeli"]
+    kalemler["kanal_marj"] = hop2["kalemler"]["servis_bedeli"]
+    hassasiyet = ISTENED_HASSASIYET
+    return {
+        **_sonuc_paketle(
+            fiyat_modeli=fiyat_modeli,
+            para_birimi=platform.get("para_birimi", "TRY"),
+            kalemler=kalemler,
+            taban=platform_satis,
+            hassasiyet=hassasiyet,
+        ),
+        "hop1_platform_satis": platform_satis,
+        "hop2": hop2,
+        "kar": _d(kalemler.get("iscilik", 0)) + hop2["kalemler"]["servis_bedeli"],
+    }
+
+
 def hesapla_modele_gore(fiyat_modeli: str, **kwargs) -> dict[str, Any]:
-    """Modelleri tek girişten seçer (`pricing_service.quote` tüketir)."""
     if fiyat_modeli not in FIYAT_MODELLERI:
         raise ValueError(f"Geçersiz fiyat_modeli: {fiyat_modeli!r}")
     if fiyat_modeli == "METAL_BAZLI":

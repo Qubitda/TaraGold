@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { serverNowMs } from "@/hooks/use-server-clock";
 import { cn } from "@/lib/utils";
 
 function remainingMs(expiresAt: string, now: number): number {
@@ -18,7 +19,7 @@ function formatRemain(ms: number): string {
 
 export function isQuoteExpired(
   expiresAt: string | null | undefined,
-  now = Date.now()
+  now = serverNowMs()
 ): boolean {
   if (!expiresAt) return false;
   return remainingMs(expiresAt, now) <= 0;
@@ -30,17 +31,17 @@ interface QuoteCountdownProps {
   onExpired?: () => void;
 }
 
-/** Quote / lock TTL geri sayımı — para aritmetiği yok. */
+/** Quote / lock TTL geri sayımı — para aritmetiği yok; sunucu saati. */
 export function QuoteCountdown({
   expiresAt,
   className,
   onExpired,
 }: QuoteCountdownProps) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => serverNowMs());
 
   useEffect(() => {
     if (!expiresAt) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => setNow(serverNowMs()), 1000);
     return () => window.clearInterval(id);
   }, [expiresAt]);
 

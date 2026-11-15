@@ -79,12 +79,12 @@ describe("EmailSettingsView", () => {
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
     });
-    const sentPayload = updateSpy.mock.calls[0][0];
-    expect(sentPayload.host).toBe("smtp.yandex.com");
-    expect(sentPayload.port).toBe(465);
-    expect(sentPayload.use_ssl).toBe(true);
-    expect(sentPayload.use_tls).toBe(false);
-    expect(sentPayload.password).toBeUndefined();
+    const sentPayload = updateSpy.mock.calls[0]?.[0];
+    expect(sentPayload?.host).toBe("smtp.yandex.com");
+    expect(sentPayload?.port).toBe(465);
+    expect(sentPayload?.use_ssl).toBe(true);
+    expect(sentPayload?.use_tls).toBe(false);
+    expect(sentPayload?.password).toBeUndefined();
   });
 
   it("bağlantı testi ve test e-postası gönderimi sonuçlarını gösterir", async () => {
@@ -124,7 +124,7 @@ describe("EmailSettingsView", () => {
     await user.click(screen.getByRole("button", { name: /Test E-postası Gönder/i }));
     await waitFor(() => {
       expect(sendSpy).toHaveBeenCalledTimes(1);
-      expect(sendSpy.mock.calls[0][0].to).toBe("admin@taragold.test");
+      expect(sendSpy.mock.calls[0]?.[0]?.to).toBe("admin@taragold.test");
       expect(
         screen.getAllByText("SMTP kimlik doğrulama başarısız.").length
       ).toBeGreaterThanOrEqual(1);

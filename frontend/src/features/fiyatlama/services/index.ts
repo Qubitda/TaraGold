@@ -1,16 +1,11 @@
 import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type { BuyerPriceLock, BuyerQuote, Paginated } from "@/lib/api/types";
+import { pickDisplayPrice } from "@/lib/format";
 import type {
   PriceLock,
   PriceLockPage,
   PriceQuote,
   PriceQuotePage,
-  SupplierOffer,
-  SupplierOfferCreateRequest,
-  SupplierOfferImportCommitResult,
-  SupplierOfferImportPreview,
-  SupplierOfferImportSatir,
-  SupplierOfferPage,
   SupplierVariantPage,
 } from "../types";
 
@@ -36,7 +31,11 @@ function mapQuote(q: BuyerQuote): PriceQuote {
   return {
     id: q.id,
     varyant_id: q.varyant_id ?? 0,
-    birim_fiyat: q.gram_basi_vergisiz || q.toplam_vergisiz,
+    birim_fiyat:
+      pickDisplayPrice({
+        toplam: q.toplam_vergisiz,
+        gram_basi: q.gram_basi_vergisiz,
+      }) ?? "",
     para_birimi: q.para_birimi,
     expires_at: q.expires_at || undefined,
     allowed_actions: q.allowed_actions,
@@ -64,7 +63,8 @@ function mapLock(
   return {
     id: l.id,
     quote_id: l.quote_id,
-    kilit_fiyati: l.toplam_vergisiz || "",
+    kilit_fiyati:
+      pickDisplayPrice({ toplam: l.toplam_vergisiz }) ?? "",
     para_birimi: l.para_birimi || "TRY",
     durum: (l.durum as PriceLock["durum"]) || "AKTIF",
     expires_at: l.expires_at || "",
@@ -149,63 +149,35 @@ export const fiyatlamaService = {
   ): Promise<SupplierVariantPage> {
     return apiFetch<SupplierVariantPage>(`/supplier/variants/${qs(params)}`);
   },
-  getSupplierOffers(
-    params?: Record<string, string | undefined>
-  ): Promise<SupplierOfferPage> {
-    return apiFetch<SupplierOfferPage>(`/supplier/offers/${qs(params)}`);
-  },
-  getSupplierOfferDetail(id: number | string): Promise<SupplierOffer> {
-    return apiFetch<SupplierOffer>(`/supplier/offers/${id}/`);
-  },
-  createSupplierOfferVersion(
-    id: number | string,
-    data: { gram?: string; birim_fiyat?: string; fiyat_modeli?: string }
-  ): Promise<SupplierOffer> {
-    return apiFetch<SupplierOffer>(`/supplier/offers/${id}/versions/`, {
+  upsertVaryantFiyat(data: {
+    varyant_id: number;
+    fiyat_modeli?: string;
+    birim_fiyat?: string;
+    gram?: string;
+    para_birimi?: string;
+    iscilik?: string;
+    tedarikci_id?: number;
+  }): Promise<{
+    id: number;
+    varyant_id: number;
+    fiyat_modeli: string;
+    birim_fiyat: string | null;
+    gram: string | null;
+    para_birimi: string;
+  }> {
+    return apiFetch("/ops/varyant-fiyat/upsert/", {
       method: "POST",
       body: data,
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  createSupplierOffer(data: SupplierOfferCreateRequest): Promise<SupplierOffer> {
-    return apiFetch<SupplierOffer>("/supplier/offers/", {
-      method: "POST",
-      body: data,
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  submitSupplierOffer(id: number | string): Promise<SupplierOffer> {
-    return apiFetch<SupplierOffer>(`/supplier/offers/${id}/submit/`, {
-      method: "POST",
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  deactivateSupplierOffer(id: number | string): Promise<SupplierOffer> {
-    return apiFetch<SupplierOffer>(`/supplier/offers/${id}/deactivate/`, {
-      method: "POST",
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  previewOfferImport(csv: string): Promise<SupplierOfferImportPreview> {
-    return apiFetch<SupplierOfferImportPreview>(
-      "/supplier/offers/import/preview/",
-      {
-        method: "POST",
-        body: { csv },
-        idempotencyKey: newIdempotencyKey(),
-      }
-    );
-  },
-  commitOfferImport(
-    satirlar: SupplierOfferImportSatir[]
-  ): Promise<SupplierOfferImportCommitResult> {
-    return apiFetch<SupplierOfferImportCommitResult>(
-      "/supplier/offers/import/commit/",
-      {
-        method: "POST",
-        body: { satirlar },
-        idempotencyKey: newIdempotencyKey(),
-      }
+  listVaryantFiyat(params?: {
+    varyant_id?: string;
+  }): Promise<{
+    results: Array<{ id: number; varyant_id: number; birim_fiyat: string | null }>;
+  }> {
+    return apiFetch(
+      `/ops/varyant-fiyat/${qs(params as Record<string, string | undefined>)}`
     );
   },
 };

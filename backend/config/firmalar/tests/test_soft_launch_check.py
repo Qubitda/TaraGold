@@ -4,10 +4,10 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 
 
-class SoftLaunchCheckTests(TestCase):
+class SoftLaunchCheckTests(SimpleTestCase):
     @override_settings(
         DEBUG=True,
         MFA_ENFORCE_PLATFORM=False,
@@ -16,6 +16,13 @@ class SoftLaunchCheckTests(TestCase):
         ALLOW_FAKE_PROVIDERS=True,
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
         PASSWORD_RESET_BASE_URL="https://example.test",
+        SECRET_KEY="test-secret-key-not-for-production-use",
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "test-soft-launch-debug",
+            }
+        },
     )
     def test_debug_sandbox_passes(self):
         out = StringIO()
@@ -50,3 +57,25 @@ class SoftLaunchCheckTests(TestCase):
                 "--require-mfa",
                 stdout=StringIO(),
             )
+
+    @override_settings(
+        DEBUG=False,
+        ALLOWED_HOSTS=["app.example.test"],
+        MFA_ENFORCE_PLATFORM=False,
+        PAYMENT_PROVIDER="fake",
+        CARRIER_PROVIDER="fake",
+        ALLOW_FAKE_PROVIDERS=False,
+        ALLOW_LOCMEM_CACHE=True,
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "test-soft-launch-fake",
+            }
+        },
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        PASSWORD_RESET_BASE_URL="https://example.test",
+        SECRET_KEY="test-secret-key-not-for-production-use",
+    )
+    def test_prod_fake_without_allow_fails(self):
+        with self.assertRaises(CommandError):
+            call_command("soft_launch_check", stdout=StringIO())

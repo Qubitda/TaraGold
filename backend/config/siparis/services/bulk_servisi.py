@@ -28,9 +28,9 @@ from siparis.services.cart_servisi import (
     al_veya_olustur_sepet,
     satir_ekle,
 )
-from siparis.services.checkout_servisi import _resolve_warehouse_for_teklif
+from siparis.services.checkout_servisi import _resolve_warehouse_for_fiyat
 from stok.models import StockBalance
-from stok.services.birim import birim_from_teklif
+from stok.services.birim import birim_from_fiyat_modeli
 from urunler.models import Varyant
 
 
@@ -104,10 +104,10 @@ def parse_csv(text: str) -> list[BulkRowInput]:
     return rows
 
 
-def _assert_atp(*, teklif, miktar: Decimal, birim: str) -> None:
-    warehouse = _resolve_warehouse_for_teklif(teklif)
+def _assert_atp(*, varyant_fiyat, varyant, miktar: Decimal, birim: str) -> None:
+    warehouse = _resolve_warehouse_for_fiyat(varyant_fiyat)
     bal = StockBalance.objects.filter(
-        warehouse=warehouse, teklif=teklif, birim=birim
+        warehouse=warehouse, varyant=varyant, birim=birim
     ).first()
     available = bal.available if bal is not None else Decimal("0")
     if available < miktar:
@@ -154,15 +154,23 @@ def _prepare_rows(
                 kullanici=actor,
                 now=now,
             )
-            birim = birim_from_teklif(quote.teklif)
+            vf = quote.varyant_fiyat
+            if vf is None:
+                raise ValidationError("Quote fiyat kaynağı yok.")
+            birim = birim_from_fiyat_modeli(vf.fiyat_modeli)
             if row.birim is not None and row.birim.strip():
                 istenen = row.birim.strip().upper()
                 if istenen != birim:
                     raise ValidationError(
-                        f"Birim uyumsuz: CSV={istenen}, teklif={birim} "
+                        f"Birim uyumsuz: CSV={istenen}, fiyat={birim} "
                         "(dönüşüm yok)."
                     )
-            _assert_atp(teklif=quote.teklif, miktar=row.miktar, birim=birim)
+            _assert_atp(
+                varyant_fiyat=vf,
+                varyant=varyant,
+                miktar=row.miktar,
+                birim=birim,
+            )
             accepted.append(
                 BulkRowOk(
                     satir_no=row.satir_no,

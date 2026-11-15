@@ -3473,9 +3473,6 @@
           "neden": {
             "type": "string"
           },
-          "teklif_id": {
-            "type": "integer"
-          },
           "tip": {
             "type": "string"
           },
@@ -3903,9 +3900,6 @@
           },
           "reserved": {
             "type": "string"
-          },
-          "teklif_id": {
-            "type": "integer"
           },
           "varyant_id": {
             "type": "integer"
@@ -7590,7 +7584,7 @@
     "/api/v1/documents/": {
       "get": {
         "description": "GET /api/v1/belgeler/ — Ops tümü; Alıcı/Tedarikçi yalnız kendi firmasının belgeleri.",
-        "operationId": "listBelges_789",
+        "operationId": "listBelges_6831",
         "parameters": [],
         "responses": {
           "200": {
@@ -7674,7 +7668,7 @@
     "/api/v1/documents/{id}/download/": {
       "get": {
         "description": "GET /api/v1/belgeler/<pk>/download/ — tenant/kör havuz kontrolü ile PDF indir.",
-        "operationId": "listBelgeDownloads_3352",
+        "operationId": "listBelgeDownloads_6853",
         "parameters": [
           {
             "description": "",
@@ -7768,7 +7762,7 @@
     "/api/v1/email-settings/": {
       "get": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "listOpsEmailSettings_872",
+        "operationId": "listOpsEmailSettings_2414",
         "parameters": [],
         "responses": {
           "200": {
@@ -7850,7 +7844,7 @@
       },
       "patch": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "partialUpdateOpsEmailSettings_7117",
+        "operationId": "partialUpdateOpsEmailSettings_478",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -7942,7 +7936,7 @@
       },
       "put": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "updateOpsEmailSettings_3517",
+        "operationId": "updateOpsEmailSettings_7799",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -8036,7 +8030,7 @@
     "/api/v1/email-settings/send-test/": {
       "post": {
         "description": "POST /api/v1/ops/email-settings/send-test/ — { to, ...formOverrides }.",
-        "operationId": "createOpsEmailSendTest_7004",
+        "operationId": "createOpsEmailSendTest_5907",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -8130,7 +8124,7 @@
     "/api/v1/email-settings/test-connection/": {
       "post": {
         "description": "POST /api/v1/ops/email-settings/test-connection/ — kaydetmeden de test eder.",
-        "operationId": "createOpsEmailTestConnection_3988",
+        "operationId": "createOpsEmailTestConnection_3796",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -22725,6 +22719,184 @@
         ]
       }
     },
+    "/api/v1/ops/varyant-fiyat/": {
+      "get": {
+        "description": "`GET /api/v1/ops/varyant-fiyat/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listOpsVaryantFiyats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/ops/varyant-fiyat/",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/varyant-fiyat/upsert/": {
+      "post": {
+        "description": "`POST /api/v1/ops/varyant-fiyat/upsert/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "createOpsVaryantFiyatUpsert",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/ops/varyant-fiyat/upsert/",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/orders/": {
       "get": {
         "description": "GET /api/v1/orders/ — alıcı kendi; view_all / QC / lojistik tümü. Client firma_id yok.",
@@ -26620,20 +26792,13 @@
       }
     },
     "/api/v1/supplier/offers/": {
-      "get": {
-        "description": "GET liste; POST taslak create (`teklif_servisi.taslak_olustur`).",
-        "operationId": "listSupplierOffers",
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferList",
         "parameters": [],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierOfferPage"
-                }
-              }
-            },
-            "description": "SupplierOfferPage"
+          "204": {
+            "description": ""
           },
           "400": {
             "content": {
@@ -26684,6 +26849,87 @@
               }
             },
             "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOffers",
+        "parameters": [],
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
           },
           "429": {
             "content": {
@@ -26701,30 +26947,31 @@
           "supplier"
         ]
       },
-      "post": {
-        "description": "GET liste; POST taslak create (`teklif_servisi.taslak_olustur`).",
-        "operationId": "createSupplierOfferList",
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferList",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SupplierOfferCreateRequest"
-              }
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
             }
-          },
-          "required": true
+          }
         },
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierOffer"
-                }
+                "schema": {}
               }
             },
-            "description": "SupplierOffer"
+            "description": ""
           },
           "400": {
             "content": {
@@ -26775,6 +27022,97 @@
               }
             },
             "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "post": {
+        "description": "`POST /api/v1/supplier/offers/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "createSupplierOfferList",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierOfferCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
           },
           "429": {
             "content": {
@@ -26791,33 +27129,32 @@
         "tags": [
           "supplier"
         ]
-      }
-    },
-    "/api/v1/supplier/offers/import/commit/": {
-      "post": {
-        "description": "POST JSON {satirlar: [...]} — hepsi geçerliyse taslak teklifler.",
-        "operationId": "createSupplierOfferImportCommit",
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferList",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SupplierOfferImportCommitRequest"
-              }
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
             }
-          },
-          "required": true
+          }
         },
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierOfferImportCommitResult"
-                }
+                "schema": {}
               }
             },
-            "description": "SupplierOfferImportCommitResult"
+            "description": ""
           },
           "400": {
             "content": {
@@ -26868,6 +27205,347 @@
               }
             },
             "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PUT /api/v1/supplier/offers/",
+        "tags": [
+          "supplier"
+        ]
+      }
+    },
+    "/api/v1/supplier/offers/import/commit/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/import/commit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferImportCommit",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/import/commit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/import/commit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOfferImportCommits",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/supplier/offers/import/commit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/import/commit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferImportCommit",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/import/commit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "post": {
+        "description": "`POST /api/v1/supplier/offers/import/commit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "createSupplierOfferImportCommit",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierOfferImportCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
           },
           "429": {
             "content": {
@@ -26884,33 +27562,32 @@
         "tags": [
           "supplier"
         ]
-      }
-    },
-    "/api/v1/supplier/offers/import/preview/": {
-      "post": {
-        "description": "POST multipart file=…csv veya JSON {csv: \"...\"}.",
-        "operationId": "createSupplierOfferImportPreview",
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/import/commit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferImportCommit",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SupplierOfferImportPreviewRequest"
-              }
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierOfferImportPreview"
-                }
+                "schema": {}
               }
             },
-            "description": "SupplierOfferImportPreview"
+            "description": ""
           },
           "400": {
             "content": {
@@ -26961,6 +27638,347 @@
               }
             },
             "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PUT /api/v1/supplier/offers/import/commit/",
+        "tags": [
+          "supplier"
+        ]
+      }
+    },
+    "/api/v1/supplier/offers/import/preview/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/import/preview/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferImportPreview",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/import/preview/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/import/preview/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOfferImportPreviews",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/supplier/offers/import/preview/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/import/preview/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferImportPreview",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/import/preview/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "post": {
+        "description": "`POST /api/v1/supplier/offers/import/preview/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "createSupplierOfferImportPreview",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierOfferImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
           },
           "429": {
             "content": {
@@ -26977,33 +27995,32 @@
         "tags": [
           "supplier"
         ]
-      }
-    },
-    "/api/v1/supplier/offers/{id}/": {
-      "get": {
-        "description": "`GET /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
-        "operationId": "retrieveSupplierOfferDetail",
-        "parameters": [
-          {
-            "description": "",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/import/preview/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferImportPreview",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SupplierOffer"
-                }
+                "schema": {}
               }
             },
-            "description": "SupplierOffer"
+            "description": ""
           },
           "400": {
             "content": {
@@ -27066,15 +28083,776 @@
             "description": "Problem+JSON"
           }
         },
+        "summary": "PUT /api/v1/supplier/offers/import/preview/",
+        "tags": [
+          "supplier"
+        ]
+      }
+    },
+    "/api/v1/supplier/offers/{id}/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferDetail",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/{id}/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "retrieveSupplierOfferDetail",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
         "summary": "GET /api/v1/supplier/offers/{id}/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferDetail",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/{id}/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "post": {
+        "description": "`POST /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "createSupplierOfferDetail",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/supplier/offers/{id}/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/{id}/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferDetail",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PUT /api/v1/supplier/offers/{id}/",
         "tags": [
           "supplier"
         ]
       }
     },
     "/api/v1/supplier/offers/{id}/deactivate/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/{id}/deactivate/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferDeactivate",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/{id}/deactivate/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/{id}/deactivate/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOfferDeactivates",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/supplier/offers/{id}/deactivate/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/{id}/deactivate/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferDeactivate",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/{id}/deactivate/",
+        "tags": [
+          "supplier"
+        ]
+      },
       "post": {
-        "description": "POST — YAYINDA → PASIF.",
+        "description": "`POST /api/v1/supplier/offers/{id}/deactivate/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
         "operationId": "createSupplierOfferDeactivate",
         "parameters": [
           {
@@ -27098,15 +28876,117 @@
           "required": false
         },
         "responses": {
-          "200": {
+          "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SupplierOffer"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
-            "description": "SupplierOffer"
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/supplier/offers/{id}/deactivate/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/{id}/deactivate/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferDeactivate",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
           },
           "400": {
             "content": {
@@ -27169,15 +29049,293 @@
             "description": "Problem+JSON"
           }
         },
-        "summary": "POST /api/v1/supplier/offers/{id}/deactivate/",
+        "summary": "PUT /api/v1/supplier/offers/{id}/deactivate/",
         "tags": [
           "supplier"
         ]
       }
     },
     "/api/v1/supplier/offers/{id}/submit/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/{id}/submit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferSubmit",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/{id}/submit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/{id}/submit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOfferSubmits",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/supplier/offers/{id}/submit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/{id}/submit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferSubmit",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/{id}/submit/",
+        "tags": [
+          "supplier"
+        ]
+      },
       "post": {
-        "description": "POST — TASLAK → ONAY_BEKLIYOR (teklif_servisi.onaya_gonder).",
+        "description": "`POST /api/v1/supplier/offers/{id}/submit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
         "operationId": "createSupplierOfferSubmit",
         "parameters": [
           {
@@ -27201,15 +29359,117 @@
           "required": false
         },
         "responses": {
-          "200": {
+          "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SupplierOffer"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
-            "description": "SupplierOffer"
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/supplier/offers/{id}/submit/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/{id}/submit/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferSubmit",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
           },
           "400": {
             "content": {
@@ -27272,15 +29532,293 @@
             "description": "Problem+JSON"
           }
         },
-        "summary": "POST /api/v1/supplier/offers/{id}/submit/",
+        "summary": "PUT /api/v1/supplier/offers/{id}/submit/",
         "tags": [
           "supplier"
         ]
       }
     },
     "/api/v1/supplier/offers/{id}/versions/": {
+      "delete": {
+        "description": "`DELETE /api/v1/supplier/offers/{id}/versions/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "destroySupplierOfferVersion",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "DELETE /api/v1/supplier/offers/{id}/versions/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "get": {
+        "description": "`GET /api/v1/supplier/offers/{id}/versions/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "listSupplierOfferVersions",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {},
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/supplier/offers/{id}/versions/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "patch": {
+        "description": "`PATCH /api/v1/supplier/offers/{id}/versions/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "partialUpdateSupplierOfferVersion",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "PATCH /api/v1/supplier/offers/{id}/versions/",
+        "tags": [
+          "supplier"
+        ]
+      },
       "post": {
-        "description": "POST — YAYINDA → yeni ONAY_BEKLIYOR versiyon.",
+        "description": "`POST /api/v1/supplier/offers/{id}/versions/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
         "operationId": "createSupplierOfferVersion",
         "parameters": [
           {
@@ -27304,15 +29842,117 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SupplierOffer"
+                  "$ref": "#/components/schemas/ProblemDetail"
                 }
               }
             },
-            "description": "SupplierOffer"
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "ProblemDetail"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/supplier/offers/{id}/versions/",
+        "tags": [
+          "supplier"
+        ]
+      },
+      "put": {
+        "description": "`PUT /api/v1/supplier/offers/{id}/versions/` — yetki ve tenant view/serviste yeniden doğrulanır; UI gizleme güvenlik değildir.",
+        "operationId": "updateSupplierOfferVersion",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {}
+            },
+            "multipart/form-data": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": ""
           },
           "400": {
             "content": {
@@ -27375,7 +30015,7 @@
             "description": "Problem+JSON"
           }
         },
-        "summary": "POST /api/v1/supplier/offers/{id}/versions/",
+        "summary": "PUT /api/v1/supplier/offers/{id}/versions/",
         "tags": [
           "supplier"
         ]
@@ -27466,7 +30106,7 @@
     },
     "/api/v1/supplier/stock/adjustments/": {
       "post": {
-        "description": "POST — ledger_servisi.duzeltme (manage_own_warehouse).",
+        "description": "POST — ledger_servisi.duzeltme (varyant anahtarı; teklif yok).",
         "operationId": "createSupplierStockAdjust",
         "parameters": [],
         "requestBody": {

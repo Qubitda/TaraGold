@@ -1,7 +1,7 @@
-"""PriceQuote + Line — değişmez proforma snapshot (ADR-0008 Dilim 3.5).
+"""PriceQuote + Line — değişmez proforma snapshot (alıcı fiyat; teklif yok).
 
 Belge dili: proforma / fiyat teklifi (fatura değil).
-B-01 platform_servis ve B-06 vergi satırı üretilmez.
+Servis bedeli kalemi üretilir (fiyatlandırma özeti). B-06 vergi yok.
 """
 
 from __future__ import annotations
@@ -32,12 +32,15 @@ class PriceQuote(models.Model):
         on_delete=models.PROTECT,
         related_name="price_quotes",
     )
-    teklif = models.ForeignKey(
-        "fiyatlama.TedarikciTeklif",
+    varyant_fiyat = models.ForeignKey(
+        "fiyatlama.VaryantFiyat",
         on_delete=models.PROTECT,
         related_name="price_quotes",
+        null=True,
+        blank=True,
+        help_text="Ops Stok & Fiyat kaynağı; teklif kaldırıldı.",
     )
-    teklif_versiyon = models.PositiveIntegerField()
+    fiyat_kaynagi_versiyon = models.PositiveIntegerField(default=1)
     fiyat_modeli = models.CharField(max_length=16)
 
     alici_sozlesme = models.ForeignKey(
@@ -116,7 +119,7 @@ class PriceQuote(models.Model):
         indexes = [
             models.Index(fields=["alici_firma", "-hesap_zamani"]),
             models.Index(fields=["varyant", "-hesap_zamani"]),
-            models.Index(fields=["teklif", "-hesap_zamani"]),
+            models.Index(fields=["varyant_fiyat", "-hesap_zamani"]),
             models.Index(fields=["gecerlilik_sonu"]),
         ]
         constraints = [
@@ -160,13 +163,14 @@ class PriceQuoteLine(models.Model):
     class KalemTipi(models.TextChoices):
         METAL = "metal", "Metal"
         ISCILIK = "iscilik", "İşçilik"
-        KANAL_MARJ = "kanal_marj", "Kanal marjı"
+        KANAL_MARJ = "kanal_marj", "Kanal marjı (alias)"
+        SERVIS_BEDELI = "servis_bedeli", "Servis bedeli"
         TAS = "tas", "Taş"
         EK_BEDEL = "ek_bedel", "Ek bedel"
         GRAM_BIRIM = "gram_birim", "Gram × birim"
         SABIT_PARCA = "sabit_parca", "Sabit parça"
         HEDEF_TOPLAM = "hedef_toplam", "Hedef toplam (KS-6)"
-        # platform_servis (B-01) ve vergi (B-06) yok
+        HAM = "ham", "Ham (hop)"
 
     quote = models.ForeignKey(
         PriceQuote,

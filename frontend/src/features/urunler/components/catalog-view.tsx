@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { urunlerService } from "../services";
@@ -29,9 +29,10 @@ import type {
   OpsProductVariant,
 } from "../types";
 import { fiyatlamaService, rememberQuoteId } from "@/features/fiyatlama";
-import { siparisService } from "@/features/siparis";
+import { siparisKeys, siparisService } from "@/features/siparis";
 import { useSalesChannelsQuery } from "@/features/tanimlar";
-import { formatGram, formatMoney } from "@/lib/format";
+import { isQuoteExpired } from "@/components/commerce/quote-countdown";
+import { formatGram, formatMoney, pickDisplayPrice } from "@/lib/format";
 import {
   ConfirmDialog,
   EntityModal,
@@ -184,12 +185,16 @@ export function CatalogView() {
         quoteId?: number;
         error?: string;
         gram?: string | null;
+        expiresAt?: string | null;
+        adding?: boolean;
+        added?: boolean;
       }
     >
   >({});
   const [selectedBuyerVariantId, setSelectedBuyerVariantId] = useState<number | null>(
     null
   );
+  const detailReqSeq = useRef(0);
 
   const createOpsMutation = useCreateOpsProductMutation();
   const deleteOpsMutation = useDeleteOpsProductMutation();
@@ -236,6 +241,8 @@ export function CatalogView() {
         price?: string;
         currency?: string;
         quoteId?: number;
+        expiresAt?: string | null;
+        adding?: boolean;
         added?: boolean;
         error?: string;
       }
@@ -314,12 +321,25 @@ export function CatalogView() {
     }
     return channelList[0]?.id ?? null;
   }, [kanalParam, channelList]);
+
+  useEffect(() => {
+    setQuoteState({});
+    setCardPrices({});
+  }, [selectedKanalId]);
+
   const prodChannelsQ = useOpsProductChannelsQuery(
     opsDetail?.id,
     Boolean(opsDetail?.id) && detailOpen && canOps
   );
 
   const buyerItems = catalogQuery.data?.results || [];
+  const buyerItemsKey = useMemo(
+    () =>
+      buyerItems
+        .map((it) => `${it.id}:${it.varsayilan_varyant_id ?? ""}`)
+        .join("|"),
+    [buyerItems]
+  );
   const monturItems = monturlerQuery.data?.results || [];
   const opsItems = opsQuery.data?.results || [];
 
@@ -356,6 +376,7 @@ export function CatalogView() {
   }, [queryClient]);
 
   const openBuyerDetail = async (id: number) => {
+    const seq = ++detailReqSeq.current;
     setDetailOpen(true);
     setDetailTab("variants");
     setLoadingDetail(true);
@@ -365,13 +386,15 @@ export function CatalogView() {
     setSelectedBuyerVariantId(null);
     try {
       const d = await urunlerService.getProductDetail(id);
+      if (seq !== detailReqSeq.current) return;
       setBuyerDetail(d);
       setSelectedBuyerVariantId(d.varyantlar?.[0]?.id ?? null);
     } catch (err) {
+      if (seq !== detailReqSeq.current) return;
       actionToast.error("Ürün detayı alınamadı", err);
       setDetailOpen(false);
     } finally {
-      setLoadingDetail(false);
+      if (seq === detailReqSeq.current) setLoadingDetail(false);
     }
   };
 
@@ -414,11 +437,20 @@ export function CatalogView() {
               };
               continue;
             }
+            const price = pickDisplayPrice({
+              toplam: r.quote.toplam_vergisiz,
+              gram_basi: r.quote.gram_basi_vergisiz,
+            });
+            if (!price) {
+              next[p.urunId] = { error: "Fiyat bilgisi alınamadı" };
+              continue;
+            }
             next[p.urunId] = {
-              price: String(r.quote.toplam_vergisiz),
+              price,
               currency: r.quote.para_birimi,
               quoteId: r.quote.id,
               gram: r.quote.gram ?? null,
+              expiresAt: r.quote.expires_at ?? null,
             };
           }
           return next;
@@ -436,13 +468,13 @@ export function CatalogView() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, canQuote, selectedKanalId, catalogQuery.dataUpdatedAt]);
+  }, [scope, canQuote, selectedKanalId, buyerItemsKey]);
 
   const openOpsDetail = async (
     id: number,
     opts?: { resetTab?: boolean; soft?: boolean }
   ) => {
+    const seq = ++detailReqSeq.current;
     setDetailOpen(true);
     const soft = Boolean(opts?.soft) || opsDetail?.id === id;
     if (opts?.resetTab !== false && !soft) {
@@ -455,12 +487,14 @@ export function CatalogView() {
     }
     try {
       const d = await urunlerService.getOpsProduct(id);
+      if (seq !== detailReqSeq.current) return;
       setOpsDetail(d);
     } catch (err) {
+      if (seq !== detailReqSeq.current) return;
       actionToast.error("Ürün detayı alınamadı", err);
       if (!soft) setDetailOpen(false);
     } finally {
-      setLoadingDetail(false);
+      if (seq === detailReqSeq.current) setLoadingDetail(false);
     }
   };
 
@@ -481,16 +515,21 @@ export function CatalogView() {
         varyant_id: variantId,
         satis_kanali_id: selectedKanalId,
       });
-      const price = quote.toplam_vergisiz || quote.gram_basi_vergisiz || quote.birim_fiyat;
+      const price = pickDisplayPrice({
+        toplam: quote.toplam_vergisiz,
+        gram_basi: quote.gram_basi_vergisiz,
+        birim: quote.birim_fiyat,
+      });
       if (!price) throw new Error("Fiyat bilgisi alınamadı.");
       rememberQuoteId(quote.id);
       setQuoteState((prev) => ({
         ...prev,
         [variantId]: {
           loading: false,
-          price: String(price),
+          price,
           currency: quote.para_birimi,
           quoteId: quote.id,
+          expiresAt: quote.expires_at ?? null,
         },
       }));
     } catch (err) {
@@ -514,16 +553,63 @@ export function CatalogView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buyerDetail?.id, selectedBuyerVariantId, selectedKanalId, canQuote]);
 
-  const handleAddToCart = async (variantId: number, quoteId: number) => {
+  const handleAddToCart = async (
+    variantId: number,
+    quoteId: number,
+    opts?: { productId?: number; expiresAt?: string | null }
+  ) => {
+    if (opts?.expiresAt && isQuoteExpired(opts.expiresAt)) {
+      actionToast.error("Fiyat süresi doldu", "Yeniden teklif alın.");
+      return;
+    }
+    const alreadyAdding =
+      quoteState[variantId]?.adding ||
+      (opts?.productId != null && cardPrices[opts.productId]?.adding);
+    if (alreadyAdding) return;
+
+    if (opts?.productId != null) {
+      setCardPrices((prev) => ({
+        ...prev,
+        [opts.productId!]: { ...prev[opts.productId!], adding: true },
+      }));
+    }
+    setQuoteState((prev) => {
+      const cur = prev[variantId] ?? { loading: false };
+      return { ...prev, [variantId]: { ...cur, adding: true } };
+    });
     try {
       await siparisService.addCartLine(quoteId, "1");
-      setQuoteState((prev) => ({
-        ...prev,
-        [variantId]: { ...prev[variantId], added: true },
-      }));
-      actionToast.success("Ürün siparişe eklendi");
+      void queryClient.invalidateQueries({ queryKey: siparisKeys.all });
+      setQuoteState((prev) => {
+        const cur = prev[variantId] ?? { loading: false };
+        return {
+          ...prev,
+          [variantId]: { ...cur, adding: false, added: true },
+        };
+      });
+      if (opts?.productId != null) {
+        setCardPrices((prev) => ({
+          ...prev,
+          [opts.productId!]: {
+            ...prev[opts.productId!],
+            adding: false,
+            added: true,
+          },
+        }));
+      }
+      actionToast.success("Ürün sepete eklendi");
     } catch (err) {
-      actionToast.error("Siparişe eklenemedi", err);
+      setQuoteState((prev) => {
+        const cur = prev[variantId] ?? { loading: false };
+        return { ...prev, [variantId]: { ...cur, adding: false } };
+      });
+      if (opts?.productId != null) {
+        setCardPrices((prev) => ({
+          ...prev,
+          [opts.productId!]: { ...prev[opts.productId!], adding: false },
+        }));
+      }
+      actionToast.error("Sepete eklenemedi", err);
     }
   };
 
@@ -557,6 +643,13 @@ export function CatalogView() {
       const defaultMetalId = metaller[0]?.id;
       const defaultAyar =
         ayarlar.find((a) => a.metal_id === defaultMetalId) ?? ayarlar[0];
+      if (!defaultAyar || cats[0] == null) {
+        actionToast.error(
+          "Varsayılan kategori/ayar bulunamadı",
+          "Tanımlar ekranını kontrol edin."
+        );
+        return;
+      }
       const created = await createOpsMutation.mutateAsync({
         ad: "Yeni ürün",
         kategori_id: cats[0].id,
@@ -1208,7 +1301,11 @@ export function CatalogView() {
                 onOpen={(id) => void openBuyerDetail(id)}
                 onAddToCart={(item, quoteId) => {
                   if (!item.varsayilan_varyant_id) return;
-                  void handleAddToCart(item.varsayilan_varyant_id, quoteId);
+                  const cp = cardPrices[item.id];
+                  void handleAddToCart(item.varsayilan_varyant_id, quoteId, {
+                    productId: item.id,
+                    expiresAt: cp?.expiresAt,
+                  });
                 }}
               />
             </div>
@@ -1304,7 +1401,12 @@ export function CatalogView() {
                 canQuote={canQuote}
                 channelSelected={Boolean(selectedKanalId)}
                 onRetryQuote={(vid) => void handleGetQuote(vid)}
-                onAddToCart={(vid, quoteId) => void handleAddToCart(vid, quoteId)}
+                onAddToCart={(vid, quoteId) => {
+                  const st = quoteState[vid];
+                  void handleAddToCart(vid, quoteId, {
+                    expiresAt: st?.expiresAt,
+                  });
+                }}
               />
             </>
           ) : loadingDetail ? (

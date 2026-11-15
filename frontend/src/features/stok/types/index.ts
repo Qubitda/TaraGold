@@ -4,14 +4,17 @@ export type StockBalance = components["schemas"]["SupplierStock"] & {
   id?: number;
   warehouse_kod?: string;
   warehouse_ad?: string;
-  teklif_kodu?: string;
   varyant_sku?: string;
   urun_ad?: string;
   platform_kodu?: string;
 };
 
-export type StockAdjustmentRequest =
-  components["schemas"]["SupplierStockAdjustRequest"];
+export type StockAdjustmentRequest = {
+  warehouse_id: number;
+  varyant_id: number;
+  miktar: string | number;
+  neden?: string;
+};
 
 export interface SupplierWarehouse {
   id: number;

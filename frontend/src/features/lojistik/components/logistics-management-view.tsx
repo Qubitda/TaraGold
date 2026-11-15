@@ -403,12 +403,12 @@ export function LogisticsManagementView() {
         createReturnForm.setValue("shipment_id", preselectedShipmentId, {
           shouldValidate: true,
         });
-      } else if (sOpts.length === 1) {
+      } else if (sOpts.length === 1 && sOpts[0]) {
         createReturnForm.setValue("shipment_id", Number(sOpts[0].value), {
           shouldValidate: true,
         });
       }
-      if (linesOpts.length === 1) {
+      if (linesOpts.length === 1 && linesOpts[0]) {
         createReturnForm.setValue("order_line_id", Number(linesOpts[0].value), {
           shouldValidate: true,
         });

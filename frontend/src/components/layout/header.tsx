@@ -28,6 +28,7 @@ import {
 import type { MeResponse } from "@/lib/api/types";
 import { PiyasaPanoStrip } from "@/features/piyasa";
 import { authService } from "@/features/auth/services/auth-service";
+import { clearClientSession } from "@/lib/session-clear";
 import { useAuth } from "@/features/auth";
 import { ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
@@ -78,8 +79,8 @@ export function Header({ user, onLogout }: HeaderProps) {
     setSwitchingFirmaId(firmaId);
     try {
       const res = await authService.switchFirma(firmaId);
+      clearClientSession(queryClient);
       await refresh();
-      await queryClient.invalidateQueries();
       toast.success(
         "Aktif firma değiştirildi",
         `${res.uyelik.firma_ad} (${res.uyelik.rol})`
@@ -117,8 +118,8 @@ export function Header({ user, onLogout }: HeaderProps) {
     setActAsLoading(true);
     try {
       const res = await authService.startActAs(parsedId);
+      clearClientSession(queryClient);
       await refresh();
-      await queryClient.invalidateQueries();
       setActAsOpen(false);
       setTargetUserId("");
       toast.success(

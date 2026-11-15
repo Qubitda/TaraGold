@@ -48,11 +48,11 @@ describe("nav-items IA", () => {
     expect(byGroup.analiz).toEqual(["reports"]);
   });
 
-  it("requiredCapability: tedarikçi teklifleri", () => {
-    const item = DOMAIN_NAV_ITEMS.find((i) => i.id === "supplier-offers")!;
-    expect(isNavItemVisible(item, caps({ can_manage_offers: true }))).toBe(
-      true
-    );
+  it("requiredCapability: stok & fiyat", () => {
+    const item = DOMAIN_NAV_ITEMS.find((i) => i.id === "stock")!;
+    expect(
+      isNavItemVisible(item, caps({ can_view_supplier_stock: true }))
+    ).toBe(true);
     expect(isNavItemVisible(item, caps({}))).toBe(false);
   });
 

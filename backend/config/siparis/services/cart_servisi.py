@@ -12,7 +12,7 @@ from firmalar.services.yetki_servisi import can_view_all_tenants, is_platform_fi
 from fiyatlama.models import PriceQuote
 from siparis.models import Cart, CartLine
 from siparis.selectors.tenant import CartNotFound, get_cart_for_actor
-from stok.services.birim import birim_from_teklif
+from stok.services.birim import birim_from_fiyat_modeli
 
 
 def _assert_buyer_actor(actor, alici_firma) -> None:
@@ -95,7 +95,10 @@ def satir_ekle(
     now = now or timezone.now()
     _assert_quote_usable(price_quote, alici_firma=alici_firma, now=now)
 
-    birim = birim_from_teklif(price_quote.teklif)
+    vf = price_quote.varyant_fiyat
+    if vf is None:
+        raise ValidationError("Quote fiyat kaynağı yok.")
+    birim = birim_from_fiyat_modeli(vf.fiyat_modeli)
 
     with domain_atomic():
         cart, created = _get_or_create_cart_locked(
