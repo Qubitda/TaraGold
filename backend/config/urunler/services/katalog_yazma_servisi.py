@@ -642,6 +642,19 @@ def urun_kopyala(*, actor, urun: Urun) -> Urun:
         return kopya
 
 
+def _validation_error_flat(exc: ValidationError) -> str:
+    """Nested ValidationError → tek satır mesaj (DRF/Django nesting 500 önler)."""
+    if hasattr(exc, "message_dict") and exc.message_dict:
+        parts: list[str] = []
+        for field, msgs in exc.message_dict.items():
+            for m in msgs:
+                parts.append(f"{field}: {m}" if field != "__all__" else str(m))
+        return "; ".join(parts)
+    if hasattr(exc, "messages"):
+        return "; ".join(str(m) for m in exc.messages)
+    return str(exc)
+
+
 def varyant_toplu_ekle(
     *,
     actor,
@@ -662,6 +675,42 @@ def varyant_toplu_ekle(
 
     created: list[Varyant] = []
     with transaction.atomic():
+        # Matris satırında renk/ölçü varsa ürün eksenlerini aç (FE kaydetmeden
+        # renk seçince «renk girilmez» 400/500 döngüsünü keser).
+        needs_renk = any(
+            isinstance(row, dict) and row.get("renk_id") not in (None, "", 0)
+            for row in satirlar
+        )
+        needs_beden = any(
+            isinstance(row, dict) and row.get("beden_id") not in (None, "", 0)
+            for row in satirlar
+        )
+        axis_updates: list[str] = []
+        if needs_renk and not urun.renk_ekseni:
+            urun.renk_ekseni = True
+            axis_updates.append("renk_ekseni")
+        if needs_beden and not urun.olcu_tipi:
+            # beden_id var ama olcu_tipi yok → beden tipini ilk satırdan çöz
+            first_beden = next(
+                (
+                    row.get("beden_id")
+                    for row in satirlar
+                    if isinstance(row, dict) and row.get("beden_id") not in (None, "", 0)
+                ),
+                None,
+            )
+            if first_beden:
+                tip = (
+                    OlcuDegeri.objects.filter(pk=first_beden)
+                    .values_list("tip", flat=True)
+                    .first()
+                )
+                if tip:
+                    urun.olcu_tipi = tip
+                    axis_updates.append("olcu_tipi")
+        if axis_updates:
+            urun.save(update_fields=[*axis_updates, "guncelleme_zamani"])
+
         for i, row in enumerate(satirlar):
             if not isinstance(row, dict):
                 raise ValidationError({"satirlar": f"Satır {i}: nesne beklenir."})
@@ -678,7 +727,9 @@ def varyant_toplu_ekle(
                     benzersiz_parca=bool(row.get("benzersiz_parca") or False),
                 )
             except ValidationError as exc:
-                raise ValidationError({"satirlar": {str(i): getattr(exc, "message_dict", exc.messages)}}) from exc
+                raise ValidationError(
+                    {"satirlar": f"Satır {i + 1}: {_validation_error_flat(exc)}"}
+                ) from None
             created.append(v)
         record_audit(
             actor=actor,

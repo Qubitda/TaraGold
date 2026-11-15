@@ -96,7 +96,7 @@ export function BuyerCatalogGrid({
         const metalAyar = [item.metal, item.ayar].filter(Boolean).join(" · ");
         const measure =
           item.gram != null && item.gram !== ""
-            ? `${formatGram(item.gram)} g`
+            ? formatGram(item.gram)
             : item.varyant_count > 1
               ? `${item.varyant_count} ölçü`
               : null;
@@ -199,7 +199,7 @@ export function BuyerCatalogGrid({
                     ? "Eklendi"
                     : price?.adding
                       ? "Ekleniyor…"
-                      : "Sepete Ekle"}
+                      : "Sipariş Ver"}
                 </Button>
               </div>
             </div>
@@ -454,7 +454,7 @@ export function BuyerProductDetailView({
                       }}
                     >
                       <ShoppingCart className="h-4 w-4" />
-                      {st.adding ? "Ekleniyor…" : "Sepete Ekle"}
+                      {st.adding ? "Ekleniyor…" : "Sipariş Ver"}
                     </Button>
                   )}
                 </>

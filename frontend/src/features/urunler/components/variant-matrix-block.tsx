@@ -12,6 +12,8 @@ type Props = {
   product: OpsProduct;
   refs?: CatalogRefsResponse | null;
   disabled?: boolean;
+  /** Kaydedilmemiş Özellikler (renk/ölçü) varsa önce persist et. */
+  onBeforeGenerate?: () => Promise<boolean>;
   onDone: () => Promise<void> | void;
   onToast: {
     success: (msg: string) => void;
@@ -24,6 +26,7 @@ export function VariantMatrixBlock({
   product,
   refs,
   disabled,
+  onBeforeGenerate,
   onDone,
   onToast,
 }: Props) {
@@ -61,6 +64,10 @@ export function VariantMatrixBlock({
     }
     setBusy(true);
     try {
+      if (onBeforeGenerate) {
+        const ok = await onBeforeGenerate();
+        if (!ok) return;
+      }
       const renkSet: Array<number | null> = renkIds.length
         ? renkIds
         : [null];
@@ -95,19 +102,36 @@ export function VariantMatrixBlock({
   };
 
   const createSingle = async () => {
-    if ((product.fiyat_tipi || "gram") === "gram" && !defaultGram.trim()) {
+    if (product.renk_ekseni) {
+      onToast.error(
+        "Renk ekseni açık — en az bir renk seçip matris oluşturun (veya Özellikler’den kapatın)."
+      );
+      return;
+    }
+    if (product.olcu_tipi) {
+      onToast.error(
+        "Ölçü tipi seçili — en az bir ölçü seçip matris oluşturun (veya Özellikler’den ölçüsüz yapın)."
+      );
+      return;
+    }
+    const fiyatTipi = product.fiyat_tipi || "gram";
+    if (fiyatTipi === "gram" && !defaultGram.trim()) {
       onToast.error("Gram girin");
+      return;
+    }
+    if (fiyatTipi === "sabit" && !defaultGram.trim()) {
+      onToast.error("Sabit fiyat girin");
       return;
     }
     setBusy(true);
     try {
+      if (onBeforeGenerate) {
+        const ok = await onBeforeGenerate();
+        if (!ok) return;
+      }
       await urunlerService.addOpsVariant(product.id, {
-        gram:
-          (product.fiyat_tipi || "gram") === "gram"
-            ? defaultGram
-            : undefined,
-        sabit_fiyat:
-          product.fiyat_tipi === "sabit" ? defaultGram : undefined,
+        gram: fiyatTipi === "gram" ? defaultGram : undefined,
+        sabit_fiyat: fiyatTipi === "sabit" ? defaultGram : undefined,
         renk_id: null,
         beden_id: null,
       });
@@ -129,7 +153,11 @@ export function VariantMatrixBlock({
       </p>
       <div className="flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
-          <Label className="text-[11px]">Varsayılan gram</Label>
+          <Label className="text-[11px]">
+            {(product.fiyat_tipi || "gram") === "sabit"
+              ? "Varsayılan sabit fiyat"
+              : "Varsayılan gram"}
+          </Label>
           <Input
             className="h-8 w-28 text-xs"
             value={defaultGram}
@@ -141,7 +169,17 @@ export function VariantMatrixBlock({
           size="sm"
           variant="outline"
           className="h-8 text-xs"
-          disabled={disabled || busy}
+          disabled={
+            disabled ||
+            busy ||
+            Boolean(product.renk_ekseni) ||
+            Boolean(product.olcu_tipi)
+          }
+          title={
+            product.renk_ekseni || product.olcu_tipi
+              ? "Renk/ölçü eksenli üründe matris kullanın"
+              : "Tek kırılım oluştur"
+          }
           onClick={() => void createSingle()}
         >
           Tek varyant oluştur

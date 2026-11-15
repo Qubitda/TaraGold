@@ -32,7 +32,7 @@ import type {
 import { ProductP0Panel } from "./product-p0-panel";
 import { ProductStockPanel } from "./product-stock-panel";
 import { VariantMatrixBlock } from "./variant-matrix-block";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 export type OpsWorkspaceTab =
   | "general"
@@ -205,15 +205,20 @@ type Props = {
   categories: CategoryItem[];
   channels: OpsProductChannelItem[];
   channelsLoading?: boolean;
+  /** yetki: düzenleyebilir mi */
   canEdit: boolean;
   canDelete: boolean;
+  /** view = salt okunur; edit = form/medya/varyant yazılabilir */
+  mode: "view" | "edit";
+  onRequestEdit?: () => void;
   tab: OpsWorkspaceTab;
   onTabChange: (t: OpsWorkspaceTab) => void;
   dirty: boolean;
   onDirtyChange: (v: boolean) => void;
   onRefresh: () => Promise<void>;
   onToast: {
-    success: (msg: string) => void;
+    success: (msg: string, description?: string) => void;
+    info?: (msg: string, description?: string) => void;
     error: (msg: string, err?: unknown) => void;
   };
   onCopy: () => void;
@@ -231,6 +236,8 @@ export function OpsProductWorkspace({
   channelsLoading,
   canEdit,
   canDelete,
+  mode,
+  onRequestEdit,
   tab,
   onTabChange,
   dirty,
@@ -259,6 +266,9 @@ export function OpsProductWorkspace({
   );
   const [priceVariantId, setPriceVariantId] = useState("");
   const [priceLoading, setPriceLoading] = useState(false);
+  const [quickVariantGram, setQuickVariantGram] = useState("3.200");
+  const [quickVariantSabit, setQuickVariantSabit] = useState("");
+  const [quickVariantBusy, setQuickVariantBusy] = useState(false);
   const [variantForm, setVariantForm] = useState({
     gram: "",
     renk_id: "",
@@ -286,8 +296,25 @@ export function OpsProductWorkspace({
   const [auditLoading, setAuditLoading] = useState(false);
 
   const acts = product.allowed_actions || [];
-  // Yayında düzenleme yok; taslak → Yayınla (çift onay yok)
-  const editable = canEdit && product.yayin_durumu !== "aktif";
+  // view modu her zaman salt okunur; yayında düzenleme yok
+  const editable =
+    mode === "edit" && canEdit && product.yayin_durumu !== "aktif";
+  const instantSaveTab =
+    tab === "media" ||
+    tab === "stock" ||
+    tab === "pricing" ||
+    tab === "channels" ||
+    tab === "stones";
+  const pendingVariantFields =
+    tab === "variants" &&
+    Boolean(
+      variantForm.gram.trim() ||
+        variantForm.sabit_fiyat.trim() ||
+        variantForm.renk_id ||
+        variantForm.beden_id ||
+        variantForm.tedarikci_sku.trim()
+    );
+  const canClickSave = dirty || pendingVariantFields;
 
   useEffect(() => {
     // Soft refresh (medya/kanal) kaydedilmemiş Genel/Özellikler editini silmesin
@@ -351,19 +378,40 @@ export function OpsProductWorkspace({
 
   useEffect(() => {
     const variants = product.varyantlar ?? [];
+    const ids = new Set(variants.map((v) => String(v.id)));
+    if (priceVariantId && !ids.has(priceVariantId)) {
+      setPriceVariantId(variants[0]?.id ? String(variants[0].id) : "");
+      return;
+    }
     if (!priceVariantId && variants[0]?.id) {
       setPriceVariantId(String(variants[0].id));
     }
   }, [product.varyantlar, priceVariantId]);
 
   useEffect(() => {
-    if (tab !== "pricing" || !priceVariantId) return;
+    if (tab !== "pricing" || !priceVariantId) {
+      if (tab === "pricing" && !priceVariantId) setPricePreview(null);
+      return;
+    }
+    let cancelled = false;
     setPriceLoading(true);
     void urunlerService
       .getOpsPricePreview(product.id, priceVariantId)
-      .then(setPricePreview)
-      .catch(() => setPricePreview(null))
-      .finally(() => setPriceLoading(false));
+      .then((res) => {
+        if (!cancelled) setPricePreview(res);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPricePreview(null);
+        onToast.error("Önizleme alınamadı", err);
+      })
+      .finally(() => {
+        if (!cancelled) setPriceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onToast stable enough
   }, [tab, product.id, priceVariantId]);
 
   const patchForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -507,63 +555,108 @@ export function OpsProductWorkspace({
     onPublish();
   };
 
-  const addVariant = async (): Promise<boolean> => {
-    if (!editable) return false;
+  const addVariant = async (
+    override?: {
+      gram?: string;
+      sabit_fiyat?: string;
+      renk_id?: string | null;
+      beden_id?: string | null;
+      ek_bedel?: string;
+      tedarikci_sku?: string;
+    }
+  ): Promise<OpsProductVariant | null> => {
+    if (!editable) return null;
     const fiyatTipi = form.fiyat_tipi || product.fiyat_tipi || "gram";
     const renkEkseni = form.renk_ekseni || product.renk_ekseni;
     const olcuTipi = form.olcu_tipi || product.olcu_tipi || "";
+    const gram = (override?.gram ?? variantForm.gram).trim();
+    const sabit = (override?.sabit_fiyat ?? variantForm.sabit_fiyat).trim();
+    const renkId =
+      override && "renk_id" in override
+        ? override.renk_id
+        : variantForm.renk_id;
+    const bedenId =
+      override && "beden_id" in override
+        ? override.beden_id
+        : variantForm.beden_id;
 
-    if (fiyatTipi === "gram" && !variantForm.gram.trim()) {
+    if (fiyatTipi === "gram" && !gram) {
       onToast.error("Gram bazlı üründe gram zorunlu");
-      return false;
+      return null;
     }
-    if (fiyatTipi === "sabit" && !variantForm.sabit_fiyat.trim()) {
+    if (fiyatTipi === "sabit" && !sabit) {
       onToast.error("Sabit fiyatlı üründe sabit fiyat zorunlu");
-      return false;
+      return null;
     }
-    if (renkEkseni && !variantForm.renk_id) {
-      onToast.error("Renk ekseni açık — renk seçin (veya Özellikler’den kapatın)");
-      return false;
+    if (renkEkseni && !renkId) {
+      onToast.error(
+        "Renk ekseni açık — renk seçin (veya Özellikler’den kapatın)"
+      );
+      return null;
     }
-    if (olcuTipi && !variantForm.beden_id) {
+    if (olcuTipi && !bedenId) {
       onToast.error(`Ölçü tipi «${olcuTipiLabel}» — ölçü seçin`);
-      return false;
+      return null;
     }
     if (dirty) {
       const ok = await saveGeneral();
-      if (!ok) return false;
+      if (!ok) return null;
     }
     try {
-      await urunlerService.addOpsVariant(product.id, {
-        gram: fiyatTipi === "gram" ? variantForm.gram || undefined : undefined,
-        sabit_fiyat:
-          fiyatTipi === "sabit" ? variantForm.sabit_fiyat || undefined : undefined,
-        renk_id:
-          renkEkseni && variantForm.renk_id
-            ? Number(variantForm.renk_id)
-            : null,
-        beden_id:
-          olcuTipi && variantForm.beden_id
-            ? Number(variantForm.beden_id)
-            : null,
-        ek_bedel: variantForm.ek_bedel || "0",
-        tedarikci_sku: variantForm.tedarikci_sku || "",
+      const created = await urunlerService.addOpsVariant(product.id, {
+        gram: fiyatTipi === "gram" ? gram || undefined : undefined,
+        sabit_fiyat: fiyatTipi === "sabit" ? sabit || undefined : undefined,
+        renk_id: renkEkseni && renkId ? Number(renkId) : null,
+        beden_id: olcuTipi && bedenId ? Number(bedenId) : null,
+        ek_bedel: override?.ek_bedel ?? variantForm.ek_bedel ?? "0",
+        tedarikci_sku:
+          override?.tedarikci_sku ?? variantForm.tedarikci_sku ?? "",
       });
       onToast.success("Varyant eklendi");
-      setVariantForm({
-        gram: "",
-        renk_id: "",
-        beden_id: "",
-        ek_bedel: "0",
-        sabit_fiyat: "",
-        tedarikci_sku: "",
-      });
+      if (!override) {
+        setVariantForm({
+          gram: "",
+          renk_id: "",
+          beden_id: "",
+          ek_bedel: "0",
+          sabit_fiyat: "",
+          tedarikci_sku: "",
+        });
+      }
+      setPriceVariantId(String(created.id));
       await onRefresh();
       await refreshReadiness();
-      return true;
+      return created;
     } catch (err) {
       onToast.error("Varyant eklenemedi", err);
-      return false;
+      return null;
+    }
+  };
+
+  const createQuickVariantFromPricing = async () => {
+    const renkEkseni = form.renk_ekseni || product.renk_ekseni;
+    const olcuTipi = form.olcu_tipi || product.olcu_tipi || "";
+    if (renkEkseni || olcuTipi) {
+      onToast.error(
+        "Bu ürün renk/ölçü eksenli — Varyantlar sekmesinden kırılım ekleyin."
+      );
+      onTabChange("variants");
+      return;
+    }
+    setQuickVariantBusy(true);
+    try {
+      const fiyatTipi = form.fiyat_tipi || product.fiyat_tipi || "gram";
+      const created = await addVariant({
+        gram: fiyatTipi === "gram" ? quickVariantGram : undefined,
+        sabit_fiyat: fiyatTipi === "sabit" ? quickVariantSabit : undefined,
+        renk_id: null,
+        beden_id: null,
+      });
+      if (created) {
+        setPriceVariantId(String(created.id));
+      }
+    } finally {
+      setQuickVariantBusy(false);
     }
   };
 
@@ -642,6 +735,12 @@ export function OpsProductWorkspace({
               className="text-[10px]"
             >
               {product.yayin_durumu === "aktif" ? "Yayında" : "Taslak / Pasif"}
+            </Badge>
+            <Badge
+              variant={mode === "edit" ? "default" : "secondary"}
+              className="text-[10px]"
+            >
+              {mode === "edit" ? "Düzenleme" : "Görüntüleme"}
             </Badge>
             {product.metal || product.ayar ? (
               <Badge variant="outline" className="text-[10px]">
@@ -976,6 +1075,10 @@ export function OpsProductWorkspace({
                 refs={refs}
                 disabled={saving}
                 onToast={onToast}
+                onBeforeGenerate={async () => {
+                  if (!dirty) return true;
+                  return saveGeneral();
+                }}
                 onDone={async () => {
                   await onRefresh();
                   await refreshReadiness();
@@ -1134,83 +1237,195 @@ export function OpsProductWorkspace({
         {tab === "pricing" ? (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Fiyat motoru yeniden yazılmaz. Önizleme mevcut quote / teklif kurallarından gelir;
-              teklif yoksa sahte fiyat üretilmez. Ürün fiyat tipi:{" "}
+              Önizleme, Stok &amp; Fiyat’taki aktif VaryantFiyat + quote kurallarından gelir;
+              fiyat yoksa sahte tutar üretilmez. Ürün fiyat tipi:{" "}
               <strong>{form.fiyat_tipi || product.fiyat_tipi}</strong>.
             </p>
-            <div className="flex flex-wrap gap-2 items-end">
-              <div className="flex flex-col gap-1 min-w-[12rem]">
-                <Label className="text-[11px]">Varyant</Label>
-                <select
-                  className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-                  value={priceVariantId}
-                  onChange={(e) => setPriceVariantId(e.target.value)}
-                >
-                  {(product.varyantlar ?? []).map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.sku || v.id} · {v.renk || "—"} / {v.beden || "—"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!priceVariantId || priceLoading}
-                onClick={() => {
-                  if (!priceVariantId) return;
-                  setPriceLoading(true);
-                  void urunlerService
-                    .getOpsPricePreview(product.id, priceVariantId)
-                    .then(setPricePreview)
-                    .catch((err) => onToast.error("Önizleme alınamadı", err))
-                    .finally(() => setPriceLoading(false));
-                }}
-              >
-                Yenile
-              </Button>
-            </div>
-            {priceLoading ? (
-              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : pricePreview ? (
-              <div className="rounded-[8px] border border-border p-3 space-y-2 text-xs">
-                <div className="font-medium">
-                  {pricePreview.available
-                    ? "Önizleme hazır"
-                    : pricePreview.reason_code || "Fiyat üretilemedi"}
-                </div>
-                {pricePreview.detail ? (
-                  <p className="text-muted-foreground">{pricePreview.detail}</p>
-                ) : null}
-                {pricePreview.hint ? (
-                  <p className="text-muted-foreground">{pricePreview.hint}</p>
-                ) : null}
-                {pricePreview.teklif?.birim_fiyat ? (
-                  <p className="font-mono text-sm">
-                    {pricePreview.teklif.birim_fiyat}{" "}
-                    {pricePreview.teklif.para_birimi || ""}
+            {(product.varyantlar ?? []).length === 0 ? (
+              <div className="rounded-[8px] border border-dashed border-border p-4 space-y-3">
+                <div>
+                  <Label className="text-[11px]">Varyant</Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Henüz kırılım yok. Ölçüsüz/renksiz ürünlerde buradan tek
+                    varyant oluşturup hemen önizleyebilirsiniz.
                   </p>
-                ) : null}
-                {pricePreview.aciklama ? (
-                  <dl className="grid grid-cols-2 gap-1">
-                    {Object.entries(pricePreview.aciklama).map(([k, v]) => (
-                      <React.Fragment key={k}>
-                        <dt className="text-muted-foreground">{k}</dt>
-                        <dd className="font-mono">{v}</dd>
-                      </React.Fragment>
-                    ))}
-                  </dl>
-                ) : null}
-                <p className="text-[10px] text-muted-foreground">
-                  Gram: {pricePreview.gram ?? "—"} · Ek bedel:{" "}
-                  {pricePreview.ek_bedel ?? "0"} · Sabit:{" "}
-                  {pricePreview.sabit_fiyat ?? "—"}
-                </p>
+                </div>
+                {editable &&
+                !(form.renk_ekseni || product.renk_ekseni) &&
+                !(form.olcu_tipi || product.olcu_tipi) ? (
+                  <div className="flex flex-wrap gap-2 items-end">
+                    {(form.fiyat_tipi || product.fiyat_tipi) === "sabit" ? (
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[11px]">Sabit fiyat *</Label>
+                        <Input
+                          className="h-9 w-36 text-xs"
+                          value={quickVariantSabit}
+                          onChange={(e) => setQuickVariantSabit(e.target.value)}
+                          placeholder="örn. 12500"
+                          disabled={quickVariantBusy}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[11px]">Gram *</Label>
+                        <Input
+                          className="h-9 w-28 text-xs"
+                          value={quickVariantGram}
+                          onChange={(e) => setQuickVariantGram(e.target.value)}
+                          placeholder="3.200"
+                          disabled={quickVariantBusy}
+                        />
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      type="button"
+                      disabled={quickVariantBusy || saving}
+                      onClick={() => void createQuickVariantFromPricing()}
+                    >
+                      {quickVariantBusy ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                      Varyant oluştur
+                    </Button>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onClick={() => onTabChange("variants")}
+                    >
+                      Varyantlar sekmesi
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={() => onTabChange("variants")}
+                    >
+                      Varyantlar’a git
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground self-center">
+                      Renk/ölçü ekseni açık — kırılımlar Varyantlar sekmesinden
+                      üretilir.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                Önce varyant ekleyin, sonra bu sekmeden önizleyin.
-              </p>
+              <>
+                <div className="flex flex-wrap gap-2 items-end">
+                  <div className="flex flex-col gap-1 min-w-[14rem] flex-1">
+                    <Label className="text-[11px]">Varyant</Label>
+                    <select
+                      className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                      value={priceVariantId}
+                      onChange={(e) => setPriceVariantId(e.target.value)}
+                      aria-label="Fiyat önizleme varyantı"
+                    >
+                      <option value="" disabled>
+                        Varyant seçin
+                      </option>
+                      {(product.varyantlar ?? []).map((v) => (
+                        <option key={v.id} value={String(v.id)}>
+                          {v.sku || v.id} · {v.renk || "—"} / {v.beden || "—"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!priceVariantId || priceLoading}
+                    title={
+                      !priceVariantId
+                        ? "Önce varyant seçin"
+                        : "Önizlemeyi yenile"
+                    }
+                    onClick={() => {
+                      if (!priceVariantId) return;
+                      setPriceLoading(true);
+                      void urunlerService
+                        .getOpsPricePreview(product.id, priceVariantId)
+                        .then(setPricePreview)
+                        .catch((err) =>
+                          onToast.error("Önizleme alınamadı", err)
+                        )
+                        .finally(() => setPriceLoading(false));
+                    }}
+                  >
+                    {priceLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Yenile"
+                    )}
+                  </Button>
+                </div>
+                {priceLoading && !pricePreview ? (
+                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : pricePreview ? (
+                  <div className="rounded-[8px] border border-border p-3 space-y-2 text-xs">
+                    <div className="font-medium">
+                      {pricePreview.available
+                        ? "Önizleme hazır"
+                        : pricePreview.reason_code || "Fiyat üretilemedi"}
+                    </div>
+                    {pricePreview.detail ? (
+                      <p className="text-muted-foreground">
+                        {pricePreview.detail}
+                      </p>
+                    ) : null}
+                    {pricePreview.hint ? (
+                      <p className="text-muted-foreground">{pricePreview.hint}</p>
+                    ) : null}
+                    {(
+                      pricePreview.varyant_fiyat?.birim_fiyat ||
+                      pricePreview.teklif?.birim_fiyat
+                    ) ? (
+                      <p className="font-mono text-sm">
+                        {pricePreview.varyant_fiyat?.birim_fiyat ||
+                          pricePreview.teklif?.birim_fiyat}{" "}
+                        {pricePreview.varyant_fiyat?.para_birimi ||
+                          pricePreview.teklif?.para_birimi ||
+                          ""}
+                      </p>
+                    ) : null}
+                    {pricePreview.aciklama ? (
+                      <dl className="grid grid-cols-2 gap-1">
+                        {Object.entries(pricePreview.aciklama).map(([k, v]) => (
+                          <React.Fragment key={k}>
+                            <dt className="text-muted-foreground">{k}</dt>
+                            <dd className="font-mono">{v}</dd>
+                          </React.Fragment>
+                        ))}
+                      </dl>
+                    ) : null}
+                    <p className="text-[10px] text-muted-foreground">
+                      Gram: {pricePreview.gram ?? "—"} · Ek bedel:{" "}
+                      {pricePreview.ek_bedel ?? "0"} · Sabit:{" "}
+                      {pricePreview.sabit_fiyat ?? "—"}
+                    </p>
+                    {!pricePreview.available &&
+                    pricePreview.reason_code === "varyant_fiyat_gerekli" ? (
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        onClick={() => onTabChange("stock")}
+                      >
+                        Stok &amp; Fiyat’a git
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Varyant seçip Yenile ile önizleyin.
+                  </p>
+                )}
+              </>
             )}
           </div>
         ) : null}
@@ -1218,7 +1433,7 @@ export function OpsProductWorkspace({
         {tab === "stock" ? (
           <ProductStockPanel
             product={product}
-            canAdjust={canEdit}
+            canAdjust={editable}
             onToast={onToast}
           />
         ) : null}
@@ -1228,6 +1443,10 @@ export function OpsProductWorkspace({
             <p className="text-xs text-muted-foreground">
               JPEG/PNG/WebP/GIF, en fazla 8 MB. Kapak görseli yayınlamak için zorunludur.
               Video için yalnızca URL desteklenir. İsteğe bağlı varyant görseli bağlayın.
+            </p>
+            <p className="rounded-[6px] border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              Görseller yüklenince <strong>anında kaydedilir</strong>. Alttaki Kaydet
+              yalnızca Genel / Özellikler form alanları içindir.
             </p>
             {editable ? (
               <div className="flex flex-wrap gap-2 items-end">
@@ -1537,32 +1756,40 @@ export function OpsProductWorkspace({
       ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-3 shrink-0 bg-card">
+        {mode === "view" && canEdit && product.yayin_durumu !== "aktif" && onRequestEdit ? (
+          <Button
+            size="sm"
+            className="h-8 text-xs"
+            onClick={onRequestEdit}
+          >
+            Düzenle
+          </Button>
+        ) : null}
         {editable ? (
           <Button
             size="sm"
             className="h-8 text-xs gap-1"
-            disabled={saving}
+            disabled={saving || !canClickSave}
+            title={
+              instantSaveTab && !dirty
+                ? "Bu sekme anında kaydedilir"
+                : !canClickSave
+                  ? "Kaydedilecek form değişikliği yok"
+                  : "Genel / Özellikler kaydet"
+            }
             onClick={() => {
               void (async () => {
-                const pendingVariant =
-                  tab === "variants" &&
-                  Boolean(
-                    variantForm.gram.trim() ||
-                      variantForm.sabit_fiyat.trim() ||
-                      variantForm.renk_id ||
-                      variantForm.beden_id ||
-                      variantForm.tedarikci_sku.trim()
-                  );
-                if (pendingVariant) {
+                if (pendingVariantFields) {
                   await addVariant();
                   return;
                 }
                 if (!dirty) {
-                  onToast.success(
-                    tab === "variants"
-                      ? "Varyant için gram girip «Varyant ekle» veya Kaydet’e basın"
-                      : "Kaydedilecek değişiklik yok"
-                  );
+                  if (instantSaveTab) {
+                    onToast.info?.(
+                      "Bu sekme anında kaydedilir",
+                      "Medya, stok, kanal ve taş işlemleri Kaydet beklemez."
+                    );
+                  }
                   return;
                 }
                 await saveGeneral();

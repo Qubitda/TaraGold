@@ -47,6 +47,7 @@ def present_ops_product(
     urun,
     *,
     user,
+    request=None,
     include_variants: bool = False,
     include_media: bool = False,
     include_hazirlik: bool = False,
@@ -126,9 +127,15 @@ def present_ops_product(
         ]
     if include_media or include_variants:
         gorseller = list(urun.gorseller.all().order_by("sira", "pk"))
-        data["gorseller"] = [present_gorsel(g) for g in gorseller]
+        data["gorseller"] = [
+            present_gorsel(g, request=request) for g in gorseller
+        ]
         data["kapak_url"] = next(
-            (present_gorsel(g)["url"] for g in gorseller if g.kapak and not g.varyant_id),
+            (
+                present_gorsel(g, request=request)["url"]
+                for g in gorseller
+                if g.kapak and not g.varyant_id
+            ),
             "",
         )
     else:
@@ -137,7 +144,9 @@ def present_ops_product(
             .order_by("sira", "pk")
             .first()
         )
-        data["kapak_url"] = present_gorsel(kapak)["url"] if kapak else ""
+        data["kapak_url"] = (
+            present_gorsel(kapak, request=request)["url"] if kapak else ""
+        )
         data["gorseller"] = []
     if include_variants:
         data["varyantlar"] = [

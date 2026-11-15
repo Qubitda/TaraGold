@@ -226,6 +226,7 @@ export function CatalogView() {
   const [quickRefVal, setQuickRefVal] = useState("");
 
   const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<"view" | "edit">("edit");
 
   // Confirmations
   const [deleteProductTarget, setDeleteProductTarget] = useState<OpsProduct | null>(null);
@@ -472,10 +473,11 @@ export function CatalogView() {
 
   const openOpsDetail = async (
     id: number,
-    opts?: { resetTab?: boolean; soft?: boolean }
+    opts?: { resetTab?: boolean; soft?: boolean; mode?: "view" | "edit" }
   ) => {
     const seq = ++detailReqSeq.current;
     setDetailOpen(true);
+    if (opts?.mode) setWorkspaceMode(opts.mode);
     const soft = Boolean(opts?.soft) || opsDetail?.id === id;
     if (opts?.resetTab !== false && !soft) {
       setDetailTab("general");
@@ -484,6 +486,7 @@ export function CatalogView() {
       setLoadingDetail(true);
       setBuyerDetail(null);
       setOpsDetail(null);
+      setWorkspaceDirty(false);
     }
     try {
       const d = await urunlerService.getOpsProduct(id);
@@ -502,7 +505,7 @@ export function CatalogView() {
     if (!routeId) return;
     const n = Number(routeId);
     if (!Number.isFinite(n) || n <= 0) return;
-    if (scope === "ops" && canOps) void openOpsDetail(n);
+    if (scope === "ops" && canOps) openOpsView(n);
     else void openBuyerDetail(n);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeId]);
@@ -597,7 +600,8 @@ export function CatalogView() {
           },
         }));
       }
-      actionToast.success("Ürün sepete eklendi");
+      actionToast.success("Sipariş listesine eklendi");
+      navigate("/siparis?tab=cart");
     } catch (err) {
       setQuoteState((prev) => {
         const cur = prev[variantId] ?? { loading: false };
@@ -609,7 +613,7 @@ export function CatalogView() {
           [opts.productId!]: { ...prev[opts.productId!], adding: false },
         }));
       }
-      actionToast.error("Sepete eklenemedi", err);
+      actionToast.error("Sipariş listesine eklenemedi", err);
     }
   };
 
@@ -659,10 +663,20 @@ export function CatalogView() {
         aciklama: "",
         ...(selectedKanalId ? { satis_kanali_id: selectedKanalId } : {}),
       });
+      // Ölçüsüz/renksiz taslakta varsayılan kırılım — Fiyat önizleme/Stok boş kalmasın
+      try {
+        await urunlerService.addOpsVariant(created.id, {
+          gram: "3.200",
+          renk_id: null,
+          beden_id: null,
+        });
+      } catch {
+        // Kullanıcı Varyantlar’dan ekleyebilir; oluşturmayı engelleme
+      }
       actionToast.success("Taslak oluşturuldu — düzenlemeye devam edin");
       setWorkspaceDirty(false);
-      setDetailTab("general");
-      await openOpsDetail(created.id);
+      setDetailTab("variants");
+      await openOpsDetail(created.id, { mode: "edit" });
       await queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
     } catch (err) {
       actionToast.error("Yeni ürün açılamadı", err);
@@ -680,12 +694,16 @@ export function CatalogView() {
         });
         actionToast.success("Ürün düzenleme için yayından alındı");
       }
-      await openOpsDetail(item.id);
+      await openOpsDetail(item.id, { mode: "edit", resetTab: true });
       setDetailTab("general");
       setWorkspaceDirty(false);
     } catch (err) {
       actionToast.error("Düzenleme açılamadı", err);
     }
+  };
+
+  const openOpsView = (id: number) => {
+    void openOpsDetail(id, { mode: "view" });
   };
 
   const canOpsEditProduct = (item: OpsProduct) => {
@@ -1143,7 +1161,7 @@ export function CatalogView() {
                       {canOps ? (
                         <RowActions
                           itemLabel={m.ad}
-                          onView={() => void openOpsDetail(m.id)}
+                          onView={() => openOpsView(m.id)}
                           onEdit={() => {
                             void urunlerService
                               .getOpsProduct(m.id)
@@ -1261,7 +1279,7 @@ export function CatalogView() {
                         <TableCell className="text-right">
                           <RowActions
                             itemLabel={item.ad}
-                            onView={() => void openOpsDetail(item.id)}
+                            onView={() => openOpsView(item.id)}
                             onEdit={
                               canOpsEditProduct(item)
                                 ? () => void startEditProduct(item)
@@ -1315,7 +1333,11 @@ export function CatalogView() {
                 <button
                   key={ops.id}
                   type="button"
-                  onClick={() => void openOpsDetail(ops.id)}
+                  onClick={() =>
+                    canOpsEditProduct(ops)
+                      ? void startEditProduct(ops)
+                      : openOpsView(ops.id)
+                  }
                   className="rounded-[10px] border border-border bg-card text-left overflow-hidden hover:shadow-md transition-shadow"
                 >
                   <div className="relative aspect-square bg-[linear-gradient(160deg,#f7f5f2_0%,#efeae3_100%)] overflow-hidden">
@@ -1427,12 +1449,20 @@ export function CatalogView() {
                 channelsLoading={prodChannelsQ.isLoading}
                 canEdit={canOpsEditProduct(opsDetail)}
                 canDelete={canOpsDeleteProduct(opsDetail)}
+                mode={workspaceMode}
+                onRequestEdit={() => {
+                  void startEditProduct(opsDetail);
+                }}
                 tab={(detailTab === "tech" ? "features" : detailTab) as OpsWorkspaceTab}
                 onTabChange={(t) => setDetailTab(t)}
                 dirty={workspaceDirty}
                 onDirtyChange={setWorkspaceDirty}
                 onRefresh={async () => {
-                  await openOpsDetail(opsDetail.id, { soft: true, resetTab: false });
+                  await openOpsDetail(opsDetail.id, {
+                    soft: true,
+                    resetTab: false,
+                    mode: workspaceMode,
+                  });
                   await prodChannelsQ.refetch();
                 }}
                 onToast={actionToast}
@@ -1443,7 +1473,7 @@ export function CatalogView() {
                       actionToast.success("Ürün kopyalandı");
                       await queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
                       setWorkspaceDirty(false);
-                      await openOpsDetail(kopya.id);
+                      await openOpsDetail(kopya.id, { mode: "edit" });
                       setDetailTab("general");
                     })
                     .catch((err) => actionToast.error("Kopyalama başarısız", err));

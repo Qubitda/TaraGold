@@ -151,7 +151,7 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
         return paginate_queryset(
             request,
             qs,
-            present=lambda u: present_ops_product(u, user=request.user),
+            present=lambda u: present_ops_product(u, user=request.user, request=request),
         )
 
     def post(self, request):
@@ -203,7 +203,14 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(_get_urun(urun.pk), user=request.user, include_variants=True, include_media=True, include_hazirlik=True),
+            present_ops_product(
+                _get_urun(urun.pk),
+                user=request.user,
+                request=request,
+                include_variants=True,
+                include_media=True,
+                include_hazirlik=True,
+            ),
             status=status.HTTP_201_CREATED,
         )
         return self.idempotency_commit(request, response)
@@ -217,7 +224,7 @@ class OpsProductDetailView(IdempotencyMixin, APIView):
         _require_ops_products(request.user)
         urun = _get_urun(pk)
         return Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
 
     def patch(self, request, pk: int):
@@ -267,6 +274,7 @@ class OpsProductDetailView(IdempotencyMixin, APIView):
             present_ops_product(
                 _get_urun(urun.pk),
                 user=request.user,
+                request=request,
                 include_variants=True,
                 include_media=True,
             )
@@ -438,7 +446,7 @@ class OpsProductSubmitView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
         return self.idempotency_commit(request, response)
 
@@ -461,7 +469,7 @@ class OpsProductApproveView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
         return self.idempotency_commit(request, response)
 
@@ -486,7 +494,7 @@ class OpsProductRejectView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
         return self.idempotency_commit(request, response)
 
@@ -511,7 +519,7 @@ class OpsProductPublishView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
         return self.idempotency_commit(request, response)
 
@@ -534,7 +542,7 @@ class OpsProductUnpublishView(IdempotencyMixin, APIView):
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
         response = Response(
-            present_ops_product(urun, user=request.user, include_variants=True, include_media=True, include_hazirlik=True)
+            present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
         return self.idempotency_commit(request, response)
 
@@ -602,7 +610,6 @@ class OpsProductStockView(APIView):
             StockBalance.objects.filter(varyant_id__in=vids)
             .select_related(
                 "warehouse",
-                "teklif",
                 "varyant",
                 "varyant__renk",
                 "varyant__beden",
@@ -612,7 +619,6 @@ class OpsProductStockView(APIView):
         rows = []
         for bal in qs:
             v = bal.varyant
-            t = bal.teklif
             rows.append(
                 {
                     "balance_id": bal.pk,
@@ -623,8 +629,6 @@ class OpsProductStockView(APIView):
                     "warehouse_id": bal.warehouse_id,
                     "warehouse_kod": getattr(bal.warehouse, "kod", "") or "",
                     "warehouse_ad": getattr(bal.warehouse, "ad", "") or "",
-                    "teklif_id": bal.teklif_id,
-                    "teklif_kodu": getattr(t, "tedarikci_kodu", None) or "",
                     "birim": bal.birim,
                     "on_hand": str(bal.on_hand),
                     "reserved": str(bal.reserved),
@@ -788,6 +792,7 @@ class OpsProductCopyView(IdempotencyMixin, APIView):
             present_ops_product(
                 _get_urun(kopya.pk),
                 user=request.user,
+                request=request,
                 include_variants=True,
                 include_media=True,
                 include_hazirlik=True,

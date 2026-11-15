@@ -97,7 +97,16 @@ export interface PricePreviewResponse {
   detail?: string;
   hint?: string;
   aciklama?: Record<string, string>;
+  aktif_fiyat_var?: boolean;
+  /** Geriye uyum — aynı içerik `varyant_fiyat`. */
   teklif?: {
+    id: number;
+    fiyat_modeli: string;
+    birim_fiyat?: string | null;
+    para_birimi?: string;
+    versiyon?: number;
+  };
+  varyant_fiyat?: {
     id: number;
     fiyat_modeli: string;
     birim_fiyat?: string | null;
