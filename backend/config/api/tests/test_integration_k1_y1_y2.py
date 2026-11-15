@@ -85,7 +85,7 @@ class IntegrationK1Y1Y2Tests(CheckoutFixtureMixin, APITestCase):
         sk_log = idem.storage_key(actor_id=self.log.pk, client_key=client_key)
         self.assertNotEqual(sk_qc, sk_log)
 
-        # QC RFQ değil — org create yok; payment intent yok.
+        # QC org create yok; payment intent yok.
         # Basit: iki actor aynı key ile farklı path'e yazabilmeli (çakışma yok).
         order = self._order("int-y2-ord")
         self.api.force_authenticate(user=self.qc)

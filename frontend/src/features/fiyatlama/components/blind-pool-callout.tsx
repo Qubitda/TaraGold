@@ -8,7 +8,7 @@ export function BlindPoolCallout({ role }: { role: "buyer" | "supplier" | "both"
     role === "buyer"
       ? "Alıcı yüzeyi: tedarikçi kimliği, iç maliyet ve marj kırılımı gösterilmez. Yalnız net quote (toplam / gram başı)."
       : role === "supplier"
-        ? "Tedarikçi yüzeyi: alıcı firma adı ve iletişim kör havuzda gizlidir. Yalnız RFQ teknik özeti ve kendi teklifiniz."
+        ? "Tedarikçi yüzeyi: alıcı firma adı ve iletişim kör havuzda gizlidir. Yalnız kendi teklifiniz görünür."
         : "Kör havuz: alıcı↔tedarikçi kimlik ve maliyet sızıntısı yok. Asıl yetki backend’de yeniden doğrulanır.";
 
   return (

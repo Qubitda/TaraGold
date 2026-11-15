@@ -131,7 +131,7 @@ def _role_for(path: str, method: str = "GET") -> str:
         return "finance_ops"
     if path.startswith("/api/v1/ops/shipments"):
         return "logistics"
-    if path.startswith("/api/v1/ops/rfq") or path.startswith("/api/v1/ops/products"):
+    if path.startswith("/api/v1/ops/products"):
         return "catalog"
     if path.startswith("/api/v1/ops/"):
         return "ops"
@@ -184,7 +184,6 @@ def _role_gated(path: str, method: str = "GET") -> bool:
         or path.startswith("/api/v1/shipments")
         or path.startswith("/api/v1/finance")
         or path.startswith("/api/v1/credit")
-        or path.startswith("/api/v1/rfqs")
         or path.startswith("/api/v1/approvals")
         or path.startswith("/api/v1/org-units")
         or path.startswith("/api/v1/bulk-orders")

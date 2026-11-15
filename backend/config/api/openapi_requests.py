@@ -215,27 +215,6 @@ ORG_UNIT_CREATE = _obj(
 )
 ORG_MEMBER_CREATE = _obj({"kullanici_id": _int()}, ["kullanici_id"])
 
-RFQ_LINE = _obj(
-    {
-        "aciklama": _str(),
-        "miktar": _num_str(),
-        "birim": _str(default="ADET"),
-        "varyant_id": _int(description="Opsiyonel; katalog satırı"),
-    },
-    ["miktar"],
-)
-RFQ_CREATE = _obj(
-    {
-        "baslik": _str(),
-        "talep_tipi": _str(description="STANDART | OZEL_URETIM vb."),
-        "sube_id": _int(),
-        "lines": {"type": "array", "items": RFQ_LINE, "minItems": 1},
-    },
-    ["lines"],
-)
-RFQ_MESSAGE = _obj({"govde": _str()}, ["govde"])
-RFQ_REVISION = _obj({"ozet": _str()}, ["ozet"])
-
 SUPPLIER_OFFER_CREATE = _obj(
     {
         "varyant_id": _int(),
@@ -249,8 +228,6 @@ SUPPLIER_OFFER_CREATE = _obj(
         "uretim_suresi_gun": _int(),
         "iscilik_override": _num_str(),
         "para_birimi": _str(),
-        "rfq_id": _int(),
-        "rfq_line_id": _int(),
     },
     ["varyant_id", "fiyat_modeli"],
 )
@@ -289,14 +266,6 @@ SUPPLIER_OFFER_VERSION = _obj(
         "birim_fiyat": _num_str(),
         "fiyat_modeli": _str(),
     }
-)
-RFQ_MATCH_CREATE = _obj(
-    {
-        "varyant_id": _int(),
-        "kanit": {"type": "object", "additionalProperties": {"type": "string"}},
-        "skor": _int(),
-    },
-    ["varyant_id"],
 )
 SUPPLIER_STOCK_ADJUST = _obj(
     {
@@ -381,14 +350,10 @@ REQUEST_SCHEMAS: dict[str, dict] = {
     "ApprovalCreateRequest": APPROVAL_CREATE,
     "OrgUnitCreateRequest": ORG_UNIT_CREATE,
     "OrgMemberCreateRequest": ORG_MEMBER_CREATE,
-    "RfqCreateRequest": RFQ_CREATE,
-    "RfqMessageRequest": RFQ_MESSAGE,
-    "RfqRevisionRequest": RFQ_REVISION,
     "SupplierOfferCreateRequest": SUPPLIER_OFFER_CREATE,
     "SupplierOfferImportPreviewRequest": SUPPLIER_OFFER_IMPORT_PREVIEW,
     "SupplierOfferImportCommitRequest": SUPPLIER_OFFER_IMPORT_COMMIT,
     "SupplierOfferVersionRequest": SUPPLIER_OFFER_VERSION,
-    "RfqMatchCreateRequest": RFQ_MATCH_CREATE,
     "SupplierStockAdjustRequest": SUPPLIER_STOCK_ADJUST,
     "OpsInspectionCreateRequest": OPS_INSPECTION_CREATE,
     "OpsMeasurementRequest": OPS_MEASUREMENT,
@@ -453,9 +418,6 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
     "/api/v1/approvals/": {"post": "ApprovalCreateRequest"},
     "/api/v1/org-units/": {"post": "OrgUnitCreateRequest"},
     "/api/v1/org-units/{id}/members/": {"post": "OrgMemberCreateRequest"},
-    "/api/v1/rfqs/": {"post": "RfqCreateRequest"},
-    "/api/v1/rfqs/{id}/messages/": {"post": "RfqMessageRequest"},
-    "/api/v1/rfqs/{id}/revisions/": {"post": "RfqRevisionRequest"},
     "/api/v1/supplier/offers/": {"post": "SupplierOfferCreateRequest"},
     "/api/v1/supplier/offers/import/preview/": {
         "post": "SupplierOfferImportPreviewRequest"
@@ -464,9 +426,6 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
         "post": "SupplierOfferImportCommitRequest"
     },
     "/api/v1/supplier/offers/{id}/versions/": {"post": "SupplierOfferVersionRequest"},
-    "/api/v1/ops/rfq-lines/{line_id}/matches/": {"post": "RfqMatchCreateRequest"},
-    "/api/v1/ops/rfq-matches/{id}/approve/": {"post": "EmptyRequest"},
-    "/api/v1/ops/rfq-matches/{id}/reject/": {"post": "ReasonRequest"},
     "/api/v1/ops/products/": {"post": "OpsProductCreateRequest"},
     "/api/v1/ops/products/{id}/variants/": {"post": "OpsProductVariantCreateRequest"},
     "/api/v1/ops/products/{id}/submit/": {"post": "EmptyRequest"},
@@ -474,8 +433,6 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
     "/api/v1/ops/products/{id}/reject/": {"post": "ReasonRequest"},
     "/api/v1/ops/products/{id}/publish/": {"post": "OpsProductPublishRequest"},
     "/api/v1/ops/products/{id}/unpublish/": {"post": "EmptyRequest"},
-    "/api/v1/supplier/rfqs/{id}/messages/": {"post": "RfqMessageRequest"},
-    "/api/v1/supplier/rfqs/{id}/revisions/": {"post": "RfqRevisionRequest"},
     "/api/v1/supplier/stock/adjustments/": {"post": "SupplierStockAdjustRequest"},
     "/api/v1/ops/inspections/": {"post": "OpsInspectionCreateRequest"},
     "/api/v1/ops/inspections/{id}/measurements/": {"post": "OpsMeasurementRequest"},
@@ -501,7 +458,6 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
     "/api/v1/ops/shipments/{id}/dispatch/": {"post": "TakipNoRequest"},
     "/api/v1/ops/shipments/{id}/deliver/": {"post": "EmptyRequest"},
     "/api/v1/ops/shipments/{id}/cancel/": {"post": "EmptyRequest"},
-    "/api/v1/rfqs/{id}/send/": {"post": "EmptyRequest"},
     "/api/v1/supplier/offers/{id}/submit/": {"post": "EmptyRequest"},
     "/api/v1/supplier/offers/{id}/deactivate/": {"post": "EmptyRequest"},
     "/api/v1/shipments/{id}/pod/": {"post": "OpsPodRequest"},

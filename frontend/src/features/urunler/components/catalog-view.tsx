@@ -521,9 +521,9 @@ export function CatalogView() {
         ...prev,
         [variantId]: { ...prev[variantId], added: true },
       }));
-      actionToast.success("Ürün sepete eklendi");
+      actionToast.success("Ürün siparişe eklendi");
     } catch (err) {
-      actionToast.error("Sepete eklenemedi", err);
+      actionToast.error("Siparişe eklenemedi", err);
     }
   };
 
@@ -853,7 +853,7 @@ export function CatalogView() {
               ? "Yeni Ürün ile taslak açın; tüm sekmeler (genel, varyant, medya, kanal…) aynı pencerede."
               : scope === "monturler"
                 ? "Yayındaki montür ürünleri (alıcı vitrini). Ürün oluşturmak için Ürün Yönetimi sekmesini kullanın."
-                : "Onaylı ve yayındaki ürünleri inceleyin, anlık fiyat alıp sepete ekleyin."
+                : "Onaylı ve yayındaki ürünleri inceleyin; Sipariş Ver ile miktarlı siparişinizi oluşturun."
           }
           createLabel={scope === "ops" && canOps ? "Yeni Ürün" : undefined}
           onCreate={

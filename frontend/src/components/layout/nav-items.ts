@@ -56,16 +56,16 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         id: "orders",
         href: "/siparis",
-        label: "Siparişler",
+        label: "Sipariş Listem",
         icon: ShoppingCart,
         requiredCapability: "can_view_orders",
       },
       {
-        id: "offers-rfq",
-        href: "/teklifler",
-        label: "Tedarikçi Teklifleri & RFQ",
+        id: "supplier-offers",
+        href: "/fiyatlama",
+        label: "Tedarikçi Teklifleri",
         icon: Briefcase,
-        requiredAnyOf: ["can_manage_offers", "can_manage_rfq"],
+        requiredCapability: "can_manage_offers",
       },
       {
         id: "stock",

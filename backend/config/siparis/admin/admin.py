@@ -6,9 +6,7 @@ from siparis.models import (
     CheckoutAttempt,
     Order,
     OrderLine,
-    RFQEslestirme,
 )
-from siparis.selectors.rfq_eslestirme import scope_rfq_eslestirme_queryset
 from siparis.selectors.tenant import scope_cart_queryset
 
 
@@ -231,30 +229,3 @@ class OrderLineAdmin(_SiparisReadOnlyAdmin):
         ):
             return qs.filter(stock_reservation__teklif__tedarikci_id=firma_id)
         return qs.filter(order__alici_firma_id=firma_id)
-
-
-@admin.register(RFQEslestirme)
-class RFQEslestirmeAdmin(_SiparisReadOnlyAdmin):
-    """F10-021 — salt okunur; yazma yalnız rfq_eslestirme_servisi."""
-
-    list_display = (
-        "id",
-        "durum",
-        "rfq_line",
-        "onerilen_varyant",
-        "skor",
-        "olusturma_tarihi",
-    )
-    list_filter = ("durum",)
-    list_select_related = (
-        "rfq_line",
-        "rfq_line__rfq",
-        "rfq_line__rfq__alici_firma",
-        "onerilen_varyant",
-    )
-    readonly_fields = [f.name for f in RFQEslestirme._meta.fields]
-
-    def get_queryset(self, request):
-        return scope_rfq_eslestirme_queryset(
-            super().get_queryset(request), request.user
-        )

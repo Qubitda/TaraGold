@@ -2,12 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { BulkOrderResult, BuyerOrder } from "../types";
+import type { BuyerOrder } from "../types";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { siparisService } from "../services";
 import {
   siparisKeys,
-  useBulkOrderMutation,
   useCancelOrderMutation,
   useCartQuery,
   useCheckoutMutation,
@@ -20,7 +19,7 @@ import {
   useSupplierHazirlamaQuery,
   useUpdateCartLineMutation,
 } from "../hooks";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { QuoteCountdown, isQuoteExpired } from "@/components/commerce/quote-countdown";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
 import { ConfirmDialog, EntityModal, ListPage, RowActions } from "@/components/crud";
@@ -39,7 +38,6 @@ import {
   AlertCircle,
   Building,
   CheckCircle2,
-  FileSpreadsheet,
   FileText,
   MapPin,
   Package,
@@ -47,19 +45,16 @@ import {
   RotateCcw,
   ShoppingCart,
   Trash2,
-  Upload,
 } from "lucide-react";
 import {
   firmalarService,
-  opsFirmalarService,
   type FirmaAdresi,
-  type SalesChannelOption,
 } from "@/features/firmalar";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { OpsOnayHavuzu } from "./ops-onay-havuzu";
 import { useAuthContext } from "@/features/auth/components/auth-provider";
 
-type TabId = "cart" | "orders" | "bulk" | "hazirlama";
+type TabId = "prepare" | "orders" | "hazirlama";
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   TASLAK: "Taslak",
@@ -105,14 +100,6 @@ export function OrderWorkflowView() {
     ...(orderSearch.trim() ? { q: orderSearch.trim() } : {}),
     ...(orderDurum ? { durum: orderDurum } : {}),
   });
-  const salesChannelsQuery = useQuery({
-    queryKey: ["sales-channels-options"],
-    queryFn: async () => {
-      const res = await opsFirmalarService.listSalesChannels();
-      const items = Array.isArray(res) ? res : (res.results ?? []);
-      return items.filter((c) => c.aktif !== false);
-    },
-  });
 
   const removeLineMutation = useRemoveCartLineMutation();
   const updateLineMutation = useUpdateCartLineMutation();
@@ -120,20 +107,21 @@ export function OrderWorkflowView() {
   const requoteMutation = useRequoteCartLineMutation();
   const cancelMutation = useCancelOrderMutation();
   const reorderMutation = useReorderOrderMutation();
-  const bulkMutation = useBulkOrderMutation();
   const hazirlamaQuery = useSupplierHazirlamaQuery(showSupplierHazirlama);
   const markHazirMutation = useMarkSupplierHazirMutation();
 
   const tabParam = searchParams.get("tab");
   const activeTab: TabId =
     tabParam === "orders" ||
-    tabParam === "bulk" ||
-    tabParam === "cart" ||
+    tabParam === "prepare" ||
+    tabParam === "cart" || // eski URL uyumu → prepare
     (tabParam === "hazirlama" && showSupplierHazirlama)
-      ? tabParam
+      ? tabParam === "cart"
+        ? "prepare"
+        : (tabParam as TabId)
       : routeOrderId
         ? "orders"
-        : "cart";
+        : "prepare";
 
   const setActiveTab = (tab: TabId) => {
     setSearchParams(
@@ -150,7 +138,6 @@ export function OrderWorkflowView() {
   const ordersPageData = ordersQuery.data;
   const orders = ordersPageData?.results ?? [];
   const ordersTotalCount = ordersPageData?.count ?? orders.length;
-  const salesChannels: SalesChannelOption[] = salesChannelsQuery.data ?? [];
 
   const [addresses, setAddresses] = useState<FirmaAdresi[]>([]);
   const loading = cartQuery.isLoading;
@@ -178,18 +165,6 @@ export function OrderWorkflowView() {
       : undefined;
   const orderDetailQuery = useOrderDetailQuery(routeIdNum, Boolean(routeIdNum));
 
-  // Toplu Sipariş State'leri
-  const [selectedChannelId, setSelectedChannelId] = useState<number | "">("");
-  const [bulkText, setBulkText] = useState("");
-  const [bulkResult, setBulkResult] = useState<BulkOrderResult | null>(null);
-  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
-
-  useEffect(() => {
-    if (selectedChannelId === "" && salesChannels.length > 0) {
-      setSelectedChannelId(salesChannels[0].id);
-    }
-  }, [salesChannels, selectedChannelId]);
-
   const handleMarkHazir = async (orderId: number) => {
     setError(null);
     try {
@@ -199,50 +174,6 @@ export function OrderWorkflowView() {
       const msg = mapCommerceError(err, "Hazır işaretleme başarısız.");
       setError(msg);
       actionToast.error("Hazır işaretlenemedi", msg);
-    }
-  };
-
-  const handleBulkSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bulkText.trim()) return;
-    if (!selectedChannelId) {
-      const msg = "Lütfen bir satış kanalı seçin.";
-      setError(msg);
-      actionToast.error("Kanal seçilmedi", msg);
-      return;
-    }
-    setIsSubmittingBulk(true);
-    setError(null);
-    setBulkResult(null);
-
-    const lines = bulkText
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-    const rows = lines.map((line) => {
-      const parts = line.split(/[,;\t]/).map((p) => p.trim());
-      return {
-        sku: parts[0] || "",
-        miktar: parts[1] || "1",
-        birim: parts[2] || "ADET",
-      };
-    });
-
-    try {
-      const result = await bulkMutation.mutateAsync({
-        satis_kanali_id: Number(selectedChannelId),
-        rows,
-      });
-      setBulkResult(result);
-      actionToast.success("Toplu sipariş işlendi");
-      if (result.order_id) {
-        await refreshData();
-      }
-    } catch (err) {
-      setError(mapCommerceError(err, "Toplu sipariş işlenemedi."));
-      actionToast.error("Toplu sipariş işlenemedi", err);
-    } finally {
-      setIsSubmittingBulk(false);
     }
   };
 
@@ -320,7 +251,7 @@ export function OrderWorkflowView() {
   const handleConfirmCheckout = async () => {
     if (cartHasExpiredQuote) {
       const msg =
-        "Sepette süresi dolmuş fiyat teklifi var. Miktarı güncelleyin veya satırı silip yeni fiyat alın.";
+        "Süresi dolmuş fiyat satırı var. Miktarı güncelleyin veya satırı kaldırıp yeniden Sipariş Verin.";
       setError(msg);
       actionToast.error("Sipariş tamamlanamadı", msg);
       return;
@@ -354,7 +285,7 @@ export function OrderWorkflowView() {
     try {
       await removeLineMutation.mutateAsync(lineId);
       setRemoveLineConfirm(null);
-      actionToast.success("Satır sepetten kaldırıldı");
+      actionToast.success("Satır kaldırıldı");
     } catch (err) {
       setError(mapCommerceError(err, "Satır silinemedi."));
       actionToast.error("Satır silinemedi", err);
@@ -403,12 +334,12 @@ export function OrderWorkflowView() {
     setError(null);
     try {
       await reorderMutation.mutateAsync(orderId);
-      actionToast.success("Sipariş kalemleri sepete aktarıldı");
+      actionToast.success("Sipariş kalemleri hazırlandı");
       setOrderDetailOpen(false);
       if (routeOrderId) {
         navigate("/siparis?tab=cart", { replace: true });
       } else {
-        setActiveTab("cart");
+        setActiveTab("prepare");
       }
     } catch (err) {
       const msg = mapCommerceError(err, "Tekrar sipariş oluşturulamadı.");
@@ -452,25 +383,25 @@ export function OrderWorkflowView() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Sipariş &amp; Sepet Yönetimi
+            Sipariş
           </h1>
           <p className="text-xs text-muted-foreground">
-            Aktif sepet kalemlerinizi yönetin, siparişlerinizi takip edin veya toplu SKU listesi yükleyin.
+            Ürünleri ekleyip gönderin; gönderilmiş siparişlerinizi ve durumlarını takip edin.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-1 rounded-[6px] border border-border bg-muted/40 p-1">
           <button
             type="button"
-            onClick={() => setActiveTab("cart")}
+            onClick={() => setActiveTab("prepare")}
             className={`flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeTab === "cart"
+              activeTab === "prepare"
                 ? "bg-card text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <ShoppingCart className="h-3.5 w-3.5" />
-            <span>Aktif Sepet ({cart?.line_count ?? 0})</span>
+            <span>Yeni sipariş ({cart?.line_count ?? 0})</span>
           </button>
           <button
             type="button"
@@ -482,19 +413,7 @@ export function OrderWorkflowView() {
             }`}
           >
             <Package className="h-3.5 w-3.5" />
-            <span>Sipariş Geçmişi ({ordersTotalCount})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("bulk")}
-            className={`flex items-center gap-2 rounded-[4px] px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeTab === "bulk"
-                ? "bg-card text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span>Toplu Sipariş</span>
+            <span>Sipariş Listem ({ordersTotalCount})</span>
           </button>
           {showSupplierHazirlama && (
             <button
@@ -543,15 +462,15 @@ export function OrderWorkflowView() {
             <span>Veriler yükleniyor…</span>
           </div>
         </div>
-      ) : activeTab === "cart" ? (
+      ) : activeTab === "prepare" ? (
         <div className="flex flex-col gap-6">
           <div className="rounded-[8px] border border-border bg-card overflow-hidden">
             {!cart || cart.lines.length === 0 ? (
               <div className="flex h-48 flex-col items-center justify-center gap-2 text-center p-6">
                 <ShoppingCart className="h-8 w-8 text-muted-foreground opacity-50" />
-                <p className="text-sm font-medium text-foreground">Sepetiniz boş</p>
+                <p className="text-sm font-medium text-foreground">Henüz ürün eklenmedi</p>
                 <p className="text-xs text-muted-foreground max-w-sm">
-                  Katalogdan seçtiğiniz ürünler için aldığınız fiyat tekliflerini sepete ekleyebilirsiniz.
+                  Katalogdan Sipariş Ver ile ürün ekleyin; miktarları düzenleyip Siparişi Gönderin.
                 </p>
               </div>
             ) : (
@@ -655,7 +574,7 @@ export function OrderWorkflowView() {
                               size="icon"
                               onClick={() => setRemoveLineConfirm(line.id)}
                               className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              aria-label="Satırı sepetten sil"
+                              aria-label="Satırı kaldır"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -672,10 +591,10 @@ export function OrderWorkflowView() {
           {cart && cart.lines.length > 0 && (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-[8px] border border-border bg-card p-4">
               <div className="text-xs text-muted-foreground space-y-1">
-                <p>Siparişi onayladığınız anda güncel fiyatlar dondurulur ve rezervasyon yapılır.</p>
+                <p>Gönderdiğiniz anda fiyatlar kilitlenir, stok rezervasyonu yapılır ve sipariş onay havuzuna düşer.</p>
                 {cartHasExpiredQuote ? (
                   <p className="text-destructive" role="alert">
-                    Sepetinizde süresi dolmuş fiyat teklifi bulunuyor. Lütfen eski satırı kaldırıp yeni teklif ekleyin.
+                    Süresi dolmuş fiyat satırı var. Eski satırı kaldırıp yeniden Sipariş Verin.
                   </p>
                 ) : null}
               </div>
@@ -686,7 +605,7 @@ export function OrderWorkflowView() {
                 className="gap-2"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Siparişi Tamamla</span>
+                <span>Siparişi Gönder</span>
               </Button>
             </div>
           )}
@@ -728,7 +647,7 @@ export function OrderWorkflowView() {
           onRetry={() => void ordersQuery.refetch()}
           isEmpty={orders.length === 0}
           emptyTitle="Kayıtlı sipariş bulunamadı"
-          emptyDescription="Sepetinizi onayladığınızda oluşan siparişler burada listelenir."
+          emptyDescription="Gönderdiğiniz siparişler ve durumları burada listelenir."
           page={orderPage}
           pageSize={orderPageSize}
           totalCount={ordersTotalCount}
@@ -810,175 +729,7 @@ export function OrderWorkflowView() {
             </TableBody>
           </Table>
         </ListPage>
-      ) : activeTab === "bulk" ? (
-        <div className="flex flex-col gap-6">
-          <form
-            onSubmit={handleBulkSubmit}
-            className="flex flex-col gap-4 rounded-[8px] border border-border bg-card p-6"
-          >
-            <div className="flex flex-col gap-1 border-b border-border pb-3">
-              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <FileSpreadsheet className="h-4 w-4 text-primary" />
-                <span>Hızlı Toplu Sipariş &amp; Stok Kodu Listesi</span>
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Toptan alımlarda her satıra bir kalem gelecek şekilde Stok Kodu, Miktar ve Birim girin (virgül, noktalı virgül veya sekme ile ayırabilirsiniz).
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-1.5 max-w-sm">
-              <label className="text-xs font-medium text-foreground">
-                Satış Kanalı
-              </label>
-              <select
-                value={selectedChannelId}
-                onChange={(e) =>
-                  setSelectedChannelId(e.target.value ? Number(e.target.value) : "")
-                }
-                disabled={isSubmittingBulk || salesChannelsQuery.isLoading}
-                className="h-9 rounded-[6px] border border-border bg-background px-3 text-xs text-foreground"
-              >
-                <option value="">Satış kanalı seçiniz…</option>
-                {salesChannels.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.ad} ({ch.kod})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-foreground">
-                Kalem Listesi (Format: STOK_KODU, MIKTAR, BIRIM)
-              </span>
-              <textarea
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={
-                  "BLZ-22K-BURMA, 10, ADET\nYUZ-18K-TEKTAS, 5, ADET\nKLY-14K-BAGET, 20, ADET"
-                }
-                rows={6}
-                className="w-full rounded-[6px] border border-input bg-background p-3 text-xs font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                disabled={isSubmittingBulk}
-              />
-              <span className="text-[11px] text-muted-foreground">
-                Örnek: Her satıra &ldquo;STOK_KODU, ADET, BIRIM&rdquo; şeklinde yazın.
-              </span>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="submit"
-                disabled={isSubmittingBulk || !bulkText.trim() || !selectedChannelId}
-                className="gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                <span>
-                  {isSubmittingBulk ? "İşleniyor…" : "Toplu Siparişi Oluştur"}
-                </span>
-              </Button>
-            </div>
-          </form>
-
-          {bulkResult && (
-            <div className="rounded-[8px] border border-border bg-card p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">
-                    Toplu Sipariş İşlendi
-                  </span>
-                </div>
-                {bulkResult.order_id && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      navigate(`/siparis/${bulkResult.order_id}?tab=orders`);
-                      setOrderDetailOpen(true);
-                    }}
-                    className="text-xs gap-1.5"
-                  >
-                    <span>Siparişi İncele</span>
-                  </Button>
-                )}
-              </div>
-
-              {bulkResult.accepted?.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-xs font-semibold text-foreground">
-                    Kabul Edilen Kalemler ({bulkResult.accepted.length})
-                  </span>
-                  <div className="rounded-[6px] border border-border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[60px]">Satır</TableHead>
-                          <TableHead>Stok Kodu</TableHead>
-                          <TableHead className="text-right">Miktar</TableHead>
-                          <TableHead>Birim</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {bulkResult.accepted.map((a, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-mono text-xs">
-                              {a.satir_no}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs font-medium">
-                              {a.sku}
-                            </TableCell>
-                            <TableCell className="text-right font-mono tabular-nums">
-                              {a.miktar}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {a.birim || "ADET"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-
-              {bulkResult.errors?.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-xs font-semibold text-destructive">
-                    Hatalı / Bulunamayan Kalemler ({bulkResult.errors.length})
-                  </span>
-                  <div className="rounded-[6px] border border-destructive/30 overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[60px]">Satır</TableHead>
-                          <TableHead>Stok Kodu</TableHead>
-                          <TableHead>Hata Açıklaması</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {bulkResult.errors.map((e, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-mono text-xs text-destructive">
-                              {e.satir_no}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs font-medium">
-                              {e.sku}
-                            </TableCell>
-                            <TableCell className="text-xs text-destructive">
-                              {e.hata}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
+            ) : (
         <ListPage
           title="Tedarikçi Hazırlama Emirleri"
           description="Alıcı kimliği gizli tutularak yönlendirilen hazırlama emirlerini tamamlayıp sevk irsaliyesi alabilirsiniz."
@@ -1070,12 +821,12 @@ export function OrderWorkflowView() {
         </ListPage>
       )}
 
-      {/* Sepet Satırı Silme Onayı */}
+      {/* Satır silme onayı */}
       <ConfirmDialog
         open={removeLineConfirm !== null}
         onOpenChange={(open) => !open && setRemoveLineConfirm(null)}
-        title="Satırı Sepetten Kaldır"
-        description="Seçili ürün kalemi aktif sepetinizden kaldırılacaktır."
+        title="Satırı Kaldır"
+        description="Seçili ürün kalemi hazırlanan listeden kaldırılacaktır."
         confirmLabel="Kaldır"
         variant="destructive"
         loading={removeLineMutation.isPending}
@@ -1221,7 +972,7 @@ export function OrderWorkflowView() {
                     <span>
                       {reorderMutation.isPending &&
                       reorderMutation.variables === selectedOrder.id
-                        ? "Sepete Aktarılıyor…"
+                        ? "Listeye aktarılıyor…"
                         : "Tekrar Sipariş Ver"}
                     </span>
                   </Button>
@@ -1245,7 +996,7 @@ export function OrderWorkflowView() {
         ) : null}
       </EntityModal>
 
-      {/* Siparişi Tamamla Modalı */}
+      {/* Siparişi Gönder Modalı */}
       <EntityModal
         open={checkoutModalOpen}
         onOpenChange={setCheckoutModalOpen}
@@ -1253,7 +1004,7 @@ export function OrderWorkflowView() {
         description="Teslimat ve fatura adreslerinizi kontrol ederek siparişi kesinleştirin."
         isDirty={Boolean(orderNotes.trim())}
         isSubmitting={isSubmittingCheckout}
-        submitLabel="Siparişi Kesinleştir"
+        submitLabel="Siparişi Gönder"
         onSubmit={(e) => {
           e.preventDefault();
           void handleConfirmCheckout();
@@ -1335,7 +1086,7 @@ export function OrderWorkflowView() {
 
           <div className="rounded-[6px] border border-border/80 bg-muted/40 p-3 text-xs space-y-1">
             <div className="flex justify-between text-muted-foreground">
-              <span>Sepetteki Kalem Adedi:</span>
+              <span>Kalem adedi:</span>
               <span className="font-mono font-medium text-foreground">
                 {cart?.line_count ?? 0}
               </span>

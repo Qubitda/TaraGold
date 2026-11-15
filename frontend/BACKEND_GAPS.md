@@ -57,24 +57,14 @@ OpenAPI kaynağı: `docs/api/openapi-v1.json`. Aşağıdakiler **HTTP yüzünde 
 
 ---
 
-## GAP-F3-05 — Özel üretim: montür/taş katalog + üretim siparişi SM — **UYGULANDI** (2026-11-13)
+## GAP-F3-05 — Montür/taş katalog — **UYGULANDI** (2026-11-13)
 
 | | |
 |--|--|
-| **İhtiyaç** | Montür seç → taş seç → özel üretim RFQ akışı |
+| **İhtiyaç** | Montür ve taş katalog seçimi (C1) |
 | **Uygulama** | `GET /api/v1/catalog/monturler/` ve `GET /api/v1/catalog/taslar/` |
-| **Ekran** | `CatalogView` ("Montürler", "Taşlar" sekmeleri) + `SupplierRfqOffersView` Özel Üretim RFQ formu |
-| **Not** | Montür/taş katalog seçicisi `montur_varyant_id`, `hedef_ayar`, `hedef_gram` ve `tas_ozeti` alanlarını doldurur |
-
----
-
-## GAP-F3-06 — RFQ ↔ tedarikçi teklif bağlama — **UYGULANDI** (2026-11-13)
-
-| | |
-|--|--|
-| **İhtiyaç** | Tedarikçi teklifini belirli RFQ satırına bağlama |
-| **Uygulama** | `POST /api/v1/supplier/offers/` body ve `SupplierOffer` yanıtında opsiyonel `rfq_id` / `rfq_line_id` |
-| **Ekran** | `SupplierRfqOffersView` ("Teklif hazırla" modalı, tablo ve detay modalı) |
+| **Ekran** | `CatalogView` ("Montürler", "Taşlar" sekmeleri) |
+| **Not** | RFQ özel üretim akışı kaldırıldı; montür/taş katalog uçları korunur |
 
 ---
 

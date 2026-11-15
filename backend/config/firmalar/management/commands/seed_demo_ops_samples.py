@@ -18,13 +18,11 @@ from firmalar.models import Firma
 from firmalar.services.rol_servisi import sync_user_role_groups
 from fiyatlama.models import PriceQuote, TedarikciTeklif
 from fiyatlama.services import pricing_service
-from siparis.models import CartLine, CheckoutAttempt, Order, RFQ, RFQEslestirme, RFQLine
+from siparis.models import CartLine, CheckoutAttempt, Order
 from siparis.services import (
     cart_servisi,
     checkout_servisi,
     order_servisi,
-    rfq_eslestirme_servisi,
-    rfq_servisi,
 )
 from stok.models import StockBalance, StockMovement, Warehouse
 from stok.services import ledger_servisi, warehouse_servisi
@@ -35,11 +33,10 @@ User = get_user_model()
 
 ORDER_KEY = "demo-sample-order-v1"
 CART_KEY = "demo-sample-cart-v1"
-RFQ_BASLIK = "DEMO · örnek RFQ"
 
 
 class Command(BaseCommand):
-    help = "Operasyon adımları için tek örnek veri (sepet, sipariş, RFQ, eşleştirme, stok)."
+    help = "Operasyon adımları için tek örnek veri (sepet, sipariş, stok)."
 
     def handle(self, *args, **options):
         call_command("seed_demo_commerce")
@@ -50,7 +47,7 @@ class Command(BaseCommand):
         supplier = User.objects.get(username="demo_tedarikci")
         ops = User.objects.get(username="demo_ops")
 
-        # İnceleme: admin tüm ops yüzeyi (eşleştirme dahil approve_eslestirme)
+        # İnceleme: admin tüm ops yüzeyi
         if ops.rol != roles.PLATFORM_ADMIN:
             ops.rol = roles.PLATFORM_ADMIN
             ops.is_staff = True
@@ -73,7 +70,7 @@ class Command(BaseCommand):
         if len(varyantlar) < 2:
             self.stderr.write("En az 2 demo varyant gerekli.")
             return
-        v_order, v_cart, v_rfq = varyantlar[0], varyantlar[1], varyantlar[0]
+        v_order, v_cart = varyantlar[0], varyantlar[1]
 
         kanal = (
             SatisKanali.objects.filter(kod="KUYUMCU_PANEL").first()
@@ -180,79 +177,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"  Sipariş #{order.pk} · zaten var")
 
-        # --- 3) RFQ katalog satırı (gönderilmiş) ---
-        rfq = RFQ.objects.filter(alici_firma=alici, baslik=RFQ_BASLIK).first()
-        if rfq is None:
-            rfq = rfq_servisi.olustur(
-                actor=buyer,
-                baslik=RFQ_BASLIK,
-                line_specs=[
-                    {
-                        "aciklama": "Demo RFQ · kataloglu satır",
-                        "miktar": Decimal("2"),
-                        "birim": "ADET",
-                        "varyant": v_rfq,
-                    }
-                ],
-                talep_tipi=RFQ.TalepTipi.STANDART,
-            )
-            rfq = rfq_servisi.gonder(actor=buyer, rfq=rfq)
-            self.stdout.write(f"  RFQ #{rfq.pk} · {rfq.durum}")
-        else:
-            if rfq.durum == RFQ.Durum.TASLAK:
-                rfq = rfq_servisi.gonder(actor=buyer, rfq=rfq)
-            self.stdout.write(f"  RFQ #{rfq.pk} · {rfq.durum}")
-
-        # --- 4) RFQ katalog-dışı + admin eşleştirme ---
-        rfq_match_baslik = "DEMO · eşleştirme RFQ"
-        rfq_m = RFQ.objects.filter(
-            alici_firma=alici, baslik=rfq_match_baslik
-        ).first()
-        if rfq_m is None:
-            rfq_m = rfq_servisi.olustur(
-                actor=buyer,
-                baslik=rfq_match_baslik,
-                line_specs=[
-                    {
-                        "aciklama": "Katalog dışı · 14K ~2.5g yüzük aranıyor",
-                        "miktar": Decimal("1"),
-                        "birim": "ADET",
-                        # varyant yok → ops eşleştirme
-                    }
-                ],
-                talep_tipi=RFQ.TalepTipi.STANDART,
-            )
-            rfq_m = rfq_servisi.gonder(actor=buyer, rfq=rfq_m)
-            self.stdout.write(f"  RFQ (eşleştirme) #{rfq_m.pk} · {rfq_m.durum}")
-        else:
-            if rfq_m.durum == RFQ.Durum.TASLAK:
-                rfq_m = rfq_servisi.gonder(actor=buyer, rfq=rfq_m)
-            self.stdout.write(f"  RFQ (eşleştirme) #{rfq_m.pk} · {rfq_m.durum}")
-
-        line = (
-            RFQLine.objects.filter(rfq=rfq_m, varyant__isnull=True)
-            .order_by("pk")
-            .first()
-        )
-        if line is not None:
-            match = RFQEslestirme.objects.filter(rfq_line=line).first()
-            if match is None:
-                match = rfq_eslestirme_servisi.oner(
-                    actor=ops,
-                    rfq_line=line,
-                    varyant=v_rfq,
-                    skor=80,
-                    kanit={"kaynak": "seed_demo_ops_samples"},
-                )
-                self.stdout.write(
-                    f"  RFQ eşleştirme #{match.pk} · durum {match.durum}"
-                )
-            else:
-                self.stdout.write(f"  RFQ eşleştirme #{match.pk} · zaten var")
-        else:
-            self.stdout.write("  RFQ eşleştirme · katalog-dışı satır yok")
-
-        # --- 5) Tedarikçi taslak teklif (ek örnek, gönderilmemiş) ---
+        # --- 3) Tedarikçi taslak teklif (ek örnek, gönderilmemiş) ---
         draft_sku_var = varyantlar[-1]
         draft = TedarikciTeklif.objects.filter(
             tedarikci=ted,
@@ -285,9 +210,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("seed_demo_ops_samples tamam."))
         self.stdout.write("")
         self.stdout.write("İnceleme haritası (şifre: DemoPortal1!):")
-        self.stdout.write("  demo_alici   → /buyer/catalog · /buyer/cart · /buyer/orders · /buyer/rfqs")
-        self.stdout.write("  demo_tedarikci → /supplier/offers · /supplier/stock · /supplier/rfqs")
-        self.stdout.write("  demo_ops    → /admin/orders · /admin/rfq-match · /admin/offers")
+        self.stdout.write("  demo_alici   → /buyer/catalog · /buyer/cart · /buyer/orders")
+        self.stdout.write("  demo_tedarikci → /supplier/offers · /supplier/stock")
+        self.stdout.write("  demo_ops    → /admin/orders · /admin/offers")
         self.stdout.write(
             f"  quote sayısı={PriceQuote.objects.filter(alici_firma=alici).count()} · "
             f"now={timezone.now().isoformat()}"

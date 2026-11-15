@@ -48,9 +48,8 @@ describe("nav-items IA", () => {
     expect(byGroup.analiz).toEqual(["reports"]);
   });
 
-  it("requiredAnyOf: herhangi biri yeterli", () => {
-    const item = DOMAIN_NAV_ITEMS.find((i) => i.id === "offers-rfq")!;
-    expect(isNavItemVisible(item, caps({ can_manage_rfq: true }))).toBe(true);
+  it("requiredCapability: tedarikçi teklifleri", () => {
+    const item = DOMAIN_NAV_ITEMS.find((i) => i.id === "supplier-offers")!;
     expect(isNavItemVisible(item, caps({ can_manage_offers: true }))).toBe(
       true
     );

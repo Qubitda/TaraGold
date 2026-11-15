@@ -178,7 +178,7 @@ export function BuyerCatalogGrid({
                   }}
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
-                  Sepet
+                  Sipariş Ver
                 </Button>
               </div>
             </div>
@@ -348,7 +348,7 @@ export function BuyerProductDetailView({
 
         {!purchasable ? (
           <div className="rounded-[8px] border border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-            Bu ürün için aktif varyant bulunmuyor; sepete eklenemez.
+            Bu ürün için aktif varyant bulunmuyor; siparişe eklenemez.
           </div>
         ) : (
           <div className="space-y-3">
@@ -413,7 +413,7 @@ export function BuyerProductDetailView({
                   {st.added ? (
                     <Badge variant="success" className="gap-1 text-[11px]">
                       <Check className="h-3 w-3" />
-                      Sepette
+                      Siparişe eklendi
                     </Badge>
                   ) : (
                     <Button
@@ -426,7 +426,7 @@ export function BuyerProductDetailView({
                       }}
                     >
                       <ShoppingCart className="h-4 w-4" />
-                      Sepete Ekle
+                      Sipariş Ver
                     </Button>
                   )}
                 </>
@@ -441,7 +441,7 @@ export function BuyerProductDetailView({
                       className="w-full"
                       onClick={() => onRetryQuote(selectedVariantId)}
                     >
-                      Teklifi yenile
+                      Fiyatı yenile
                     </Button>
                   ) : null}
                 </div>

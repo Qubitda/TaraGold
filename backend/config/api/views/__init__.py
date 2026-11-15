@@ -193,19 +193,6 @@ from .returns import (
     ReturnRejectView,
     ReturnSubmitView,
 )
-from .rfq import (
-    RfqDetailView,
-    RfqListCreateView,
-    RfqMessageView,
-    RfqRevisionView,
-    RfqSendView,
-)
-from .rfq_eslestirme import (
-    OpsRfqMatchApproveView,
-    OpsRfqMatchCandidatesView,
-    OpsRfqMatchListCreateView,
-    OpsRfqMatchRejectView,
-)
 from .piyasa_pano import PiyasaPanoView
 from .sales_channels import SalesChannelListView
 from .shipment import ShipmentDetailView, ShipmentListView, ShipmentPodView
@@ -219,10 +206,6 @@ from .supplier import (
     SupplierOfferListView,
     SupplierOfferSubmitView,
     SupplierOfferVersionView,
-    SupplierRfqDetailView,
-    SupplierRfqListView,
-    SupplierRfqMessageView,
-    SupplierRfqRevisionView,
     SupplierStockAdjustView,
     SupplierStockSummaryView,
     SupplierVariantListView,
@@ -391,15 +374,6 @@ __all__ = [
     "TicariSiparisOzetView",
     "AliciDavranisOzetView",
     "CiroAnomaliView",
-    "RfqDetailView",
-    "RfqListCreateView",
-    "RfqMessageView",
-    "RfqRevisionView",
-    "RfqSendView",
-    "OpsRfqMatchApproveView",
-    "OpsRfqMatchCandidatesView",
-    "OpsRfqMatchListCreateView",
-    "OpsRfqMatchRejectView",
     "ShipmentDetailView",
     "ShipmentListView",
     "ShipmentPodView",
@@ -410,10 +384,6 @@ __all__ = [
     "SupplierOfferListView",
     "SupplierOfferSubmitView",
     "SupplierOfferVersionView",
-    "SupplierRfqDetailView",
-    "SupplierRfqListView",
-    "SupplierRfqMessageView",
-    "SupplierRfqRevisionView",
     "SupplierStockAdjustView",
     "SupplierStockSummaryView",
     "SupplierVariantListView",

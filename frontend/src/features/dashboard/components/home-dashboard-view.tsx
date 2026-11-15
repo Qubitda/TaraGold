@@ -34,7 +34,6 @@ import {
   Bell,
   ArrowRight,
   Wallet,
-  Briefcase,
 } from "lucide-react";
 import type { Capabilities } from "@/lib/api/types";
 
@@ -221,22 +220,11 @@ export function HomeDashboardView() {
       });
       list.push({
         key: "cart",
-        label: "Sepet kalemi",
+        label: "Hazırlanan kalem",
         value:
           dash.cart_line_count != null ? String(dash.cart_line_count) : "—",
         href: "/siparis",
         empty: dash.cart_line_count == null,
-      });
-      list.push({
-        key: "rfq",
-        label: "RFQ",
-        value: dash.rfq_count != null ? String(dash.rfq_count) : "—",
-        href: "/teklifler",
-        empty: dash.rfq_count == null,
-        hint:
-          dash.rfq_ozel_count != null
-            ? `${dash.rfq_ozel_count} özel RFQ`
-            : undefined,
       });
     } else if (loading) {
       list.push({
@@ -413,14 +401,6 @@ export function HomeDashboardView() {
         href: "/siparis",
       });
     }
-    if (snap.meDashboard?.rfq_count && snap.meDashboard.rfq_count > 0) {
-      items.push({
-        id: "rfq",
-        title: "Açık RFQ kayıtları",
-        meta: `${snap.meDashboard.rfq_count} RFQ`,
-        href: "/teklifler",
-      });
-    }
     if (
       snap.credit?.limit_aktif &&
       snap.credit.kullanilabilir != null &&
@@ -434,7 +414,7 @@ export function HomeDashboardView() {
       });
     }
     return items;
-  }, [pendingApprovals, pendingOrders, snap.meDashboard, snap.credit]);
+  }, [pendingApprovals, pendingOrders, snap.credit]);
 
   const quickLinks = useMemo(() => {
     const c = caps || ({} as Capabilities);
@@ -444,10 +424,9 @@ export function HomeDashboardView() {
       icon: React.ComponentType<{ className?: string }>;
       show: boolean;
     }> = [
-      { href: "/siparis", label: "Sipariş / sepet", icon: ShoppingCart, show: Boolean(c.can_view_orders || c.can_view_cart || c.can_checkout) },
+      { href: "/siparis", label: "Sipariş Listem", icon: ShoppingCart, show: Boolean(c.can_view_orders || c.can_view_cart || c.can_checkout) },
       { href: "/urunler", label: "Katalog", icon: Gem, show: Boolean(c.can_view_catalog) },
-      { href: "/fiyatlama", label: "Fiyat / quote", icon: Tag, show: Boolean(c.can_lock_quote) },
-      { href: "/teklifler", label: "Tedarikçi RFQ", icon: Briefcase, show: Boolean(c.can_manage_offers || c.can_manage_rfq) },
+      { href: "/fiyatlama", label: "Fiyat", icon: Tag, show: Boolean(c.can_lock_quote) },
       { href: "/stok", label: "Stok", icon: Boxes, show: Boolean(c.can_view_supplier_stock) },
       { href: "/finans", label: "Finans", icon: Receipt, show: Boolean(c.can_view_finance || c.can_view_credit) },
       { href: "/lojistik", label: "Lojistik", icon: Truck, show: Boolean(c.can_view_shipments || c.can_manage_shipment) },

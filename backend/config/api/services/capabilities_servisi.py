@@ -41,7 +41,6 @@ def capabilities_for(user) -> dict[str, bool]:
         "can_view_credit": buyer or ops,
         "can_view_shipments": buyer or ops,
         "can_approve": has_perm(user, P["manage_approval"]),
-        "can_manage_rfq": has_perm(user, P["manage_rfq"]) or buyer or ops,
         "can_manage_org": has_perm(user, P["manage_org"]),
         "can_lock_quote": has_perm(user, P["lock_quote"]) or buyer or ops,
         "can_manage_offers": supplier or has_perm(user, P["manage_own_teklif"]),

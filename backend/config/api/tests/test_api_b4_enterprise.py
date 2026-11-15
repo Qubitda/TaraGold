@@ -1,4 +1,4 @@
-"""API-B4 — org / onay / RFQ HTTP + concurrency (PostgreSQL)."""
+"""API-B4 — org / onay HTTP + concurrency (PostgreSQL)."""
 
 from __future__ import annotations
 
@@ -17,8 +17,6 @@ from firmalar.models import OnayTalebi, OrgBirimi, OrgUyeligi
 from firmalar.role_permissions import seed_role_permissions
 from firmalar.services import onay_servisi, org_servisi
 from firmalar.services.rol_servisi import sync_user_role_groups
-from siparis.models import RFQ, RFQMessage, RFQRevizyon
-from siparis.services import rfq_servisi
 from siparis.tests.test_checkout_f4_040 import CheckoutFixtureMixin
 
 User = get_user_model()
@@ -244,135 +242,6 @@ class ApiB4EnterpriseTests(B4FixtureMixin, APITestCase):
         deny = self.api.get(reverse("api-approval-list"))
         self.assertEqual(deny.status_code, 403)
 
-    def test_rfq_flow_blind_message_variant(self):
-        self.api.force_authenticate(user=self.buyer)
-        create = self.api.post(
-            reverse("api-rfq-list"),
-            {
-                "baslik": "B4 RFQ",
-                "talep_tipi": "OZEL_URETIM",
-                "lines": [
-                    {
-                        "aciklama": "özel bilezik",
-                        "miktar": "5",
-                        "birim": "ADET",
-                        "varyant_id": self.varyant.pk,
-                    }
-                ],
-            },
-            format="json",
-            **self._idem("b4-rfq-1"),
-        )
-        self.assertEqual(create.status_code, 201, create.content)
-        body = create.json()
-        self.assertEqual(body["talep_tipi"], RFQ.TalepTipi.OZEL_URETIM)
-        self.assertEqual(Decimal(body["lines"][0]["miktar"]), Decimal("5"))
-        self.assertIn("send", body["allowed_actions"])
-        self.assertGreaterEqual(len(body["revizyonlar"]), 1)
-        self.assertNotIn("olusturan", body)
-        self.assertNotIn("alici_firma", body)
-        assert_masked(body)
-        rid = body["id"]
-
-        send = self.api.post(
-            reverse("api-rfq-send", kwargs={"pk": rid}),
-            {},
-            format="json",
-            **self._idem("b4-rfq-s"),
-        )
-        self.assertEqual(send.status_code, 200)
-        self.assertEqual(send.json()["durum"], RFQ.Durum.GONDERILDI)
-
-        msg = self.api.post(
-            reverse("api-rfq-message", kwargs={"pk": rid}),
-            {"govde": "Platform sorusu"},
-            format="json",
-            **self._idem("b4-rfq-m"),
-        )
-        self.assertEqual(msg.status_code, 200)
-        m0 = msg.json()["messages"][0]
-        self.assertEqual(m0["gonderen_rol"], roles.ALICI_SATINALMACI)
-        self.assertNotIn("olusturan", m0)
-
-        rev = self.api.post(
-            reverse("api-rfq-revision", kwargs={"pk": rid}),
-            {"ozet": "Taş rengi değişti"},
-            format="json",
-            **self._idem("b4-rfq-r"),
-        )
-        self.assertEqual(rev.status_code, 200)
-        self.assertGreaterEqual(len(rev.json()["revizyonlar"]), 2)
-
-        # Görünmeyen (pasif) varyant = olmayan ile aynı hata (varlık sızdırılmaz)
-        self.varyant.aktif = False
-        self.varyant.save(update_fields=["aktif"])
-        bad_pub = self.api.post(
-            reverse("api-rfq-list"),
-            {
-                "baslik": "bad",
-                "lines": [
-                    {
-                        "aciklama": "x",
-                        "miktar": "1",
-                        "varyant_id": self.varyant.pk,
-                    }
-                ],
-            },
-            format="json",
-            **self._idem("b4-rfq-bad-pub"),
-        )
-        self.assertEqual(bad_pub.status_code, 400)
-        missing = self.api.post(
-            reverse("api-rfq-list"),
-            {
-                "baslik": "bad2",
-                "lines": [
-                    {"aciklama": "x", "miktar": "1", "varyant_id": 99999999}
-                ],
-            },
-            format="json",
-            **self._idem("b4-rfq-bad-miss"),
-        )
-        self.assertEqual(missing.status_code, 400)
-        self.assertEqual(bad_pub.json()["detail"], missing.json()["detail"])
-        self.assertEqual(bad_pub.json()["detail"], "Varyant bulunamadı.")
-        self.varyant.aktif = True
-        self.varyant.save(update_fields=["aktif"])
-
-        # Tedarikçi → 403 (rol kapısı; B2 Order/Catalog)
-        self.api.force_authenticate(user=self.ted_user)
-        cross = self.api.get(reverse("api-rfq-detail", kwargs={"pk": rid}))
-        self.assertEqual(cross.status_code, 403)
-
-        # RFQ create idempotency conflict
-        self.api.force_authenticate(user=self.buyer)
-        payload = {
-            "baslik": "Idem RFQ",
-            "lines": [{"aciklama": "a", "miktar": "1", "birim": "ADET"}],
-        }
-        a = self.api.post(
-            reverse("api-rfq-list"),
-            payload,
-            format="json",
-            **self._idem("b4-rfq-idem"),
-        )
-        self.assertEqual(a.status_code, 201)
-        b = self.api.post(
-            reverse("api-rfq-list"),
-            payload,
-            format="json",
-            **self._idem("b4-rfq-idem"),
-        )
-        self.assertEqual(b.status_code, 201)
-        self.assertEqual(a.json()["id"], b.json()["id"])
-        c = self.api.post(
-            reverse("api-rfq-list"),
-            {**payload, "baslik": "Other"},
-            format="json",
-            **self._idem("b4-rfq-idem"),
-        )
-        self.assertEqual(c.status_code, 409)
-
 
 class ApiB4ConcurrencyTests(B4FixtureMixin, TransactionTestCase):
     def setUp(self):
@@ -467,62 +336,3 @@ class ApiB4ConcurrencyTests(B4FixtureMixin, TransactionTestCase):
         self.assertTrue(all(r.status_code == 200 for r in results))
         ot.refresh_from_db()
         self.assertEqual(ot.durum, OnayTalebi.Durum.REDDEDILDI)
-
-    def test_concurrent_rfq_create_one(self):
-        url = reverse("api-rfq-list")
-        payload = {
-            "baslik": "Conc RFQ",
-            "lines": [{"aciklama": "x", "miktar": "1", "birim": "ADET"}],
-        }
-        results = self._parallel_post(
-            self.buyer.pk, url, payload, "b4c-rfq-1", n=4
-        )
-        self.assertTrue(
-            all(r.status_code == 201 for r in results),
-            [r.content for r in results],
-        )
-        ids = {r.json()["id"] for r in results}
-        self.assertEqual(len(ids), 1)
-        self.assertEqual(
-            RFQ.objects.filter(alici_firma=self.alici, baslik="Conc RFQ").count(),
-            1,
-        )
-
-    def test_concurrent_rfq_message_one(self):
-        rfq = rfq_servisi.olustur(
-            actor=self.buyer,
-            baslik="Msg race",
-            line_specs=[{"aciklama": "x", "miktar": Decimal("1"), "birim": "ADET"}],
-        )
-        rfq = rfq_servisi.gonder(actor=self.buyer, rfq=rfq)
-        url = reverse("api-rfq-message", kwargs={"pk": rfq.pk})
-        results = self._parallel_post(
-            self.buyer.pk,
-            url,
-            {"govde": "aynı mesaj gövdesi"},
-            "b4c-rfq-m",
-            n=4,
-        )
-        self.assertTrue(all(r.status_code == 200 for r in results))
-        self.assertEqual(RFQMessage.objects.filter(rfq=rfq).count(), 1)
-
-    def test_concurrent_rfq_revision_one(self):
-        rfq = rfq_servisi.olustur(
-            actor=self.buyer,
-            baslik="Rev race",
-            line_specs=[{"aciklama": "x", "miktar": Decimal("1"), "birim": "ADET"}],
-            talep_tipi=RFQ.TalepTipi.OZEL_URETIM,
-        )
-        url = reverse("api-rfq-revision", kwargs={"pk": rfq.pk})
-        before = RFQRevizyon.objects.filter(rfq=rfq).count()
-        results = self._parallel_post(
-            self.buyer.pk,
-            url,
-            {"ozet": "revizyon yarisi"},
-            "b4c-rfq-r",
-            n=4,
-        )
-        self.assertTrue(all(r.status_code == 200 for r in results))
-        self.assertEqual(
-            RFQRevizyon.objects.filter(rfq=rfq).count(), before + 1
-        )

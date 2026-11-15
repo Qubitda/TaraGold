@@ -1,4 +1,4 @@
-"""F7-011 + API-B6 — Supplier teklif/stok yazma + ters kör RFQ."""
+"""F7-011 + API-B6 — Supplier teklif/stok yazma."""
 
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ from api.presenters.supplier import (
     present_balance,
     present_movement,
     present_offer,
-    present_rfq_supplier,
     present_warehouse,
 )
 from api.throttles import SupplierRateThrottle
@@ -37,13 +36,6 @@ from fiyatlama.selectors.tenant import scope_teklif_varyant_queryset
 from fiyatlama.services import teklif_servisi
 from firmalar.role_permissions import P
 from firmalar.services.yetki_servisi import can_view_all_tenants, has_perm
-from siparis.models import RFQ, RFQLine
-from siparis.selectors.rfq import (
-    RFQNotFound,
-    get_supplier_rfq_for_actor,
-    scope_supplier_rfq_queryset,
-)
-from siparis.services import rfq_servisi
 from stok.models import StockBalance, Warehouse
 from stok.services import ledger_servisi, warehouse_servisi
 from urunler.models import Varyant
@@ -189,37 +181,6 @@ class SupplierOfferListView(IdempotencyMixin, APIView):
                     detail={"uretim_suresi_gun": "Tam sayı gerekir."}
                 ) from exc
 
-        rfq_obj = None
-        rfq_line_obj = None
-        if body.get("rfq_id") not in (None, ""):
-            try:
-                rfq_pk = int(body.get("rfq_id"))
-            except (TypeError, ValueError) as exc:
-                raise ValidationError(detail={"rfq_id": "Geçersiz tam sayı."}) from exc
-            try:
-                rfq_obj = get_supplier_rfq_for_actor(request.user, rfq_id=rfq_pk)
-            except RFQNotFound as exc:
-                raise ValidationError(detail={"rfq_id": "RFQ bulunamadı."}) from exc
-        if body.get("rfq_line_id") not in (None, ""):
-            try:
-                rfq_line_pk = int(body.get("rfq_line_id"))
-            except (TypeError, ValueError) as exc:
-                raise ValidationError(detail={"rfq_line_id": "Geçersiz tam sayı."}) from exc
-            rfq_line_obj = RFQLine.objects.select_related("rfq").filter(pk=rfq_line_pk).first()
-            if rfq_line_obj is None:
-                raise ValidationError(detail={"rfq_line_id": "RFQ satırı bulunamadı."})
-            if rfq_obj is None:
-                try:
-                    rfq_obj = get_supplier_rfq_for_actor(
-                        request.user, rfq_id=rfq_line_obj.rfq_id
-                    )
-                except RFQNotFound as exc:
-                    raise ValidationError(detail={"rfq_line_id": "RFQ satırı bulunamadı."}) from exc
-            elif rfq_line_obj.rfq_id != rfq_obj.pk:
-                raise ValidationError(
-                    detail={"rfq_line_id": "RFQ satırı bu RFQ ile eşleşmiyor."}
-                )
-
         try:
             teklif = teklif_servisi.taslak_olustur(
                 request.user,
@@ -234,8 +195,6 @@ class SupplierOfferListView(IdempotencyMixin, APIView):
                 uretim_suresi_gun=gun_v,
                 iscilik_override=iscilik,
                 para_birimi=str(body.get("para_birimi") or "TRY"),
-                rfq=rfq_obj,
-                rfq_line=rfq_line_obj,
             )
         except (DjangoValidationError, DjangoPermissionDenied) as exc:
             raise_drf(exc)
@@ -604,86 +563,4 @@ class SupplierStockAdjustView(IdempotencyMixin, APIView):
         return self.idempotency_commit(
             request,
             Response(present_movement(mv), status=status.HTTP_201_CREATED),
-        )
-
-
-class SupplierRfqListView(APIView):
-    """GET — GONDERILDI havuzu; alıcı kimliği yok."""
-
-    permission_classes = [IsAuthenticatedWithFirma]
-    throttle_classes = [SupplierRateThrottle]
-
-    def get(self, request):
-        _require_supplier(request.user)
-        request.query_params.get("firma_id")  # ignore
-        qs = scope_supplier_rfq_queryset(
-            RFQ.objects.prefetch_related("lines", "messages", "revizyonlar"),
-            request.user,
-        )
-        qs = apply_ordering(
-            qs, request, whitelist=("olusturma_tarihi", "pk"), default="-pk"
-        )
-        return paginate_queryset(request, qs, present=present_rfq_supplier)
-
-
-class SupplierRfqDetailView(APIView):
-    permission_classes = [IsAuthenticatedWithFirma]
-    throttle_classes = [SupplierRateThrottle]
-
-    def get(self, request, pk: int):
-        _require_supplier(request.user)
-        try:
-            rfq = get_supplier_rfq_for_actor(request.user, rfq_id=pk)
-        except RFQNotFound as exc:
-            raise NotFound(detail="RFQ bulunamadı.") from exc
-        return Response(present_rfq_supplier(rfq))
-
-
-class SupplierRfqMessageView(IdempotencyMixin, APIView):
-    permission_classes = [IsAuthenticatedWithFirma]
-    throttle_classes = [SupplierRateThrottle]
-
-    def post(self, request, pk: int):
-        _require_supplier(request.user)
-        cached = self.idempotency_begin(request)
-        if cached is not None:
-            return cached
-        body = request.data if isinstance(request.data, dict) else {}
-        try:
-            rfq = get_supplier_rfq_for_actor(request.user, rfq_id=pk)
-            rfq_servisi.mesaj_ekle(
-                actor=request.user, rfq=rfq, govde=body.get("govde") or ""
-            )
-        except RFQNotFound as exc:
-            raise NotFound(detail="RFQ bulunamadı.") from exc
-        except (DjangoValidationError, DjangoPermissionDenied) as exc:
-            raise_drf(exc)
-        rfq = get_supplier_rfq_for_actor(request.user, rfq_id=pk)
-        return self.idempotency_commit(
-            request, Response(present_rfq_supplier(rfq))
-        )
-
-
-class SupplierRfqRevisionView(IdempotencyMixin, APIView):
-    permission_classes = [IsAuthenticatedWithFirma]
-    throttle_classes = [SupplierRateThrottle]
-
-    def post(self, request, pk: int):
-        _require_supplier(request.user)
-        cached = self.idempotency_begin(request)
-        if cached is not None:
-            return cached
-        body = request.data if isinstance(request.data, dict) else {}
-        try:
-            rfq = get_supplier_rfq_for_actor(request.user, rfq_id=pk)
-            rfq_servisi.revizyon_ekle(
-                actor=request.user, rfq=rfq, ozet=body.get("ozet") or ""
-            )
-        except RFQNotFound as exc:
-            raise NotFound(detail="RFQ bulunamadı.") from exc
-        except (DjangoValidationError, DjangoPermissionDenied) as exc:
-            raise_drf(exc)
-        rfq = get_supplier_rfq_for_actor(request.user, rfq_id=pk)
-        return self.idempotency_commit(
-            request, Response(present_rfq_supplier(rfq))
         )

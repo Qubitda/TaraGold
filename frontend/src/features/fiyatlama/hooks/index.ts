@@ -45,14 +45,8 @@ export const fiyatlamaKeys = {
     [...fiyatlamaKeys.all, "quote", String(id)] as const,
   lock: (id: number | string) =>
     [...fiyatlamaKeys.all, "lock", String(id)] as const,
-  supplierRfqs: (params?: Record<string, string | undefined>) =>
-    [...fiyatlamaKeys.all, "supplier-rfqs", params ?? {}] as const,
-  supplierRfq: (id: number | string) =>
-    [...fiyatlamaKeys.all, "supplier-rfq", String(id)] as const,
   supplierOffers: (params?: Record<string, string | undefined>) =>
     [...fiyatlamaKeys.all, "supplier-offers", params ?? {}] as const,
-  buyerRfqs: (params?: Record<string, string | undefined>) =>
-    [...fiyatlamaKeys.all, "buyer-rfqs", params ?? {}] as const,
 };
 
 export function useQuotesListQuery(
@@ -157,27 +151,7 @@ export function useCreatePriceLockMutation() {
   });
 }
 
-export function useSupplierRfqsQuery(
-  params?: Record<string, string | undefined>,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: fiyatlamaKeys.supplierRfqs(params),
-    queryFn: () => fiyatlamaService.getSupplierRfqs(params),
-    enabled,
-  });
-}
 
-export function useSupplierRfqQuery(
-  id: number | string | undefined,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: fiyatlamaKeys.supplierRfq(id ?? ""),
-    queryFn: () => fiyatlamaService.getSupplierRfq(id!),
-    enabled: Boolean(id) && enabled,
-  });
-}
 
 export function useSupplierOffersQuery(
   params?: Record<string, string | undefined>,
@@ -190,27 +164,7 @@ export function useSupplierOffersQuery(
   });
 }
 
-export function useBuyerRfqsQuery(
-  params?: Record<string, string | undefined>,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: fiyatlamaKeys.buyerRfqs(params),
-    queryFn: () => fiyatlamaService.getBuyerRfqs(params),
-    enabled,
-  });
-}
 
-export function useBuyerRfqQuery(
-  id: number | string | undefined,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: [...fiyatlamaKeys.buyerRfqs(), "detail", String(id ?? "")] as const,
-    queryFn: () => fiyatlamaService.getBuyerRfqDetail(id!),
-    enabled: Boolean(id) && enabled,
-  });
-}
 
 export function useFiyatlamaInvalidate() {
   const qc = useQueryClient();

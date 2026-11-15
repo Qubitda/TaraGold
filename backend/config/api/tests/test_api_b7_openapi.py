@@ -32,12 +32,10 @@ class ApiB7OpenApiFreezeTests(SimpleTestCase):
             "/api/v1/checkouts/",
             "/api/v1/orders/",
             "/api/v1/finance/me/",
-            "/api/v1/rfqs/",
             "/api/v1/ops/inspections/",
             "/api/v1/ops/shipments/",
             "/api/v1/supplier/offers/",
             "/api/v1/supplier/stock/adjustments/",
-            "/api/v1/supplier/rfqs/",
         )
         for path in required:
             self.assertIn(path, paths, msg=f"eksik path: {path}")

@@ -1,4 +1,4 @@
-"""API-B6 — tedarikçi teklif/stok yazma + ters kör RFQ."""
+"""API-B6 — tedarikçi teklif/stok yazma."""
 
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ from rest_framework.test import APIClient, APITestCase
 
 from api.masking import assert_masked
 from fiyatlama.models import TedarikciTeklif
-from siparis.models import RFQ
-from siparis.services import rfq_servisi
 from siparis.tests.test_checkout_f4_040 import CheckoutFixtureMixin
 from stok.models import StockBalance
 
@@ -112,84 +110,10 @@ class ApiB6SupplierTests(CheckoutFixtureMixin, APITestCase):
         self.assertIn("teklif_id", row)
         assert_masked(row)
 
-    def test_supplier_rfq_reverse_blind_message(self):
-        rfq = rfq_servisi.olustur(
-            actor=self.buyer,
-            baslik="B6 RFQ",
-            line_specs=[
-                {
-                    "aciklama": "14k yuzuk",
-                    "miktar": Decimal("3"),
-                    "birim": "ADET",
-                    "varyant": self.varyant,
-                }
-            ],
-            talep_tipi=RFQ.TalepTipi.OZEL_URETIM,
-        )
-        rfq = rfq_servisi.gonder(actor=self.buyer, rfq=rfq)
-
-        self.api.force_authenticate(user=self.ted_user)
-        listing = self.api.get(reverse("api-supplier-rfq-list"))
-        self.assertEqual(listing.status_code, 200, listing.content)
-        ids = [r["id"] for r in listing.json()["results"]]
-        self.assertIn(rfq.pk, ids)
-
-        det = self.api.get(
-            reverse("api-supplier-rfq-detail", kwargs={"pk": rfq.pk})
-        )
-        self.assertEqual(det.status_code, 200, det.content)
-        body = det.json()
-        self.assertNotIn("alici_firma_id", body)
-        self.assertNotIn("sube_id", body)
-        self.assertNotIn("buyer_name", body)
-        self.assertNotIn("alici_ad", body)
-        assert_masked(body)
-        self.assertIn("add_message", body["allowed_actions"])
-
-        msg = self.api.post(
-            reverse("api-supplier-rfq-message", kwargs={"pk": rfq.pk}),
-            {"govde": "Uretim suresi 10 gun"},
-            format="json",
-            **self._idem("b6-rfq-m1"),
-        )
-        self.assertEqual(msg.status_code, 200, msg.content)
-        assert_masked(msg.json())
-        self.assertTrue(
-            any("Uretim" in m["govde"] for m in msg.json()["messages"])
-        )
-
-        rev = self.api.post(
-            reverse("api-supplier-rfq-revision", kwargs={"pk": rfq.pk}),
-            {"ozet": "Tasarim revizyon onerisi"},
-            format="json",
-            **self._idem("b6-rfq-r1"),
-        )
-        self.assertEqual(rev.status_code, 200, rev.content)
-        self.assertGreaterEqual(len(rev.json()["revizyonlar"]), 2)
-
-    def test_buyer_forbidden_supplier_draft_hidden(self):
-        draft = rfq_servisi.olustur(
-            actor=self.buyer,
-            baslik="Gizli taslak",
-            line_specs=[
-                {
-                    "aciklama": "x",
-                    "miktar": Decimal("1"),
-                    "birim": "ADET",
-                }
-            ],
-        )
-        self.api.force_authenticate(user=self.ted_user)
-        hidden = self.api.get(
-            reverse("api-supplier-rfq-detail", kwargs={"pk": draft.pk})
-        )
-        self.assertEqual(hidden.status_code, 404)
-
+    def test_buyer_forbidden_supplier_surfaces(self):
         self.api.force_authenticate(user=self.buyer)
         forb = self.api.get(reverse("api-supplier-offers"))
         self.assertEqual(forb.status_code, 403)
-        forb2 = self.api.get(reverse("api-supplier-rfq-list"))
-        self.assertEqual(forb2.status_code, 403)
         forb3 = self.api.post(
             reverse("api-supplier-stock-adjust"),
             {

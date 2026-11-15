@@ -12,8 +12,7 @@ from firmalar.models import Firma, OnayTalebi
 from firmalar.role_permissions import seed_role_permissions
 from firmalar.services import onay_servisi
 from firmalar.services.rol_servisi import sync_user_role_groups
-from siparis.models import RFQ
-from siparis.services import cart_servisi, checkout_servisi, order_servisi, rfq_servisi
+from siparis.services import cart_servisi, checkout_servisi, order_servisi
 from siparis.tests.test_checkout_f4_040 import CheckoutFixtureMixin
 
 User = get_user_model()
@@ -85,7 +84,6 @@ class SecurityIdorF8007Tests(CheckoutFixtureMixin, TestCase):
             403,
         )
         self.assertEqual(self.api.get(reverse("api-cart-mine")).status_code, 403)
-        self.assertEqual(self.api.get(reverse("api-rfq-list")).status_code, 403)
 
     def test_api_approval_cross_tenant_404(self):
         ot = onay_servisi.olustur(
@@ -110,16 +108,3 @@ class SecurityIdorF8007Tests(CheckoutFixtureMixin, TestCase):
         self.assertEqual(res.status_code, 404)
         ot.refresh_from_db()
         self.assertEqual(ot.durum, OnayTalebi.Durum.BEKLEMEDE)
-
-    def test_rfq_detail_cross_actor_denied(self):
-        rfq = rfq_servisi.olustur(
-            actor=self.buyer,
-            baslik="SEC RFQ",
-            line_specs=[
-                {"aciklama": "x", "miktar": Decimal("1"), "birim": "ADET"}
-            ],
-        )
-        self.assertEqual(RFQ.objects.filter(pk=rfq.pk).count(), 1)
-        self.api.force_authenticate(user=self.other_buyer)
-        res = self.api.get(reverse("api-rfq-detail", kwargs={"pk": rfq.pk}))
-        self.assertEqual(res.status_code, 404)

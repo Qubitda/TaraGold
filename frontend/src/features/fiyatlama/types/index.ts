@@ -61,77 +61,13 @@ export interface SupplierVariantPage {
   results: SupplierVariantOption[];
 }
 
-export interface SupplierRfqLine {
-  id?: number;
-  varyant_id?: number;
-  miktar?: string;
-  birim?: string;
-  notlar?: string;
-  hedef_gram?: string;
-  hedef_ayar?: string;
-  aciklama?: string;
-}
 
-export interface RfqMessage {
-  id?: number;
-  gonderen_rol?: string;
-  govde: string;
-  olusturma_tarihi?: string | null;
-}
 
-export interface RfqRevision {
-  id?: number;
-  versiyon?: number;
-  ozet: string;
-  olusturma_tarihi?: string | null;
-}
 
-export interface OpsRfqMatchCandidate {
-  varyant_id: number;
-  sku?: string;
-  urun_ad?: string;
-  skor?: string | number;
-  neden?: string;
-}
 
-export interface OpsRfqMatch {
-  id: number;
-  rfq_line_id: number;
-  varyant_id: number;
-  durum: string;
-  skor?: string | number | null;
-  kanit?: string;
-  allowed_actions?: string[];
-}
 
-export interface SupplierRfq {
-  id: number;
-  baslik?: string;
-  talep_tipi: string;
-  durum: "TASLAK" | "GONDERILDI" | "TEKLIF_ALINDI" | "KAPANDI" | "IPTAL" | string;
-  allowed_actions: string[];
-  server_now?: string;
-  lines?: SupplierRfqLine[];
-  messages?: RfqMessage[];
-  revizyonlar?: RfqRevision[];
-}
 
-export interface SupplierRfqPage {
-  count: number;
-  results: SupplierRfq[];
-}
 
-export interface BuyerRfqCreateRequest {
-  baslik?: string;
-  talep_tipi: "STANDART" | "KATALOG_DISI" | "OZEL_URETIM" | string;
-  sube_id?: number;
-  lines: Array<{
-    varyant_id?: number;
-    miktar: string;
-    birim?: string;
-    aciklama?: string;
-  }>;
-}
 
 export interface SupplierOffer {
   id: number;
@@ -151,8 +87,6 @@ export interface SupplierOffer {
   versiyon?: number;
   uretim_suresi_gun?: number | null;
   gecerlilik_bitis?: string | null;
-  rfq_id?: number | null;
-  rfq_line_id?: number | null;
 }
 
 export interface SupplierOfferPage {
@@ -172,8 +106,6 @@ export interface SupplierOfferCreateRequest {
   uretim_suresi_gun?: number;
   gecerlilik_baslangic?: string;
   gecerlilik_bitis?: string;
-  rfq_id?: number;
-  rfq_line_id?: number;
 }
 
 export interface SupplierOfferImportSatir {

@@ -95,7 +95,6 @@ function createMockState() {
     can_manage_org: true,
     can_manage_qc: true,
     can_manage_return: true,
-    can_manage_rfq: true,
     can_manage_shipment: true,
     can_manage_users: true,
     can_view_cart: true,
@@ -324,40 +323,6 @@ function createMockState() {
         },
       ],
       hazirlama_emirleri: [],
-    },
-  ];
-
-  const rfqs: any[] = [
-    {
-      id: 301,
-      talep_tipi: "STANDART",
-      durum: "GONDERILDI",
-      baslik: "22K Burma Bilezik Toptan Alım",
-      olusturma_tarihi: new Date(Date.now() - 7_200_000).toISOString(),
-      allowed_actions: ["send", "add_message", "add_revision"],
-      lines: [
-        {
-          id: 1,
-          varyant_id: 1001,
-          miktar: "10.000",
-          birim: "ADET",
-          aciklama: "62mm standart ölçü",
-        },
-      ],
-      messages: [],
-      revizyonlar: [],
-    },
-  ];
-
-  const rfqMatches: any[] = [
-    {
-      id: 901,
-      rfq_line_id: 1,
-      varyant_id: 1001,
-      durum: "ONERILDI",
-      skor: "0.94",
-      kanit: "22K Burma 62mm eşleşme",
-      allowed_actions: ["approve", "reject"],
     },
   ];
 
@@ -1315,8 +1280,6 @@ function createMockState() {
         cart_id: cart.id,
         cart_line_count: cart.lines.length,
         order_count: orders.length,
-        rfq_count: rfqs.length,
-        rfq_ozel_count: 0,
       });
       return true;
     }
@@ -1868,123 +1831,6 @@ function createMockState() {
         gecerli: true,
       };
       sendJson(res, 200, l);
-      return true;
-    }
-
-    // RFQs & Supplier Offers
-    if ((path === "/rfqs/" || path === "/supplier/rfqs/") && method === "GET") {
-      sendJson(res, 200, paginate(rfqs, url));
-      return true;
-    }
-    if (path === "/rfqs/" && method === "POST") {
-      const body = await readJsonBody(req);
-      const rfq = {
-        id: genId(),
-        talep_tipi: body.talep_tipi || "STANDART",
-        durum: "TASLAK",
-        baslik: body.baslik || "Yeni RFQ Talebi",
-        olusturma_tarihi: nowIso(),
-        allowed_actions: ["send"],
-        lines: body.lines || [],
-      };
-      rfqs.unshift(rfq);
-      sendJson(res, 201, rfq);
-      return true;
-    }
-    const rfqDetailMatch = /^\/(?:supplier\/)?rfqs\/(\d+)\/(?:(send|messages|revisions)\/)?$/.exec(path);
-    if (rfqDetailMatch) {
-      const rfq = rfqs.find((r) => r.id === Number(rfqDetailMatch[1]));
-      if (!rfq) {
-        sendJson(res, 404, { status: 404, title: "RFQ bulunamadı" });
-        return true;
-      }
-      const sub = rfqDetailMatch[2];
-      if (sub === "send" && method === "POST") {
-        rfq.durum = "GONDERILDI";
-        sendJson(res, 200, rfq);
-        return true;
-      }
-      if (sub === "messages" && method === "POST") {
-        const body = await readJsonBody(req);
-        const msg = {
-          id: genId(),
-          gonderen_rol: path.startsWith("/supplier/") ? "TEDARIKCI" : "ALICI",
-          govde: String(body.govde || ""),
-          olusturma_tarihi: nowIso(),
-        };
-        rfq.messages = rfq.messages || [];
-        rfq.messages.push(msg);
-        sendJson(res, 201, msg);
-        return true;
-      }
-      if (sub === "revisions" && method === "POST") {
-        const body = await readJsonBody(req);
-        rfq.revizyonlar = rfq.revizyonlar || [];
-        const rev = {
-          id: genId(),
-          versiyon: rfq.revizyonlar.length + 1,
-          ozet: String(body.ozet || ""),
-          olusturma_tarihi: nowIso(),
-        };
-        rfq.revizyonlar.push(rev);
-        sendJson(res, 201, rev);
-        return true;
-      }
-      sendJson(res, 200, rfq);
-      return true;
-    }
-
-    const rfqMatchCand = /^\/ops\/rfq-lines\/(\d+)\/match-candidates\/$/.exec(path);
-    if (rfqMatchCand && method === "GET") {
-      const lineId = Number(rfqMatchCand[1]);
-      const candidates = catalogProducts.flatMap((p) =>
-        p.varyantlar.map((v) => ({
-          varyant_id: v.id,
-          sku: v.sku,
-          urun_ad: p.ad,
-          skor: "0.94",
-          neden: `${p.ayar} · ${v.gram}g`,
-        }))
-      );
-      sendJson(res, 200, { rfq_line_id: lineId, results: candidates });
-      return true;
-    }
-    const rfqLineMatchesPath = /^\/ops\/rfq-lines\/(\d+)\/matches\/$/.exec(path);
-    if (rfqLineMatchesPath) {
-      const lineId = Number(rfqLineMatchesPath[1]);
-      if (method === "GET") {
-        sendJson(res, 200, {
-          rfq_line_id: lineId,
-          results: rfqMatches.filter((m) => m.rfq_line_id === lineId),
-        });
-        return true;
-      }
-      if (method === "POST") {
-        const body = await readJsonBody(req);
-        const m = {
-          id: genId(),
-          rfq_line_id: lineId,
-          varyant_id: Number(body.varyant_id),
-          durum: "ONERILDI",
-          skor: body.skor || "0.90",
-          kanit: body.kanit || "",
-          allowed_actions: ["approve", "reject"],
-        };
-        rfqMatches.push(m);
-        sendJson(res, 201, m);
-        return true;
-      }
-    }
-    const rfqMatchAction = /^\/ops\/rfq-matches\/(\d+)\/(approve|reject)\/$/.exec(path);
-    if (rfqMatchAction && method === "POST") {
-      const m = rfqMatches.find((x) => x.id === Number(rfqMatchAction[1]));
-      if (!m) {
-        sendJson(res, 404, { status: 404, title: "Eşleşme bulunamadı" });
-        return true;
-      }
-      m.durum = rfqMatchAction[2] === "approve" ? "ONAYLANDI" : "REDDEDILDI";
-      m.allowed_actions = [];
-      sendJson(res, 200, m);
       return true;
     }
 

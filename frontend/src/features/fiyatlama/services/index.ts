@@ -1,23 +1,16 @@
 import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
 import type { BuyerPriceLock, BuyerQuote, Paginated } from "@/lib/api/types";
 import type {
-  BuyerRfqCreateRequest,
-  OpsRfqMatch,
-  OpsRfqMatchCandidate,
   PriceLock,
   PriceLockPage,
   PriceQuote,
   PriceQuotePage,
-  RfqMessage,
-  RfqRevision,
   SupplierOffer,
   SupplierOfferCreateRequest,
   SupplierOfferImportCommitResult,
   SupplierOfferImportPreview,
   SupplierOfferImportSatir,
   SupplierOfferPage,
-  SupplierRfq,
-  SupplierRfqPage,
   SupplierVariantPage,
 } from "../types";
 
@@ -156,14 +149,6 @@ export const fiyatlamaService = {
   ): Promise<SupplierVariantPage> {
     return apiFetch<SupplierVariantPage>(`/supplier/variants/${qs(params)}`);
   },
-  getSupplierRfqs(
-    params?: Record<string, string | undefined>
-  ): Promise<SupplierRfqPage> {
-    return apiFetch<SupplierRfqPage>(`/supplier/rfqs/${qs(params)}`);
-  },
-  getSupplierRfq(id: number | string): Promise<SupplierRfq> {
-    return apiFetch<SupplierRfq>(`/supplier/rfqs/${id}/`);
-  },
   getSupplierOffers(
     params?: Record<string, string | undefined>
   ): Promise<SupplierOfferPage> {
@@ -222,103 +207,5 @@ export const fiyatlamaService = {
         idempotencyKey: newIdempotencyKey(),
       }
     );
-  },
-  getBuyerRfqs(params?: Record<string, string | undefined>): Promise<SupplierRfqPage> {
-    return apiFetch<SupplierRfqPage>(`/rfqs/${qs(params)}`);
-  },
-  getBuyerRfqDetail(id: number | string): Promise<SupplierRfq> {
-    return apiFetch<SupplierRfq>(`/rfqs/${id}/`);
-  },
-  createBuyerRfq(data: BuyerRfqCreateRequest): Promise<SupplierRfq> {
-    return apiFetch<SupplierRfq>("/rfqs/", {
-      method: "POST",
-      body: data,
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  sendBuyerRfq(id: number | string): Promise<SupplierRfq> {
-    return apiFetch<SupplierRfq>(`/rfqs/${id}/send/`, {
-      method: "POST",
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  addBuyerRfqMessage(
-    id: number | string,
-    govde: string
-  ): Promise<RfqMessage> {
-    return apiFetch<RfqMessage>(`/rfqs/${id}/messages/`, {
-      method: "POST",
-      body: { govde },
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  addBuyerRfqRevision(
-    id: number | string,
-    ozet: string
-  ): Promise<RfqRevision> {
-    return apiFetch<RfqRevision>(`/rfqs/${id}/revisions/`, {
-      method: "POST",
-      body: { ozet },
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  addSupplierRfqMessage(
-    id: number | string,
-    govde: string
-  ): Promise<RfqMessage> {
-    return apiFetch<RfqMessage>(`/supplier/rfqs/${id}/messages/`, {
-      method: "POST",
-      body: { govde },
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  addSupplierRfqRevision(
-    id: number | string,
-    ozet: string
-  ): Promise<RfqRevision> {
-    return apiFetch<RfqRevision>(`/supplier/rfqs/${id}/revisions/`, {
-      method: "POST",
-      body: { ozet },
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  getRfqMatchCandidates(
-    lineId: number,
-    limit = 10
-  ): Promise<{ rfq_line_id: number; results: OpsRfqMatchCandidate[] }> {
-    return apiFetch<{ rfq_line_id: number; results: OpsRfqMatchCandidate[] }>(
-      `/ops/rfq-lines/${lineId}/match-candidates/?limit=${limit}`
-    );
-  },
-  getRfqLineMatches(
-    lineId: number
-  ): Promise<{ rfq_line_id: number; results: OpsRfqMatch[] }> {
-    return apiFetch<{ rfq_line_id: number; results: OpsRfqMatch[] }>(
-      `/ops/rfq-lines/${lineId}/matches/`
-    );
-  },
-  createRfqLineMatch(
-    lineId: number,
-    data: { varyant_id: number; kanit?: string; skor?: string }
-  ): Promise<OpsRfqMatch> {
-    return apiFetch<OpsRfqMatch>(`/ops/rfq-lines/${lineId}/matches/`, {
-      method: "POST",
-      body: data,
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  approveRfqMatch(matchId: number): Promise<OpsRfqMatch> {
-    return apiFetch<OpsRfqMatch>(`/ops/rfq-matches/${matchId}/approve/`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: newIdempotencyKey(),
-    });
-  },
-  rejectRfqMatch(matchId: number, neden?: string): Promise<OpsRfqMatch> {
-    return apiFetch<OpsRfqMatch>(`/ops/rfq-matches/${matchId}/reject/`, {
-      method: "POST",
-      body: neden ? { neden } : {},
-      idempotencyKey: newIdempotencyKey(),
-    });
   },
 };

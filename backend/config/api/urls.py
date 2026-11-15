@@ -143,10 +143,6 @@ from api.views import (
     OpsProductExportView,
     OpsProductAuditView,
     OpsProductStockView,
-    OpsRfqMatchApproveView,
-    OpsRfqMatchCandidatesView,
-    OpsRfqMatchListCreateView,
-    OpsRfqMatchRejectView,
     OpsShipmentCancelView,
     OpsShipmentDeliverView,
     OpsShipmentDetailView,
@@ -180,11 +176,6 @@ from api.views import (
     AliciDavranisOzetView,
     CiroAnomaliView,
     TicariSiparisOzetView,
-    RfqDetailView,
-    RfqListCreateView,
-    RfqMessageView,
-    RfqRevisionView,
-    RfqSendView,
     ShipmentDetailView,
     ShipmentListView,
     ShipmentPodView,
@@ -195,10 +186,6 @@ from api.views import (
     SupplierOfferListView,
     SupplierOfferSubmitView,
     SupplierOfferVersionView,
-    SupplierRfqDetailView,
-    SupplierRfqListView,
-    SupplierRfqMessageView,
-    SupplierRfqRevisionView,
     SupplierStockAdjustView,
     SupplierStockSummaryView,
     SupplierVariantListView,
@@ -524,26 +511,6 @@ api_urlpatterns = [
         SupplierStockAdjustView.as_view(),
         name="api-supplier-stock-adjust",
     ),
-    path(
-        "supplier/rfqs/",
-        SupplierRfqListView.as_view(),
-        name="api-supplier-rfq-list",
-    ),
-    path(
-        "supplier/rfqs/<int:pk>/",
-        SupplierRfqDetailView.as_view(),
-        name="api-supplier-rfq-detail",
-    ),
-    path(
-        "supplier/rfqs/<int:pk>/messages/",
-        SupplierRfqMessageView.as_view(),
-        name="api-supplier-rfq-message",
-    ),
-    path(
-        "supplier/rfqs/<int:pk>/revisions/",
-        SupplierRfqRevisionView.as_view(),
-        name="api-supplier-rfq-revision",
-    ),
     path("credit/me/", CreditMineView.as_view(), name="api-credit-mine"),
     path("credit/check/", CreditCheckView.as_view(), name="api-credit-check"),
     path("finance/me/", BuyerFinanceSummaryView.as_view(), name="api-finance-mine"),
@@ -685,26 +652,6 @@ api_urlpatterns = [
         "ops/shipments/<int:pk>/pod/",
         OpsShipmentPodCreateView.as_view(),
         name="api-ops-shipment-pod",
-    ),
-    path(
-        "ops/rfq-lines/<int:line_id>/match-candidates/",
-        OpsRfqMatchCandidatesView.as_view(),
-        name="api-ops-rfq-match-candidates",
-    ),
-    path(
-        "ops/rfq-lines/<int:line_id>/matches/",
-        OpsRfqMatchListCreateView.as_view(),
-        name="api-ops-rfq-matches",
-    ),
-    path(
-        "ops/rfq-matches/<int:pk>/approve/",
-        OpsRfqMatchApproveView.as_view(),
-        name="api-ops-rfq-match-approve",
-    ),
-    path(
-        "ops/rfq-matches/<int:pk>/reject/",
-        OpsRfqMatchRejectView.as_view(),
-        name="api-ops-rfq-match-reject",
     ),
     path("feed/urunler/", FeedUrunListView.as_view(), name="api-feed-urunler"),
     path(
@@ -1022,7 +969,7 @@ api_urlpatterns = [
         PaymentWebhookView.as_view(),
         name="api-payment-webhook",
     ),
-    # API-B4 — kurumsal (org / onay / RFQ)
+    # API-B4 — kurumsal (org / onay)
     path("org-units/", OrgUnitListCreateView.as_view(), name="api-org-list"),
     path(
         "org-units/<int:pk>/",
@@ -1063,23 +1010,6 @@ api_urlpatterns = [
         "approvals/<int:pk>/reject/",
         ApprovalRejectView.as_view(),
         name="api-approval-reject",
-    ),
-    path("rfqs/", RfqListCreateView.as_view(), name="api-rfq-list"),
-    path("rfqs/<int:pk>/", RfqDetailView.as_view(), name="api-rfq-detail"),
-    path(
-        "rfqs/<int:pk>/send/",
-        RfqSendView.as_view(),
-        name="api-rfq-send",
-    ),
-    path(
-        "rfqs/<int:pk>/messages/",
-        RfqMessageView.as_view(),
-        name="api-rfq-message",
-    ),
-    path(
-        "rfqs/<int:pk>/revisions/",
-        RfqRevisionView.as_view(),
-        name="api-rfq-revision",
     ),
 ]
 
