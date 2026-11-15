@@ -65,7 +65,13 @@ def _order_tutar(order: Order) -> tuple[Decimal, str]:
     if not lines:
         return Decimal("0.00"), "TRY"
     pb = lines[0].para_birimi
-    toplam = sum((ln.snapshot_satir_tutari_vergisiz for ln in lines), Decimal("0"))
+    # ADR-0038: kesin (snapshot) yoksa tahmini
+    toplam = Decimal("0")
+    for ln in lines:
+        v = ln.snapshot_satir_tutari_vergisiz
+        if v is None:
+            v = ln.tahmini_satir_tutari_vergisiz
+        toplam += Decimal(v or "0")
     return toplam.quantize(Decimal("0.01")), pb
 
 

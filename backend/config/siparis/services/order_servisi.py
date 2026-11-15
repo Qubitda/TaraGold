@@ -1,4 +1,4 @@
-"""Order oluşturma / iptal — F4-050…053 (snapshot, tüketim, stok iade; finans yok)."""
+"""Order oluşturma / iptal — ADR-0038 (tahmini fiyat; stok onayda)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from firmalar.services.audit_servisi import (
     record_audit_durable,
 )
 from firmalar.services import outbox_servisi
-from fiyatlama.models import PriceLock
+from fiyatlama.models import PriceQuote
 from siparis.birim_constants import SepetBirimi
 from siparis.models import CartLine, CheckoutAttempt, Order, OrderLine
 from siparis.services.cart_servisi import _assert_buyer_actor
@@ -21,10 +21,6 @@ from stok.models import StockMovement, StockReservation
 from stok.services.ledger_servisi import (
     get_or_create_balance_locked,
     save_balance_fields,
-)
-from stok.services.reservation_servisi import (
-    expire_reservation,
-    tuket_rezervasyon,
 )
 
 _CENT = Decimal("0.01")
@@ -34,17 +30,15 @@ def _q2(value: Decimal) -> Decimal:
     return Decimal(value).quantize(_CENT, rounding=ROUND_HALF_UP)
 
 
-def _snapshot_from_lock(*, lock, miktar: Decimal, birim: str) -> tuple[Decimal, Decimal]:
-    """Lock toplamı → satır snapshot.
-
-    ADET: toplam = parça; × miktar.
-    GRAM/KARAT: toplam = quote.gram için; gram başına ölçekle (çift sayım yok).
-    """
-    toplam = Decimal(lock.toplam_vergisiz)
+def _tahmini_from_quote(
+    *, quote, miktar: Decimal, birim: str
+) -> tuple[Decimal, Decimal]:
+    """Quote toplamı → tahmini birim/satır (ADR-0038)."""
+    toplam = Decimal(quote.toplam_vergisiz)
     if birim == SepetBirimi.ADET:
         return toplam, _q2(toplam * miktar)
 
-    quote_gram = getattr(lock.quote, "gram", None)
+    quote_gram = getattr(quote, "gram", None)
     if quote_gram is None or Decimal(quote_gram) <= 0:
         raise ValidationError(
             "GRAM sipariş için PriceQuote.gram zorunlu; satır tutarı hesaplanamaz."
@@ -54,14 +48,20 @@ def _snapshot_from_lock(*, lock, miktar: Decimal, birim: str) -> tuple[Decimal, 
     return birim_fiyat, _q2(birim_fiyat * miktar)
 
 
+# Geriye dönük alias (eski testler)
+def _snapshot_from_lock(*, lock, miktar: Decimal, birim: str) -> tuple[Decimal, Decimal]:
+    return _tahmini_from_quote(quote=lock.quote, miktar=miktar, birim=birim)
+
+
 def olustur_from_checkout(
     *,
     actor,
     checkout_attempt: CheckoutAttempt,
     now=None,
 ) -> Order:
-    """Başarılı checkout adayından sipariş üretir; rezervasyonları tüketir."""
+    """Başarılı checkout → ONAY_BEKLIYOR; tahmini fiyat; stok tutulmaz (ADR-0038)."""
     now = now or timezone.now()
+    del now
     alici_firma = getattr(actor, "firma", None)
 
     try:
@@ -102,36 +102,7 @@ def olustur_from_checkout(
         raise ValidationError("Checkout sonucunda satır yok.")
 
     try:
-        # F4-022: TTL expire, order domain_atomic DIŞINDA kalıcı yazılır.
-        # (İç içe atomic/savepoint rollback expire'ı silerdi.)
-        for row in rows:
-            res = StockReservation.objects.filter(
-                pk=int(row["reservation_id"])
-            ).first()
-            if res is None:
-                continue
-            if (
-                res.durum == StockReservation.Durum.AKTIF
-                and now >= res.gecerlilik_sonu
-            ):
-                expire_reservation(res, now=now, actor=None)
-
-        for row in rows:
-            res = StockReservation.objects.filter(
-                pk=int(row["reservation_id"])
-            ).first()
-            if res is None or res.durum != StockReservation.Durum.AKTIF:
-                raise ValidationError(
-                    "Rezervasyon aktif değil veya süresi dolmuş; "
-                    "sipariş oluşturulamaz."
-                )
-            if now >= res.gecerlilik_sonu:
-                raise ValidationError(
-                    "Rezervasyon süresi dolmuş; sipariş oluşturulamaz."
-                )
-
         with domain_atomic():
-            # Yarış: aynı attempt
             locked_attempt = (
                 CheckoutAttempt.objects.select_for_update()
                 .filter(pk=checkout_attempt.pk)
@@ -161,61 +132,70 @@ def olustur_from_checkout(
             order.save()
 
             for row in rows:
-                lock = (
-                    PriceLock.objects.select_for_update()
-                    .select_related("quote")
-                    .get(pk=int(row["lock_id"]))
+                quote = (
+                    PriceQuote.objects.select_related("varyant")
+                    .filter(pk=int(row["quote_id"]))
+                    .first()
                 )
-                if not lock.is_gecerli(now=now):
-                    raise ValidationError(
-                        "PriceLock süresi dolmuş; sipariş oluşturulamaz."
-                    )
-                if lock.alici_firma_id != alici_firma.pk:
-                    raise ValidationError("PriceLock tenant uyumsuz.")
-
-                res = StockReservation.objects.select_for_update().get(
-                    pk=int(row["reservation_id"])
-                )
-                if res.durum != StockReservation.Durum.AKTIF:
-                    raise ValidationError(
-                        f"Rezervasyon aktif değil: {res.durum}"
-                    )
+                if quote is None:
+                    raise ValidationError("Checkout quote bulunamadı.")
+                if quote.alici_firma_id != alici_firma.pk:
+                    raise ValidationError("Quote tenant uyumsuz.")
 
                 miktar = Decimal(row["miktar"])
                 birim = row["birim"]
-                birim_fiyat, satir_tutar = _snapshot_from_lock(
-                    lock=lock, miktar=miktar, birim=birim
+                birim_fiyat, satir_tutar = _tahmini_from_quote(
+                    quote=quote, miktar=miktar, birim=birim
                 )
-                res_id = res.pk
-                varyant_id = lock.quote.varyant_id
+                from siparis.services.has_hesap import compute_line_has_tl
+                from siparis.services.line_kaynak import line_varyant_fiyat
 
-                # Rezervasyonu tüket (SATIS movement) — F4-052
-                tuket_rezervasyon(res, actor=actor, now=now)
+                vf = getattr(quote, "varyant_fiyat", None)
+                if vf is None:
+                    # Fake line shim for resolver
+                    class _Tmp:
+                        price_quote = quote
+                        price_lock = None
+                        varyant = quote.varyant
+
+                    vf = line_varyant_fiyat(_Tmp())
+                calc = compute_line_has_tl(
+                    miktar=miktar,
+                    birim=birim,
+                    quote=quote,
+                    vf=vf,
+                    varyant=quote.varyant,
+                )
 
                 line = OrderLine(
                     order=order,
-                    varyant_id=varyant_id,
-                    price_lock=lock,
-                    stock_reservation_id=res_id,
+                    varyant_id=quote.varyant_id,
+                    price_quote=quote,
+                    price_lock=None,
+                    stock_reservation=None,
                     miktar=miktar,
                     birim=birim,
-                    snapshot_birim_fiyat_vergisiz=birim_fiyat,
-                    snapshot_satir_tutari_vergisiz=satir_tutar,
-                    para_birimi=lock.para_birimi,
+                    gram_toplam=calc["gram_toplam"],
+                    tas_agirligi=calc.get("tas_agirligi"),
+                    net_altin_gram=calc.get("net_altin_gram"),
+                    milyem=calc["milyem"],
+                    iscilik_birimi=calc["iscilik_birimi"],
+                    tahmini_has_gram=calc["tahmini_has_gram"],
+                    has_gram=None,
+                    tl_borc=None,
+                    usd_borc=None,
+                    tahmini_birim_fiyat_vergisiz=birim_fiyat,
+                    tahmini_satir_tutari_vergisiz=satir_tutar,
+                    snapshot_birim_fiyat_vergisiz=None,
+                    snapshot_satir_tutari_vergisiz=None,
+                    para_birimi=quote.para_birimi,
                 )
                 line.save()
 
-                # F5-041b: AKTIF contract release planı varsa serbest miktarı tüket
-                from fiyatlama.services.release_servisi import tuket_order_line
-
-                tuket_order_line(actor=actor, order_line=line)
-
-            # F10-012: satır snapshot toplamı ≤ harcama limiti (onaysız aşım yok)
             from firmalar.services.limiti_servisi import assert_order_limit
 
             assert_order_limit(order)
 
-            # Sepet satırlarını temizle (sipariş sonrası)
             if locked_attempt.cart_id:
                 CartLine.objects.filter(cart_id=locked_attempt.cart_id).delete()
 
@@ -229,9 +209,9 @@ def olustur_from_checkout(
                     "checkout_attempt_id": locked_attempt.pk,
                     "line_count": len(rows),
                     "idempotency_key": order.idempotency_key,
+                    "adr": "0001",
                 },
             )
-            # F4-090: aynı atomic — rollback outbox'ı da siler
             outbox_servisi.enqueue(
                 event_type="order.created",
                 payload={
@@ -292,10 +272,12 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
     if order.durum == Order.Durum.IPTAL:
         return order
 
+    # ADR-0001: onay sonrası HAZIRLANIYOR da iptal edilebilir (aktif sevkiyat yoksa).
     _iptal_izinli = {
         Order.Durum.OLUSTURULDU,
         Order.Durum.ONAY_BEKLIYOR,
         Order.Durum.ONAYLANDI,
+        Order.Durum.HAZIRLANIYOR,
         Order.Durum.REDDEDILDI,
     }
     if order.durum not in _iptal_izinli:
@@ -340,9 +322,18 @@ def iptal_siparis(*, actor, order: Order, now=None) -> Order:
                 )
 
             iade_ids: list[int] = []
+            # ADR-0038: ONAY_BEKLIYOR ve stoksuz satırda IADE yok
             for line in locked.lines.all():
                 res = line.stock_reservation
+                if res is None:
+                    continue
                 if res.durum != StockReservation.Durum.TUKETILDI:
+                    # Onay öncesi / tüketilmemiş hold — stok bırakılacak bir şey yok
+                    if locked.durum in (
+                        Order.Durum.ONAY_BEKLIYOR,
+                        Order.Durum.REDDEDILDI,
+                    ):
+                        continue
                     raise ValidationError(
                         "İptal için satır rezervasyonu tüketilmiş olmalı."
                     )

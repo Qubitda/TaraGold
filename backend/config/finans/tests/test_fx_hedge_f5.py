@@ -57,10 +57,21 @@ class HedgeAndFxTests(CheckoutFixtureMixin, TestCase):
             )
 
     def test_open_has_locked_minus_hedge(self):
-        self._quote_and_cart(miktar=Decimal("2"))
-        checkout_servisi.checkout(actor=self.buyer, idempotency_key="fx-co-1")
+        # ADR-0001: locked_customer = pozitif HAS cari borcu
+        from finans.constants import HAS_KODU
+        from finans.models import CariHesap
+        from firmalar.services.platform_kurulum import ensure_platform_firma
+
+        platform = ensure_platform_firma()
+        hesap = CariHesap(
+            firma=self.alici,
+            karsi_firma=platform,
+            para_birimi=HAS_KODU,
+            bakiye=Decimal("5.8500"),
+        )
+        hesap.save()
         locked = fx_servisi.locked_customer_has()
-        self.assertGreater(locked, Decimal("0"))
+        self.assertEqual(locked, Decimal("5.8500"))
 
         hedge_servisi.kaydet_hedge(
             actor=self.finance,
@@ -75,8 +86,17 @@ class HedgeAndFxTests(CheckoutFixtureMixin, TestCase):
 
     @override_settings(HAS_POSITION_LIMIT=Decimal("0.0001"))
     def test_over_limit_sets_approval_required(self):
-        self._quote_and_cart(miktar=Decimal("2"))
-        checkout_servisi.checkout(actor=self.buyer, idempotency_key="fx-co-2")
+        from finans.constants import HAS_KODU
+        from finans.models import CariHesap
+        from firmalar.services.platform_kurulum import ensure_platform_firma
+
+        platform = ensure_platform_firma()
+        CariHesap(
+            firma=self.alici,
+            karsi_firma=platform,
+            para_birimi=HAS_KODU,
+            bakiye=Decimal("1.0000"),
+        ).save()
         pos = fx_servisi.open_has_position()
         self.assertTrue(pos.over_limit)
         self.assertTrue(pos.approval_required)

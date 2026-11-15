@@ -140,19 +140,26 @@ def _compute_line_supplier_cost(line, *, now) -> tuple[Decimal | None, str]:
 
 
 def _line_groups(order: Order, *, now) -> dict[int, dict]:
-    """tedarikci_id → {gram, para_birimi, tutar}."""
+    """tedarikci_id → {gram, para_birimi, tutar} (ADR-0001; teklif yok)."""
+    from siparis.services.line_kaynak import line_quote, line_tedarikci_id
+
     groups: dict[int, dict] = {}
     lines = list(
         order.lines.select_related(
             "varyant__urun__ayar",
             "varyant__urun__metal_cins",
-            "stock_reservation__teklif",
+            "stock_reservation__warehouse",
+            "price_quote__varyant_fiyat",
             "price_lock__quote",
-        ).prefetch_related("stock_reservation__teklif__taslar")
+        )
     )
     single = len(lines) == 1
     for line in lines:
-        tedarikci_id = line.stock_reservation.teklif.tedarikci_id
+        tedarikci_id = line_tedarikci_id(line)
+        if not tedarikci_id:
+            raise ValidationError(
+                f"Satır #{line.pk}: tedarikçi çözülemedi (VaryantFiyat/depo)."
+            )
         bucket = groups.setdefault(
             tedarikci_id,
             {
@@ -164,8 +171,10 @@ def _line_groups(order: Order, *, now) -> dict[int, dict]:
         )
         if line.birim == "GRAM":
             bucket["gram"] += line.miktar
+        elif line.gram_toplam is not None:
+            bucket["gram"] += Decimal(line.gram_toplam)
         elif single:
-            quote = getattr(line.price_lock, "quote", None)
+            quote = line_quote(line)
             if quote is not None and getattr(quote, "gram", None):
                 bucket["gram"] += Decimal(str(quote.gram))
         cost, cost_pb = _compute_line_supplier_cost(line, now=now)

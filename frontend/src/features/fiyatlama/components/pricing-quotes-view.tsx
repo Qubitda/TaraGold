@@ -14,10 +14,6 @@ import { urunlerService, type BuyerCatalogVariant } from "@/features/urunler";
 import { tanimlarService } from "@/features/tanimlar";
 import { formatMoney, formatDateTime } from "@/lib/format";
 import {
-  QuoteCountdown,
-  isQuoteExpired,
-} from "@/components/commerce/quote-countdown";
-import {
   EntityModal,
   ListPage,
   RelationSelect,
@@ -152,13 +148,9 @@ export function PricingQuotesView() {
   const handleRefreshQuote = async (quoteId: number) => {
     setRefreshingId(quoteId);
     try {
-      const quote = await fiyatlamaService.getQuote(quoteId);
+      await fiyatlamaService.getQuote(quoteId);
       await quotesQ.refetch();
-      if (isQuoteExpired(quote.expires_at)) {
-        actionToast.info("Teklif süresi dolmuş", "Katalogdan yeni fiyat alabilirsiniz.");
-      } else {
-        actionToast.success("Fiyat teklifi güncellendi");
-      }
+      actionToast.success("Tahmini fiyat güncellendi");
     } catch (err) {
       actionToast.error("Fiyat teklifi yenilenemedi", err);
     } finally {
@@ -167,14 +159,10 @@ export function PricingQuotesView() {
   };
 
   const handleLock = async (q: PriceQuote) => {
-    if (isQuoteExpired(q.expires_at)) {
-      actionToast.error("Teklif süresi dolmuş", "Süresi dolan fiyat kilitlenemez.");
-      return;
-    }
     setLockingId(q.id);
     try {
       await createLockMut.mutateAsync(q.id);
-      actionToast.success("Fiyat kilitlendi");
+      actionToast.success("Fiyat kilitlendi (opsiyonel; sipariş için zorunlu değil)");
       await Promise.all([quotesQ.refetch(), locksQ.refetch()]);
     } catch (err) {
       actionToast.error("Fiyat kilitlenemedi", err);
@@ -224,7 +212,7 @@ export function PricingQuotesView() {
       {activeTab === "quotes" ? (
         <ListPage
           title="Fiyatlama & Fiyat Teklifleri"
-          description="Alıcıya sunulan güncel fiyat tekliflerini inceleyin ve süresi dolmadan fiyatı kilitleyin."
+          description="Tahmini net fiyat teklifleri. Kesin fiyat sipariş onayında güncel kura göre yazılır; kilit zorunlu değildir."
           createLabel={canBuyerWrite ? "Yeni Fiyat Al" : undefined}
           onCreate={
             canBuyerWrite
@@ -268,17 +256,14 @@ export function PricingQuotesView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Ürün & Varyant</TableHead>
-                <TableHead className="text-right">Net Tutar</TableHead>
-                <TableHead>Durum</TableHead>
-                <TableHead>Geçerlilik Süresi</TableHead>
+                <TableHead className="text-right">Tahmini Net</TableHead>
+                <TableHead>Etiket</TableHead>
                 <TableHead className="w-[140px] text-right">İşlem</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {quotes.map((q) => {
-                const expired = isQuoteExpired(q.expires_at);
-                return (
-                  <TableRow key={q.id} className={expired ? "opacity-75" : undefined}>
+              {quotes.map((q) => (
+                  <TableRow key={q.id}>
                     <TableCell className="text-xs">
                       <div className="font-medium text-foreground">
                         {q.urun || "Katalog Ürünü"}
@@ -295,15 +280,9 @@ export function PricingQuotesView() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={expired ? "destructive" : "success"}
-                        className="text-[10px]"
-                      >
-                        {expired ? "Süresi Doldu" : "Geçerli"}
+                      <Badge variant="outline" className="text-[10px]">
+                        Tahmini
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <QuoteCountdown expiresAt={q.expires_at} />
                     </TableCell>
                     <TableCell className="text-right">
                       <RowActions
@@ -311,7 +290,7 @@ export function PricingQuotesView() {
                         extraActions={[
                           {
                             label:
-                              refreshingId === q.id ? "Yenileniyor…" : "Süreyi Kontrol Et",
+                              refreshingId === q.id ? "Yenileniyor…" : "Yenile",
                             icon: <RefreshCw className="h-3.5 w-3.5" />,
                             onClick: () => void handleRefreshQuote(q.id),
                             disabled: refreshingId === q.id,
@@ -322,10 +301,10 @@ export function PricingQuotesView() {
                                   label:
                                     lockingId === q.id
                                       ? "Kilitleniyor…"
-                                      : "Fiyatı Kilitle",
+                                      : "Opsiyonel kilit",
                                   icon: <Lock className="h-3.5 w-3.5" />,
                                   onClick: () => void handleLock(q),
-                                  disabled: lockingId === q.id || expired,
+                                  disabled: lockingId === q.id,
                                 },
                               ]
                             : []),
@@ -333,15 +312,14 @@ export function PricingQuotesView() {
                       />
                     </TableCell>
                   </TableRow>
-                );
-              })}
+              ))}
             </TableBody>
           </Table>
         </ListPage>
       ) : (
         <ListPage
           title="Fiyat Kilitleri"
-          description="Sipariş öncesi sabitlenen fiyat kilitlerinin kalan sürelerini takip edin."
+          description="Opsiyonel kilit kayıtları (ADR-0038: sipariş yolu kilit zorunlu değildir; kesin fiyat onayda)."
           extraActions={tabSwitcher}
           searchValue={lockSearch}
           onSearchChange={(val) => {
@@ -389,7 +367,7 @@ export function PricingQuotesView() {
                 <TableHead>Ürün & Varyant</TableHead>
                 <TableHead>Durum</TableHead>
                 <TableHead className="text-right">Kilitli Tutar</TableHead>
-                <TableHead>Kalan Süre / Bitiş</TableHead>
+                <TableHead>Oluşturma / Bitiş</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -416,13 +394,8 @@ export function PricingQuotesView() {
                       ? formatMoney(l.kilit_fiyati, l.para_birimi)
                       : "—"}
                   </TableCell>
-                  <TableCell className="text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <QuoteCountdown expiresAt={l.expires_at} />
-                      <span className="text-muted-foreground">
-                        {l.expires_at ? formatDateTime(l.expires_at) : "—"}
-                      </span>
-                    </div>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {l.expires_at ? formatDateTime(l.expires_at) : "—"}
                   </TableCell>
                 </TableRow>
               ))}

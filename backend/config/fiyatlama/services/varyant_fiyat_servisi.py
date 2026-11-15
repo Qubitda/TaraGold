@@ -94,7 +94,7 @@ def upsert_aktif(
         record_audit(
             actor=kullanici,
             action="varyant_fiyat.upsert",
-            entity="VaryantFiyat",
+            entity_type="VaryantFiyat",
             entity_id=str(yeni.pk),
             success=True,
             detail={"varyant_id": varyant.pk, "versiyon": yeni.versiyon},

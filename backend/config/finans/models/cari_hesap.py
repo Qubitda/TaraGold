@@ -28,13 +28,14 @@ class CariHesap(models.Model):
         help_text="Karşı taraf (interim: platform).",
     )
     para_birimi = models.CharField(max_length=3)
+    # ADR-0001: HAS 4 hane; TRY pratikte 2 hane quantize
     bakiye = models.DecimalField(
-        max_digits=18, decimal_places=2, default=Decimal("0.00")
+        max_digits=18, decimal_places=4, default=Decimal("0.0000")
     )
     kredi_limiti = models.DecimalField(
         max_digits=18,
-        decimal_places=2,
-        default=Decimal("0.00"),
+        decimal_places=4,
+        default=Decimal("0.0000"),
         help_text="0 = limit kapalı (aşım kontrolü yok). >0 → max borç.",
     )
     guncelleme_tarihi = models.DateTimeField(auto_now=True)

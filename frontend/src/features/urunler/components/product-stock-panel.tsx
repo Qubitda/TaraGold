@@ -201,12 +201,38 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
       throw new Error("Birim fiyat pozitif bir sayı olmalı.");
     }
 
-    const created = await fiyatlamaService.upsertVaryantFiyat({
-      varyant_id: varyantId,
-      fiyat_modeli: "SABIT_PARCA",
-      birim_fiyat: price,
-      para_birimi: "TRY",
-    });
+    const fiyatTipi = (product.fiyat_tipi || "gram").toLowerCase();
+    const varyant = (product.varyantlar ?? []).find((v) => v.id === varyantId);
+    const gram =
+      varyant?.gram != null && String(varyant.gram).trim() !== ""
+        ? String(varyant.gram)
+        : undefined;
+
+    // Gram ürün → GRAM_BIRIM (gram × birim); sabit → SABIT_PARCA.
+    // Eski SABIT_PARCA sabitlenmesi gram ürünlerde quote uyumsuzluğu yaratıyordu.
+    if (fiyatTipi !== "sabit" && !gram) {
+      throw new Error(
+        "Gram bazlı üründe varyant gramı yok; önce Varyantlar sekmesinden gram girin."
+      );
+    }
+
+    const payload =
+      fiyatTipi === "sabit"
+        ? {
+            varyant_id: varyantId,
+            fiyat_modeli: "SABIT_PARCA",
+            birim_fiyat: price,
+            para_birimi: "TRY",
+          }
+        : {
+            varyant_id: varyantId,
+            fiyat_modeli: "GRAM_BIRIM",
+            birim_fiyat: price,
+            gram,
+            para_birimi: "TRY",
+          };
+
+    const created = await fiyatlamaService.upsertVaryantFiyat(payload);
     setPricesByVaryant((prev) => ({
       ...prev,
       [varyantId]: {
@@ -442,7 +468,11 @@ export function ProductStockPanel({ product, canAdjust, onToast }: Props) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Özellik kırılımı</TableHead>
-                    <TableHead className="w-[7.5rem]">Birim fiyat</TableHead>
+                    <TableHead className="w-[7.5rem]">
+                      {(product.fiyat_tipi || "gram") === "sabit"
+                        ? "Parça fiyatı"
+                        : "Gram başı"}
+                    </TableHead>
                     <TableHead className="text-right">Depodaki</TableHead>
                     {canAdjust ? (
                       <TableHead className="w-[7rem]">Hedef adet</TableHead>

@@ -54,7 +54,8 @@ class LedgerEntry(models.Model):
         related_name="karsi_ledger_entries",
         help_text="Karşı taraf; U-005 netleşene kadar genelde platform (F5-K5).",
     )
-    tutar = models.DecimalField(max_digits=18, decimal_places=2)
+    # ADR-0001: HAS 4 hane; TRY yazımda 2'ye quantize
+    tutar = models.DecimalField(max_digits=18, decimal_places=4)
     para_birimi = models.CharField(max_length=3)
     yon = models.CharField(max_length=8, choices=Yon.choices)
     hareket_tipi = models.CharField(max_length=16, choices=HareketTipi.choices)

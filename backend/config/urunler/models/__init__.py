@@ -28,6 +28,7 @@ from .urun_gorsel import UrunGorsel
 from .urun_kanal import UrunKanal
 from .urun_tasi import UrunTasi
 from .varyant import Varyant
+from .varyant_bilesen import VaryantBilesen
 
 __all__ = [
     "Berraklik",
@@ -51,6 +52,7 @@ __all__ = [
     "UrunKanal",
     "UrunTasi",
     "Varyant",
+    "VaryantBilesen",
     "YasGrubu",
     "ZincirTipi",
 ]

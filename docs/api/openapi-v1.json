@@ -866,10 +866,33 @@
           "durum": {
             "type": "string"
           },
+          "fark_toplam_vergisiz": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiyat_kesin": {
+            "type": "boolean"
+          },
           "id": {
             "type": "integer"
           },
           "idempotency_key": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kesin_toplam_vergisiz": {
             "oneOf": [
               {
                 "type": "string"
@@ -888,6 +911,9 @@
                 "birim": {
                   "type": "string"
                 },
+                "fiyat_kesin": {
+                  "type": "boolean"
+                },
                 "id": {
                   "type": "integer"
                 },
@@ -897,11 +923,55 @@
                 "para_birimi": {
                   "type": "string"
                 },
+                "price_lock_id": {
+                  "oneOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "snapshot_birim_fiyat_vergisiz": {
-                  "type": "string"
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "snapshot_satir_tutari_vergisiz": {
-                  "type": "string"
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tahmini_birim_fiyat_vergisiz": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tahmini_satir_tutari_vergisiz": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "varyant_id": {
                   "type": "integer"
@@ -928,6 +998,16 @@
             "oneOf": [
               {
                 "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tahmini_toplam_vergisiz": {
+            "oneOf": [
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1466,6 +1546,40 @@
         },
         "type": "object"
       },
+      "CariOzet": {
+        "properties": {
+          "HAS": {
+            "$ref": "#/components/schemas/CariOzetPb"
+          },
+          "TRY": {
+            "$ref": "#/components/schemas/CariOzetPb"
+          },
+          "firma_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "firma_id",
+          "HAS",
+          "TRY"
+        ],
+        "type": "object"
+      },
+      "CariOzetPb": {
+        "properties": {
+          "anlam": {
+            "type": "string"
+          },
+          "bakiye": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bakiye",
+          "anlam"
+        ],
+        "type": "object"
+      },
       "CartLineCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1767,6 +1881,41 @@
           "tedarikci_mi",
           "platform_mu",
           "aktif"
+        ],
+        "type": "object"
+      },
+      "HasPozisyon": {
+        "properties": {
+          "approval_required": {
+            "type": "boolean"
+          },
+          "hedge": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          },
+          "locked_customer": {
+            "type": "string"
+          },
+          "open_has": {
+            "type": "string"
+          },
+          "over_limit": {
+            "type": "boolean"
+          },
+          "unpaid_supplier": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "locked_customer",
+          "unpaid_supplier",
+          "hedge",
+          "open_has",
+          "limit",
+          "over_limit",
+          "approval_required"
         ],
         "type": "object"
       },
@@ -2284,6 +2433,123 @@
         ],
         "type": "object"
       },
+      "OdemeKaydi": {
+        "properties": {
+          "brut_gram": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dekont_ref": {
+            "type": "string"
+          },
+          "firma_id": {
+            "type": "integer"
+          },
+          "has_karsiligi": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "kur_has_birim_fiyat": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kur_kaynagi": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kur_zamani": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ledger_entry_idler": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "olculen_milyem": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "olusturma_tarihi": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tip": {
+            "enum": [
+              "HAS",
+              "HURDA",
+              "TL"
+            ],
+            "type": "string"
+          },
+          "tl_tutar": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firma_id",
+          "tip",
+          "has_karsiligi"
+        ],
+        "type": "object"
+      },
       "OpsFinanceSummary": {
         "properties": {
           "cari_count": {
@@ -2431,6 +2697,48 @@
         },
         "required": [
           "order_line_id"
+        ],
+        "type": "object"
+      },
+      "OpsOdemeCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "brut_gram": {
+            "type": "string"
+          },
+          "dekont_ref": {
+            "type": "string"
+          },
+          "firma_id": {
+            "type": "integer"
+          },
+          "manuel_kur": {
+            "type": "string"
+          },
+          "manuel_kur_gerekce": {
+            "type": "string"
+          },
+          "olculen_milyem": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "integer"
+          },
+          "tip": {
+            "enum": [
+              "HAS",
+              "HURDA",
+              "TL"
+            ],
+            "type": "string"
+          },
+          "tl_tutar": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "firma_id",
+          "tip"
         ],
         "type": "object"
       },
@@ -6309,6 +6617,89 @@
         ]
       }
     },
+    "/api/v1/cari/": {
+      "get": {
+        "description": "GET /api/v1/cari/ — alıcı HAS+TRY özet (ADR-0001).",
+        "operationId": "listBuyerCariOzets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CariOzet"
+                }
+              }
+            },
+            "description": "CariOzet"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/cari/",
+        "tags": [
+          "cari"
+        ]
+      }
+    },
     "/api/v1/carts/me/": {
       "get": {
         "description": "GET /api/v1/carts/me/ — yazma rolünde yoksa oluştur; salt okuma yalnızca mevcut.",
@@ -7584,7 +7975,7 @@
     "/api/v1/documents/": {
       "get": {
         "description": "GET /api/v1/belgeler/ — Ops tümü; Alıcı/Tedarikçi yalnız kendi firmasının belgeleri.",
-        "operationId": "listBelges_6831",
+        "operationId": "listBelges_553",
         "parameters": [],
         "responses": {
           "200": {
@@ -7668,7 +8059,7 @@
     "/api/v1/documents/{id}/download/": {
       "get": {
         "description": "GET /api/v1/belgeler/<pk>/download/ — tenant/kör havuz kontrolü ile PDF indir.",
-        "operationId": "listBelgeDownloads_6853",
+        "operationId": "listBelgeDownloads_8455",
         "parameters": [
           {
             "description": "",
@@ -7762,7 +8153,7 @@
     "/api/v1/email-settings/": {
       "get": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "listOpsEmailSettings_2414",
+        "operationId": "listOpsEmailSettings_1353",
         "parameters": [],
         "responses": {
           "200": {
@@ -7844,7 +8235,7 @@
       },
       "patch": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "partialUpdateOpsEmailSettings_478",
+        "operationId": "partialUpdateOpsEmailSettings_9088",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -7936,7 +8327,7 @@
       },
       "put": {
         "description": "GET / PUT / PATCH /api/v1/ops/email-settings/.",
-        "operationId": "updateOpsEmailSettings_7799",
+        "operationId": "updateOpsEmailSettings_9882",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -8030,7 +8421,7 @@
     "/api/v1/email-settings/send-test/": {
       "post": {
         "description": "POST /api/v1/ops/email-settings/send-test/ — { to, ...formOverrides }.",
-        "operationId": "createOpsEmailSendTest_5907",
+        "operationId": "createOpsEmailSendTest_1885",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -8124,7 +8515,7 @@
     "/api/v1/email-settings/test-connection/": {
       "post": {
         "description": "POST /api/v1/ops/email-settings/test-connection/ — kaydetmeden de test eder.",
-        "operationId": "createOpsEmailTestConnection_3796",
+        "operationId": "createOpsEmailTestConnection_4785",
         "parameters": [],
         "requestBody": {
           "content": {
@@ -10880,6 +11271,99 @@
           }
         },
         "summary": "PATCH /api/v1/ops/belge-ayarlari/",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/cari/{firma_id}/": {
+      "get": {
+        "description": "GET /api/v1/ops/cari/{firma_id}/ — HAS + TRY bakiyeleri.",
+        "operationId": "retrieveOpsCariFirma",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "firma_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CariOzet"
+                }
+              }
+            },
+            "description": "CariOzet"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/ops/cari/{firma_id}/",
         "tags": [
           "ops"
         ]
@@ -17301,6 +17785,99 @@
         ]
       }
     },
+    "/api/v1/ops/odemeler/": {
+      "post": {
+        "description": "POST /api/v1/ops/odemeler/ — Idempotency-Key zorunlu.",
+        "operationId": "createOpsOdeme",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsOdemeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OdemeKaydi"
+                }
+              }
+            },
+            "description": "OdemeKaydi"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "POST /api/v1/ops/odemeler/",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/ops/orders/": {
       "get": {
         "description": "GET /api/v1/ops/orders/ — tüm ops siparişleri (filtre: durum, alici_firma_id).",
@@ -18780,6 +19357,89 @@
           }
         },
         "summary": "PATCH /api/v1/ops/piyasa/marj-politikasi/",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/pozisyon/has/": {
+      "get": {
+        "description": "GET /api/v1/ops/pozisyon/has/",
+        "operationId": "listOpsHasPozisyons",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HasPozisyon"
+                }
+              }
+            },
+            "description": "HasPozisyon"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Problem+JSON"
+          }
+        },
+        "summary": "GET /api/v1/ops/pozisyon/has/",
         "tags": [
           "ops"
         ]

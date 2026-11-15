@@ -533,7 +533,10 @@ export type OpsOrderLineRow = {
   miktar: string;
   birim: string;
   para_birimi: string;
-  satir_tutari: string;
+  satir_tutari?: string | null;
+  tahmini_satir_tutari?: string | null;
+  fiyat_kesin?: boolean;
+  benzersiz_parca?: boolean;
   teslim_modeli?: string;
 };
 
@@ -553,6 +556,8 @@ export type OpsOrderRow = {
   alici_firma_ad?: string;
   olusturma_tarihi?: string | null;
   toplamlar?: Record<string, string>;
+  tahmini_toplamlar?: Record<string, string>;
+  fiyat_kesin?: boolean;
   satir_sayisi?: number;
   satirlar?: OpsOrderLineRow[];
   hazirlama_emirleri?: OpsHazirlamaEmriRow[];

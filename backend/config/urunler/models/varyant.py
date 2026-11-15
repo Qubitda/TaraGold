@@ -36,7 +36,35 @@ class Varyant(models.Model):
         null=True, blank=True, on_delete=models.PROTECT,
     )
 
-    gram = models.DecimalField("Gram", max_digits=10, decimal_places=3, null=True, blank=True)
+    class Tip(models.TextChoices):
+        HAM_ALTIN = "HAM_ALTIN", "Ham altın"
+        MONTUR = "MONTUR", "Montür"
+        TASLI = "TASLI", "Taşlı bitmiş"
+        TAS = "TAS", "Taş (stok)"
+
+    tip = models.CharField(
+        "Tip",
+        max_length=12,
+        choices=Tip.choices,
+        default=Tip.HAM_ALTIN,
+        db_index=True,
+        help_text="ADR-0001 v2 bileşen modeli.",
+    )
+    gram = models.DecimalField(
+        "Brüt gram",
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="Brüt ağırlık (ADR-0001 B4).",
+    )
+    tas_agirligi = models.DecimalField(
+        "Taş ağırlığı (g)",
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("0"),
+        help_text="Taşların toplam gramı; net_altin = gram − tas_agirligi.",
+    )
     gram_bandi_min = models.DecimalField(
         "Gram bandı min", max_digits=10, decimal_places=3, null=True, blank=True,
         help_text="Boşsa settings VARYANT_GRAM_BANDI_ORAN ile hesaplanır (ADR-0005 K3).",
@@ -91,7 +119,25 @@ class Varyant(models.Model):
                 condition=models.Q(ek_bedel__gte=0),
                 name="varyant_ek_bedel_negatif_degil",
             ),
+            models.CheckConstraint(
+                condition=models.Q(tas_agirligi__gte=0),
+                name="varyant_tas_agirligi_negatif_degil",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    tip__in=["HAM_ALTIN", "MONTUR", "TASLI", "TAS"]
+                ),
+                name="varyant_tip_gecerli",
+            ),
         ]
+
+    @property
+    def net_altin_gram(self) -> Decimal | None:
+        if self.gram is None:
+            return None
+        return (Decimal(self.gram) - Decimal(self.tas_agirligi or 0)).quantize(
+            Decimal("0.0001")
+        )
 
     # ------------------------------------------------------------------ #
     # Yardımcılar
@@ -124,6 +170,10 @@ class Varyant(models.Model):
         elif urun.fiyat_tipi == "sabit":
             if not self.sabit_fiyat:
                 errors["sabit_fiyat"] = "Sabit fiyatlı üründe sabit fiyat zorunludur."
+
+        if self.gram is not None and self.tas_agirligi is not None:
+            if Decimal(self.tas_agirligi) >= Decimal(self.gram):
+                errors["tas_agirligi"] = "taş_agirligi < gram olmalı (ADR-0001 B4)."
 
         # --- Eksen kuralları: renk ---
         if urun.renk_ekseni:

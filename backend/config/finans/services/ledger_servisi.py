@@ -26,12 +26,16 @@ def _assert_can_post(actor) -> None:
     raise PermissionDenied("Finans ledger yazma yetkisi yok.")
 
 
-def _normalize_tutar(tutar: Decimal) -> Decimal:
+def _normalize_tutar(tutar: Decimal, *, para_birimi: str = "TRY") -> Decimal:
+    from finans.constants import HAS_KODU, Q2, Q4
+
     if not isinstance(tutar, Decimal):
         tutar = Decimal(str(tutar))
     if tutar <= 0:
         raise ValidationError({"tutar": "Tutar sıfırdan büyük olmalı."})
-    return tutar.quantize(Decimal("0.01"))
+    pb = (para_birimi or "TRY").strip().upper()
+    q = Q4 if pb == HAS_KODU else Q2
+    return tutar.quantize(q)
 
 
 def _order_ref(referans_tip: str, referans_id: str) -> str:
@@ -83,7 +87,7 @@ def kaydet_hareket(
     if existing is not None:
         return existing
 
-    tutar_n = _normalize_tutar(tutar)
+    tutar_n = _normalize_tutar(tutar, para_birimi=pb)
     if yon not in LedgerEntry.Yon.values:
         raise ValidationError({"yon": "Geçersiz yön."})
     if hareket_tipi not in LedgerEntry.HareketTipi.values:

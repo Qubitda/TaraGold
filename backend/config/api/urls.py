@@ -2,6 +2,12 @@ from django.urls import path
 
 from api.schema_views import EnrichedOpenAPISchemaView
 from api.views.ops_varyant_fiyat import OpsVaryantFiyatListView, OpsVaryantFiyatUpsertView
+from api.views.ops_odemeler import (
+    BuyerCariOzetView,
+    OpsCariFirmaView,
+    OpsHasPozisyonView,
+    OpsOdemeCreateView,
+)
 from api.views import (
     ApprovalApproveView,
     ApprovalDetailView,
@@ -699,6 +705,26 @@ api_urlpatterns = [
         "ops/orders/<int:pk>/tahsilat/",
         OpsOrderTahsilatView.as_view(),
         name="api-ops-order-tahsilat",
+    ),
+    path(
+        "ops/odemeler/",
+        OpsOdemeCreateView.as_view(),
+        name="api-ops-odemeler",
+    ),
+    path(
+        "ops/cari/<int:firma_id>/",
+        OpsCariFirmaView.as_view(),
+        name="api-ops-cari-firma",
+    ),
+    path(
+        "ops/pozisyon/has/",
+        OpsHasPozisyonView.as_view(),
+        name="api-ops-pozisyon-has",
+    ),
+    path(
+        "cari/",
+        BuyerCariOzetView.as_view(),
+        name="api-buyer-cari-ozet",
     ),
     path(
         "supplier/hazirlama/",

@@ -30,40 +30,18 @@ import { isPositiveDecimal } from "@/lib/parse-decimal";
 import { dashboardKeys } from "@/features/dashboard";
 import { finansKeys } from "@/features/finans";
 import { siparisKeys } from "@/features/siparis";
-
-const ORDER_STATUS_LABELS: Record<string, string> = {
-  ONAY_BEKLIYOR: "Onay Bekliyor",
-  OLUSTURULDU: "Oluşturuldu",
-  ONAYLANDI: "Onaylandı",
-  HAZIRLANIYOR: "Hazırlanıyor",
-  HAZIR: "Hazır",
-  SEVKIYAT: "Sevkiyatta",
-  TAMAMLANDI: "Tamamlandı",
-  REDDEDILDI: "Reddedildi",
-  IPTAL: "İptal",
-};
-
-function statusLabel(durum: string): string {
-  return ORDER_STATUS_LABELS[durum] || durum;
-}
+import {
+  ORDER_STATUSES,
+  orderStatusBadge,
+  orderStatusLabel,
+} from "@/lib/order-status";
 
 function statusBadge(durum: string) {
-  switch (durum) {
-    case "ONAYLANDI":
-    case "HAZIR":
-    case "TAMAMLANDI":
-      return <Badge variant="success">{statusLabel(durum)}</Badge>;
-    case "IPTAL":
-    case "REDDEDILDI":
-      return <Badge variant="destructive">{statusLabel(durum)}</Badge>;
-    case "ONAY_BEKLIYOR":
-    case "OLUSTURULDU":
-    case "HAZIRLANIYOR":
-    case "SEVKIYAT":
-      return <Badge variant="warning">{statusLabel(durum)}</Badge>;
-    default:
-      return <Badge variant="outline">{statusLabel(durum)}</Badge>;
-  }
+  return (
+    <Badge variant={orderStatusBadge(durum)}>
+      {orderStatusLabel(durum, "admin")}
+    </Badge>
+  );
 }
 
 export function OpsOnayHavuzu() {
@@ -166,10 +144,15 @@ export function OpsOnayHavuzu() {
   const totalCount = q.data?.count ?? rows.length;
 
   const formatTotals = (o: OpsOrderRow) => {
-    if (!o.toplamlar) return "—";
-    const entries = Object.entries(o.toplamlar);
+    const source =
+      o.fiyat_kesin && o.toplamlar
+        ? o.toplamlar
+        : o.tahmini_toplamlar || o.toplamlar;
+    if (!source) return "—";
+    const entries = Object.entries(source);
     if (entries.length === 0) return "—";
-    return entries.map(([pb, v]) => `${v} ${pb}`).join(" · ");
+    const prefix = o.fiyat_kesin ? "Kesin" : "Tahmini";
+    return `${prefix}: ${entries.map(([pb, v]) => `${v} ${pb}`).join(" · ")}`;
   };
 
   const formatOrderTitle = (o: OpsOrderRow) =>
@@ -230,9 +213,9 @@ export function OpsOnayHavuzu() {
                 className="h-9 rounded-[6px] border border-border bg-background px-3 text-xs text-foreground"
               >
                 <option value="">Tüm Durumlar</option>
-                {Object.entries(ORDER_STATUS_LABELS).map(([k, lbl]) => (
+                {ORDER_STATUSES.map((k) => (
                   <option key={k} value={k}>
-                    {lbl}
+                    {orderStatusLabel(k, "admin")}
                   </option>
                 ))}
               </select>
@@ -384,7 +367,7 @@ export function OpsOnayHavuzu() {
         title={detailOrder ? `Sipariş Detayı · ${formatOrderTitle(detailOrder)}` : "Sipariş Detayı"}
         description={
           detailOrder
-            ? `Durum: ${statusLabel(detailOrder.durum)} · Toplam: ${formatTotals(detailOrder)}`
+            ? `Durum: ${orderStatusLabel(detailOrder.durum, "admin")} · Toplam: ${formatTotals(detailOrder)}`
             : undefined
         }
         size="lg"
@@ -436,6 +419,14 @@ export function OpsOnayHavuzu() {
       >
         {detailOrder ? (
           <div className="space-y-4 text-xs">
+            {!detailOrder.fiyat_kesin ? (
+              <p className="rounded-[6px] border border-border bg-muted/40 px-3 py-2 text-muted-foreground">
+                Gösterilen tutarlar <strong className="text-foreground">tahmini</strong>
+                dir. Onayda güncel kur ile kesin fiyat yazılır ve stok ayrılır; ATP
+                yetersizse onay geri alınır. Tek-parça için önde bekleyen sipariş varsa
+                onay engellenir.
+              </p>
+            ) : null}
             {detailOrder.satirlar && detailOrder.satirlar.length > 0 && (
               <div className="rounded-[6px] border border-border overflow-hidden">
                 <Table>
@@ -444,7 +435,9 @@ export function OpsOnayHavuzu() {
                       <TableHead>Ürün / Stok Kodu</TableHead>
                       <TableHead>Teslim Modeli</TableHead>
                       <TableHead className="text-right">Miktar</TableHead>
-                      <TableHead className="text-right">Tutar</TableHead>
+                      <TableHead className="text-right">
+                        {detailOrder.fiyat_kesin ? "Kesin" : "Tahmini"}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -455,6 +448,7 @@ export function OpsOnayHavuzu() {
                           {ln.platform_kodu ? (
                             <div className="font-mono text-[11px] text-muted-foreground">
                               {ln.platform_kodu}
+                              {ln.benzersiz_parca ? " · tek-parça" : ""}
                             </div>
                           ) : null}
                         </TableCell>
@@ -467,7 +461,12 @@ export function OpsOnayHavuzu() {
                           {ln.miktar} {ln.birim}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums font-semibold">
-                          {ln.satir_tutari} {ln.para_birimi}
+                          {ln.tahmini_satir_tutari ?? ln.satir_tutari} {ln.para_birimi}
+                          {ln.fiyat_kesin && ln.tahmini_satir_tutari ? (
+                            <div className="text-[10px] font-normal text-muted-foreground">
+                              kesin: {ln.satir_tutari}
+                            </div>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

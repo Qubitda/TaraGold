@@ -38,11 +38,12 @@ def beklenen_deger(order_line: OrderLine) -> tuple[Decimal, Decimal | None]:
         raise ValidationError({"miktar": "Beklenen miktar pozitif olmalı."})
     quote_gram = None
     if order_line.birim == SepetBirimi.GRAM:
-        lock = order_line.price_lock
-        quote = getattr(lock, "quote", None)
+        from siparis.services.line_kaynak import line_quote
+
+        quote = line_quote(order_line)
         if quote is None:
             raise ValidationError(
-                "GRAM QC için PriceLock.quote zorunlu (F6-K2)."
+                "GRAM QC için price_quote zorunlu (ADR-0001)."
             )
         if quote.gram is None or Decimal(quote.gram) <= 0:
             raise ValidationError(

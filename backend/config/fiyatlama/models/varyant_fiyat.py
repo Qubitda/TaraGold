@@ -21,6 +21,14 @@ class VaryantFiyat(models.Model):
         AKTIF = "AKTIF", "Aktif"
         PASIF = "PASIF", "Pasif"
 
+    class IscilikBirimi(models.TextChoices):
+        TL = "TL", "TL"
+        HAS = "HAS", "Has gram"
+
+    class IscilikTipi(models.TextChoices):
+        PARCA = "PARCA", "Parça başı"
+        GRAM = "GRAM", "Gram başı"
+
     varyant = models.ForeignKey(
         "urunler.Varyant",
         on_delete=models.PROTECT,
@@ -50,7 +58,18 @@ class VaryantFiyat(models.Model):
     )
     para_birimi = models.CharField(max_length=3, default="TRY")
     iscilik = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0")
+        max_digits=12, decimal_places=4, default=Decimal("0")
+    )
+    iscilik_birimi = models.CharField(
+        max_length=3,
+        choices=IscilikBirimi.choices,
+        default=IscilikBirimi.TL,
+        help_text="ADR-0001: HAS ise değer has gram; TL ise TRY borç.",
+    )
+    iscilik_tipi = models.CharField(
+        max_length=8,
+        choices=IscilikTipi.choices,
+        default=IscilikTipi.PARCA,
     )
     tas_bedeli = models.DecimalField(
         max_digits=14, decimal_places=2, default=Decimal("0")

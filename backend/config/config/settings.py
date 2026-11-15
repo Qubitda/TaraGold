@@ -360,6 +360,14 @@ VARYANT_GRAM_BANDI_ORAN = Decimal(env("VARYANT_GRAM_BANDI_ORAN", default="0.05")
 # 0 → limit kapalı (over_limit False). Decimal string env.
 HAS_POSITION_LIMIT = Decimal(env("HAS_POSITION_LIMIT", default="0"))
 
+# --- ADR-0001 altın ödeme / bağlantı ----------------------------------------
+# Has ödeme varsayılan milyemi (ops kayıtta override edebilir).
+HAS_ALTIN_MILYEM = Decimal(env("HAS_ALTIN_MILYEM", default="0.995"))
+# Manuel bağlantı kurunun canlı satış kurundan max sapma oranı (0.02 = %2).
+ODEME_KUR_SAPMA_ORANI = Decimal(env("ODEME_KUR_SAPMA_ORANI", default="0.02"))
+# Cari birim kodu (ISO-3 harf; döviz listesine eklenmez).
+HAS_PARA_BIRIMI = "HAS"
+
 # --- QC gram tolerans (ADR-0013 F6-K3 / F6-011) -----------------------------
 # Bağıl ±% + isteğe bağlı mutlak taban (gram). Float yasak; Decimal string env.
 QC_GRAM_TOLERANCE_PCT = Decimal(env("QC_GRAM_TOLERANCE_PCT", default="0.50"))

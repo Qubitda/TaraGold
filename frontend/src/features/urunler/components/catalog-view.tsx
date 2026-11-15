@@ -31,7 +31,6 @@ import type {
 import { fiyatlamaService, rememberQuoteId } from "@/features/fiyatlama";
 import { siparisKeys, siparisService } from "@/features/siparis";
 import { useSalesChannelsQuery } from "@/features/tanimlar";
-import { isQuoteExpired } from "@/components/commerce/quote-countdown";
 import { formatGram, formatMoney, pickDisplayPrice } from "@/lib/format";
 import {
   ConfirmDialog,
@@ -561,10 +560,6 @@ export function CatalogView() {
     quoteId: number,
     opts?: { productId?: number; expiresAt?: string | null }
   ) => {
-    if (opts?.expiresAt && isQuoteExpired(opts.expiresAt)) {
-      actionToast.error("Fiyat süresi doldu", "Yeniden teklif alın.");
-      return;
-    }
     const alreadyAdding =
       quoteState[variantId]?.adding ||
       (opts?.productId != null && cardPrices[opts.productId]?.adding);
@@ -1324,6 +1319,9 @@ export function CatalogView() {
                     productId: item.id,
                     expiresAt: cp?.expiresAt,
                   });
+                }}
+                onOrderBlocked={(msg) => {
+                  actionToast.error("Sipariş verilemedi", msg);
                 }}
               />
             </div>

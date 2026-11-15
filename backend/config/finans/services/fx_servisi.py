@@ -8,9 +8,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from django.db.models import Sum
 
-from fiyatlama.models import PriceLock
-
-
 Q4 = Decimal("0.0001")
 
 
@@ -32,10 +29,13 @@ def _q4(value: Decimal) -> Decimal:
 
 
 def locked_customer_has() -> Decimal:
-    """Interim (F5-K6): AKTİF PriceLock → quote.gram toplamı."""
+    """ADR-0001: müşterilerin platforma pozitif HAS cari borcu toplamı."""
+    from finans.constants import HAS_KODU
+    from finans.models import CariHesap
+
     total = (
-        PriceLock.objects.filter(durum=PriceLock.Durum.AKTIF)
-        .aggregate(s=Sum("quote__gram"))
+        CariHesap.objects.filter(para_birimi=HAS_KODU, bakiye__gt=0)
+        .aggregate(s=Sum("bakiye"))
         .get("s")
     )
     return _q4(total if total is not None else Decimal("0"))

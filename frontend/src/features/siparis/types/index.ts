@@ -36,20 +36,29 @@ export interface BuyerOrderLine {
   urun_ad?: string;
   miktar: string;
   birim: string;
-  snapshot_birim_fiyat_vergisiz: string;
-  snapshot_satir_tutari_vergisiz: string;
+  tahmini_birim_fiyat_vergisiz?: string | null;
+  tahmini_satir_tutari_vergisiz?: string | null;
+  snapshot_birim_fiyat_vergisiz?: string | null;
+  snapshot_satir_tutari_vergisiz?: string | null;
+  fiyat_kesin?: boolean;
+  fark_vergisiz?: string | null;
   para_birimi: string;
+  price_quote_id?: number | null;
 }
 
 export interface BuyerOrder {
   id: number;
   alici_firma_id: number;
   alici_firma_ad?: string;
-  durum: "TASLAK" | "BEKLEMEDE" | "ONAYLANDI" | "HAZIRLANIYOR" | "SEVKIYAT" | "TAMAMLANDI" | "IPTAL" | string;
+  durum: string;
   idempotency_key: string | null;
   line_count: number;
   olusturma_tarihi: string;
   allowed_actions: string[];
+  tahmini_toplam_vergisiz?: string | null;
+  kesin_toplam_vergisiz?: string | null;
+  fark_toplam_vergisiz?: string | null;
+  fiyat_kesin?: boolean;
   lines?: BuyerOrderLine[];
   teslimat_adresi?: {
     id: number;

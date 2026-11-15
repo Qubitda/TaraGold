@@ -1,7 +1,4 @@
-"""Checkout — PriceLock + StockReservation → sipariş adayı (F4-040/041).
-
-Order oluşturmaz (F4-050). Ödeme yok. Fail audit durable (F4-A16).
-"""
+"""Checkout — quote doğrulama → sipariş adayı (ADR-0038; kilit/stok yok)."""
 
 from __future__ import annotations
 
@@ -16,22 +13,21 @@ from firmalar.services.audit_servisi import (
     record_audit,
     record_audit_durable,
 )
-from fiyatlama.services.pricing_service import lock_quote
 from siparis.models import Cart, CartLine, CheckoutAttempt
 from siparis.services.cart_servisi import _assert_buyer_actor
 from stok.models import Warehouse
-from stok.services.reservation_servisi import olustur_rezervasyon
 
 
 @dataclass(frozen=True)
 class CheckoutLineResult:
     cart_line_id: int
     quote_id: int
-    lock_id: int
-    reservation_id: int
-    warehouse_id: int
     miktar: Decimal
     birim: str
+    # Geriye dönük alanlar (FE/eski istemci) — ADR-0038 sonrası 0/None
+    lock_id: int = 0
+    reservation_id: int = 0
+    warehouse_id: int = 0
 
 
 @dataclass(frozen=True)
@@ -136,8 +132,9 @@ def checkout(
     fatura_adresi_id=None,
     siparis_notu: str = "",
 ) -> CheckoutResult:
-    """Sepeti kilitler ve rezerve eder; CheckoutAttempt (sipariş adayı) döner."""
+    """Sepet satırlarını doğrular; CheckoutAttempt üretir (kilit/stok yok — ADR-0038)."""
     now = now or timezone.now()
+    del now  # TTL zorunlu değil; quote varlık kontrolü yeterli
     key = (idempotency_key or "").strip()
     if not key:
         raise ValidationError("idempotency_key zorunlu.")
@@ -179,11 +176,11 @@ def checkout(
             CheckoutLineResult(
                 cart_line_id=int(row["cart_line_id"]),
                 quote_id=int(row["quote_id"]),
-                lock_id=int(row["lock_id"]),
-                reservation_id=int(row["reservation_id"]),
-                warehouse_id=int(row["warehouse_id"]),
                 miktar=Decimal(row["miktar"]),
                 birim=row["birim"],
+                lock_id=int(row.get("lock_id") or 0),
+                reservation_id=int(row.get("reservation_id") or 0),
+                warehouse_id=int(row.get("warehouse_id") or 0),
             )
             for row in (existing.sonuc.get("lines") or [])
         )
@@ -212,51 +209,25 @@ def checkout(
             line_results: list[CheckoutLineResult] = []
             for cl in lines_qs:
                 quote = cl.price_quote
+                if quote is None:
+                    raise ValidationError("Sepet satırında quote yok.")
                 if quote.alici_firma_id != alici_firma.pk:
                     raise ValidationError("Sepet satırı quote firması uyumsuz.")
-                if now >= quote.gecerlilik_sonu:
-                    raise ValidationError(
-                        "PriceQuote süresi dolmuş; checkout fail."
-                    )
                 if not quote.varyant.aktif:
                     raise ValidationError("Varyant pasif; checkout fail.")
                 urun = quote.varyant.urun
                 if urun.onay_durumu != "onayli" or urun.yayin_durumu != "aktif":
                     raise ValidationError("Ürün yayınlı değil; checkout fail.")
-
-                lock = lock_quote(
-                    quote,
-                    kullanici=actor,
-                    now=now,
-                    idempotency_key=f"{key}:lock:{quote.pk}",
-                )
-                if not lock.is_gecerli(now=now):
-                    raise ValidationError(
-                        "PriceLock geçersiz/süresi dolmuş; checkout fail."
-                    )
-
                 vf = quote.varyant_fiyat
                 if vf is None:
                     raise ValidationError("Quote varyant fiyatı yok; checkout fail.")
-                warehouse = _resolve_warehouse_for_fiyat(vf)
-                res = olustur_rezervasyon(
-                    actor=actor,
-                    warehouse=warehouse,
-                    varyant=quote.varyant,
-                    fiyat_modeli=vf.fiyat_modeli,
-                    tedarikci_id=vf.tedarikci_id,
-                    miktar=cl.miktar,
-                    alici_firma=alici_firma,
-                    now=now,
-                    idempotency_key=f"{key}:res:{cl.pk}",
-                )
+                # Depo var mı kontrolü (onayda kullanılacak); stok tutulmaz
+                _resolve_warehouse_for_fiyat(vf)
+
                 line_results.append(
                     CheckoutLineResult(
                         cart_line_id=cl.pk,
                         quote_id=quote.pk,
-                        lock_id=lock.pk,
-                        reservation_id=res.pk,
-                        warehouse_id=warehouse.pk,
                         miktar=cl.miktar,
                         birim=cl.birim,
                     )
@@ -278,9 +249,6 @@ def checkout(
                     {
                         "cart_line_id": r.cart_line_id,
                         "quote_id": r.quote_id,
-                        "lock_id": r.lock_id,
-                        "reservation_id": r.reservation_id,
-                        "warehouse_id": r.warehouse_id,
                         "miktar": str(r.miktar),
                         "birim": r.birim,
                     }
@@ -310,8 +278,7 @@ def checkout(
                 detail={
                     "idempotency_key": key,
                     "line_count": len(line_results),
-                    "lock_ids": [r.lock_id for r in line_results],
-                    "reservation_ids": [r.reservation_id for r in line_results],
+                    "adr": "0038",
                 },
             )
             return CheckoutResult(
@@ -321,7 +288,6 @@ def checkout(
         reason = str(exc)
         if isinstance(exc, ValidationError) and hasattr(exc, "messages"):
             reason = "; ".join(str(m) for m in exc.messages)
-        # domain_atomic dışı durable fail (F4-041)
         record_audit_durable(
             actor=actor,
             action="checkout.fail",
@@ -335,7 +301,6 @@ def checkout(
                 "idempotency_key": key,
             },
         )
-        # Başarısız attempt kaydı (başarılı üzerine yazılmaz)
         prior = CheckoutAttempt.objects.filter(
             alici_firma=alici_firma, idempotency_key=key
         ).first()

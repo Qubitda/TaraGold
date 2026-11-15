@@ -1,4 +1,4 @@
-"""HazirlamaEmri — tedarikçi bazlı kör sipariş hazırlama emri (ADR-0036)."""
+"""HazirlamaEmri — tedarikçi emri + teyit + tip (ADR-0001 v2 / ADR-0036)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,20 @@ from django.db import models
 
 
 class HazirlamaEmri(models.Model):
-    """Sipariş onaylandığında tedarikçi başına bir emir açılır; alıcı kimliği içermez."""
+    """Sipariş onayında bileşen tedarikçisine emir; alıcı kimliği yok."""
 
     class Durum(models.TextChoices):
+        TEDARIK_BEKLIYOR = "TEDARIK_BEKLIYOR", "Tedarikçi teyidi bekleniyor"
         HAZIRLANIYOR = "HAZIRLANIYOR", "Hazırlanıyor"
         HAZIR = "HAZIR", "Hazır"
+        REDDEDILDI = "REDDEDILDI", "Tedarikçi reddetti"
         IPTAL = "IPTAL", "İptal"
+
+    class Tip(models.TextChoices):
+        HAM_ALTIN = "HAM_ALTIN", "Ham altın"
+        MONTUR = "MONTUR", "Montür"
+        TAS = "TAS", "Taş"
+        CAKIM = "CAKIM", "Çakım"
 
     class TeslimModeli(models.TextChoices):
         PLATFORM_QC = "PLATFORM_QC", "Platform üzerinden QC"
@@ -29,13 +37,35 @@ class HazirlamaEmri(models.Model):
         on_delete=models.PROTECT,
         related_name="hazirlama_emirleri",
     )
+    tip = models.CharField(
+        max_length=12, choices=Tip.choices, default=Tip.MONTUR, db_index=True
+    )
     durum = models.CharField(
-        max_length=16, choices=Durum.choices, default=Durum.HAZIRLANIYOR
+        max_length=20, choices=Durum.choices, default=Durum.TEDARIK_BEKLIYOR
     )
     teslim_modeli = models.CharField(
         max_length=16,
         choices=TeslimModeli.choices,
         default=TeslimModeli.PLATFORM_QC,
+    )
+    fiyat_degisti = models.BooleanField(
+        default=False,
+        help_text="Teyitte fiyat değişti; ops onayı gerekir.",
+    )
+    teyit_notu = models.CharField(max_length=255, blank=True, default="")
+    order_line = models.ForeignKey(
+        "siparis.OrderLine",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="hazirlama_emirleri",
+    )
+    bilesen = models.ForeignKey(
+        "urunler.VaryantBilesen",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="hazirlama_emirleri",
     )
     hazir_zamani = models.DateTimeField(null=True, blank=True)
     hazir_isaretleyen = models.ForeignKey(
@@ -56,12 +86,26 @@ class HazirlamaEmri(models.Model):
         ordering = ["-olusturma_tarihi", "-pk"]
         constraints = [
             models.UniqueConstraint(
-                fields=["order", "tedarikci_firma"],
-                name="hazirlamaemri_order_tedarikci_uniq",
+                fields=["order", "tedarikci_firma", "tip"],
+                name="hazirlamaemri_order_tedarikci_tip_uniq",
             ),
             models.CheckConstraint(
-                condition=models.Q(durum__in=["HAZIRLANIYOR", "HAZIR", "IPTAL"]),
+                condition=models.Q(
+                    durum__in=[
+                        "TEDARIK_BEKLIYOR",
+                        "HAZIRLANIYOR",
+                        "HAZIR",
+                        "REDDEDILDI",
+                        "IPTAL",
+                    ]
+                ),
                 name="hazirlamaemri_durum_gecerli",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    tip__in=["HAM_ALTIN", "MONTUR", "TAS", "CAKIM"]
+                ),
+                name="hazirlamaemri_tip_gecerli",
             ),
             models.CheckConstraint(
                 condition=models.Q(teslim_modeli__in=["PLATFORM_QC", "DOGRUDAN"]),
@@ -71,12 +115,13 @@ class HazirlamaEmri(models.Model):
         indexes = [
             models.Index(fields=["tedarikci_firma", "durum"]),
             models.Index(fields=["order", "durum"]),
+            models.Index(fields=["order", "tip"]),
         ]
 
     def __str__(self) -> str:
         return (
             f"HE#{self.pk or '?'} O#{self.order_id} "
-            f"T#{self.tedarikci_firma_id} {self.durum}"
+            f"{self.tip} T#{self.tedarikci_firma_id} {self.durum}"
         )
 
     def clean(self):
@@ -93,13 +138,17 @@ class HazirlamaEmri(models.Model):
             return super().save(*args, **kwargs)
         if self._allow_status_transition:
             update_fields = kwargs.get("update_fields")
-            if update_fields is not None and set(update_fields) <= {
+            allowed = {
                 "durum",
                 "hazir_zamani",
                 "hazir_isaretleyen",
                 "teslim_modeli",
+                "fiyat_degisti",
+                "teyit_notu",
+                "tedarikci_firma",
                 "guncelleme_tarihi",
-            }:
+            }
+            if update_fields is not None and set(update_fields) <= allowed:
                 return super().save(*args, **kwargs)
             raise ValidationError(
                 "HazirlamaEmri güncellemesi yalnız izinli geçiş alanlarıyla yapılır."

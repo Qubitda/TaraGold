@@ -359,6 +359,20 @@ REQUEST_SCHEMAS: dict[str, dict] = {
     "OpsMeasurementRequest": OPS_MEASUREMENT,
     "OpsShipmentCreateRequest": OPS_SHIPMENT_CREATE,
     "OpsPodRequest": OPS_POD,
+    "OpsOdemeCreateRequest": _obj(
+        {
+            "firma_id": _int(),
+            "tip": _str(enum=["HAS", "HURDA", "TL"]),
+            "brut_gram": _str(),
+            "olculen_milyem": _str(),
+            "tl_tutar": _str(),
+            "manuel_kur": _str(),
+            "manuel_kur_gerekce": _str(),
+            "dekont_ref": _str(),
+            "order_id": _int(),
+        },
+        ["firma_id", "tip"],
+    ),
     "OpsProductCreateRequest": _obj(
         {
             "ad": _str(),
@@ -438,6 +452,7 @@ REQUEST_BINDINGS: dict[str, dict[str, str]] = {
     "/api/v1/ops/inspections/{id}/measurements/": {"post": "OpsMeasurementRequest"},
     "/api/v1/ops/shipments/": {"post": "OpsShipmentCreateRequest"},
     "/api/v1/ops/shipments/{id}/pod/": {"post": "OpsPodRequest"},
+    "/api/v1/ops/odemeler/": {"post": "OpsOdemeCreateRequest"},
     # B — action (empty / reason / optional)
     "/api/v1/auth/logout/": {"post": "EmptyRequest"},
     "/api/v1/orders/{id}/cancel/": {"post": "EmptyRequest"},

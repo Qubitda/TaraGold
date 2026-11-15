@@ -345,7 +345,7 @@ export function HomeDashboardView() {
 
     if (caps?.can_view_ops && snap.opsSummary?.counts) {
       const statusLabelMap: Record<string, string> = {
-        ONAY_BEKLIYOR: "Onay Bekleyen Sipariş",
+        ONAY_BEKLIYOR: "Onay bekliyor",
         ONAYLANDI: "Onaylanan Sipariş",
         HAZIRLANIYOR: "Hazırlanan Sipariş",
         SEVKIYAT: "Sevkiyattaki Sipariş",

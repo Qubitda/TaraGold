@@ -242,15 +242,19 @@ def olustur_rezervasyon(
             return _return_or_reject_existing(existing, now=now)
         raise
     except ValidationError as exc:
-        record_audit_durable(
-            actor=actor,
-            action="stock_reservation.create",
-            entity_type="StockReservation",
-            entity_id="",
-            success=False,
-            reason=str(exc),
-            detail={"warehouse_id": warehouse.pk, "varyant_id": varyant.pk},
-        )
+        from firmalar.services.audit_servisi import _in_domain_atomic
+
+        # Dış domain_atomic (ör. order.onayla) içinde durable yasak; rollback yeterli.
+        if not _in_domain_atomic.get():
+            record_audit_durable(
+                actor=actor,
+                action="stock_reservation.create",
+                entity_type="StockReservation",
+                entity_id="",
+                success=False,
+                reason=str(exc),
+                detail={"warehouse_id": warehouse.pk, "varyant_id": varyant.pk},
+            )
         raise
 
 

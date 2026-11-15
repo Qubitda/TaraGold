@@ -60,6 +60,12 @@ class Firma(models.Model):
     alici_mi = models.BooleanField("Alıcı (müşteri)", default=False)
     tedarikci_mi = models.BooleanField("Tedarikçi", default=False)
     platform_mu = models.BooleanField("Platform (biz)", default=False)
+    # ADR-0001 v2: tedarikçi hazırlama emri teyidini atla
+    otomatik_teyit = models.BooleanField(
+        "Otomatik teyit",
+        default=False,
+        help_text="True ise hazırlama emri TEDARIK_BEKLIYOR atlanır → HAZIRLANIYOR.",
+    )
 
     durum = models.CharField(
         "Durum",

@@ -425,9 +425,13 @@ BUYER_ORDER_LINE = _obj(
         "varyant_id": _int(),
         "miktar": _str(),
         "birim": _str(),
-        "snapshot_birim_fiyat_vergisiz": _str(),
-        "snapshot_satir_tutari_vergisiz": _str(),
+        "tahmini_birim_fiyat_vergisiz": _null_str(),
+        "tahmini_satir_tutari_vergisiz": _null_str(),
+        "snapshot_birim_fiyat_vergisiz": _null_str(),
+        "snapshot_satir_tutari_vergisiz": _null_str(),
+        "price_lock_id": _null_int(),
         "para_birimi": _str(),
+        "fiyat_kesin": _bool(),
     }
 )
 BUYER_ORDER = _obj(
@@ -439,6 +443,10 @@ BUYER_ORDER = _obj(
         "idempotency_key": _null_str(),
         "olusturma_tarihi": _null_str(),
         "line_count": _int(),
+        "tahmini_toplam_vergisiz": _null_str(),
+        "kesin_toplam_vergisiz": _null_str(),
+        "fark_toplam_vergisiz": _null_str(),
+        "fiyat_kesin": _bool(),
         "lines": {"type": "array", "items": BUYER_ORDER_LINE},
         "allowed_actions": _actions(),
         "server_now": _str(),
@@ -503,6 +511,58 @@ BUYER_CARI = _obj(
         "server_now": _str(),
     },
     ["id", "para_birimi", "bakiye"],
+)
+# ADR-0001 — ödeme / cari özet / HAS pozisyon
+ODEME_KAYDI = _obj(
+    {
+        "id": _int(),
+        "firma_id": _int(),
+        "order_id": _null_int(),
+        "tip": _str(enum=["HAS", "HURDA", "TL"]),
+        "brut_gram": _null_str(),
+        "olculen_milyem": _null_str(),
+        "has_karsiligi": _str(),
+        "tl_tutar": _null_str(),
+        "kur_has_birim_fiyat": _null_str(),
+        "kur_kaynagi": _null_str(),
+        "kur_zamani": _null_str(),
+        "dekont_ref": _str(),
+        "ledger_entry_idler": {"type": "array", "items": _int()},
+        "olusturma_tarihi": _null_str(),
+    },
+    ["id", "firma_id", "tip", "has_karsiligi"],
+)
+CARI_OZET_PB = _obj(
+    {"bakiye": _str(), "anlam": _str()},
+    ["bakiye", "anlam"],
+)
+CARI_OZET = _obj(
+    {
+        "firma_id": _int(),
+        "HAS": {"$ref": "#/components/schemas/CariOzetPb"},
+        "TRY": {"$ref": "#/components/schemas/CariOzetPb"},
+    },
+    ["firma_id", "HAS", "TRY"],
+)
+HAS_POZISYON = _obj(
+    {
+        "locked_customer": _str(),
+        "unpaid_supplier": _str(),
+        "hedge": _str(),
+        "open_has": _str(),
+        "limit": _str(),
+        "over_limit": _bool(),
+        "approval_required": _bool(),
+    },
+    [
+        "locked_customer",
+        "unpaid_supplier",
+        "hedge",
+        "open_has",
+        "limit",
+        "over_limit",
+        "approval_required",
+    ],
 )
 BUYER_LEDGER = _obj(
     {
@@ -772,6 +832,10 @@ COMPONENT_SCHEMAS: dict[str, dict] = {
     "OpsFinanceSummary": OPS_FINANCE_SUMMARY,
     "BuyerCari": BUYER_CARI,
     "BuyerCariPage": paginated("BuyerCari"),
+    "OdemeKaydi": ODEME_KAYDI,
+    "CariOzetPb": CARI_OZET_PB,
+    "CariOzet": CARI_OZET,
+    "HasPozisyon": HAS_POZISYON,
     "BuyerLedger": BUYER_LEDGER,
     "BuyerLedgerPage": paginated("BuyerLedger"),
     "BuyerCredit": BUYER_CREDIT,
@@ -933,6 +997,10 @@ RESPONSE_BINDINGS: dict[str, _R] = {
     "/api/v1/ops/finance/cari/": {"get": ("200", "BuyerCariPage")},
     "/api/v1/ops/finance/ledger/": {"get": ("200", "BuyerLedgerPage")},
     "/api/v1/ops/finance/payments/": {"get": ("200", "BuyerOrderPage")},
+    "/api/v1/ops/odemeler/": {"post": ("201", "OdemeKaydi")},
+    "/api/v1/ops/cari/{firma_id}/": {"get": ("200", "CariOzet")},
+    "/api/v1/ops/pozisyon/has/": {"get": ("200", "HasPozisyon")},
+    "/api/v1/cari/": {"get": ("200", "CariOzet")},
     "/api/v1/reports/orders/": {"get": ("200", "TicariSiparisOzet")},
     "/api/v1/reports/buyer-behavior/": {"get": ("200", "AliciDavranisOzet")},
     "/api/v1/ops/anomalies/ciro/": {"get": ("200", "CiroAnomali")},

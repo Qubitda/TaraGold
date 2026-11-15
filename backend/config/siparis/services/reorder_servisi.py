@@ -80,9 +80,13 @@ def sepete_aktar(
         )
         raise PermissionDenied("Sipariş firması aktör ile uyumsuz.")
 
+    from siparis.services.line_kaynak import require_line_quote
+
     lines = list(
         order.lines.select_related(
             "varyant",
+            "price_quote__satis_kanali",
+            "price_quote__varyant_fiyat",
             "price_lock__quote__satis_kanali",
             "price_lock__quote__varyant_fiyat",
         ).order_by("pk")
@@ -93,7 +97,7 @@ def sepete_aktar(
     prepared: list[tuple] = []
     try:
         for line in lines:
-            old_quote = line.price_lock.quote
+            old_quote = require_line_quote(line)
             varyant = line.varyant
             miktar = Decimal(line.miktar)
             if miktar <= 0:

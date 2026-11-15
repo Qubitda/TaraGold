@@ -19,8 +19,12 @@ import {
   useUpdateCartLineMutation,
 } from "../hooks";
 import { useQueryClient } from "@tanstack/react-query";
-import { QuoteCountdown, isQuoteExpired } from "@/components/commerce/quote-countdown";
-import { calibrateServerClock, useServerClock } from "@/hooks/use-server-clock";
+import {
+  ORDER_STATUSES,
+  TAHMINI_FIYAT_ACIKLAMA,
+  orderStatusLabel as sharedOrderStatusLabel,
+} from "@/lib/order-status";
+import { calibrateServerClock } from "@/hooks/use-server-clock";
 import { newIdempotencyKey } from "@/lib/api/client";
 import { mapCommerceError } from "@/lib/api/commerce-errors";
 import { isPositiveDecimal } from "@/lib/parse-decimal";
@@ -58,22 +62,8 @@ import { useAuthContext } from "@/features/auth/components/auth-provider";
 
 type TabId = "prepare" | "orders" | "hazirlama";
 
-const ORDER_STATUS_LABELS: Record<string, string> = {
-  TASLAK: "Taslak",
-  OLUSTURULDU: "Oluşturuldu",
-  ONAY_BEKLIYOR: "Onay Bekliyor",
-  BEKLEMEDE: "Beklemede",
-  ONAYLANDI: "Onaylandı",
-  HAZIRLANIYOR: "Hazırlanıyor",
-  HAZIR: "Hazır",
-  SEVKIYAT: "Sevkiyatta",
-  TAMAMLANDI: "Tamamlandı",
-  REDDEDILDI: "Reddedildi",
-  IPTAL: "İptal",
-};
-
 function orderStatusLabel(durum: string): string {
-  return ORDER_STATUS_LABELS[durum] || durum;
+  return sharedOrderStatusLabel(durum, "buyer");
 }
 
 export function OrderWorkflowView() {
@@ -164,8 +154,6 @@ export function OrderWorkflowView() {
   const [selectedOrder, setSelectedOrder] = useState<BuyerOrder | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
-  const serverClock = useServerClock();
-
   const routeIdNum =
     routeOrderId && Number.isFinite(Number(routeOrderId))
       ? Number(routeOrderId)
@@ -265,24 +253,7 @@ export function OrderWorkflowView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeIdNum, orderDetailQuery.data]);
 
-  const cartHasExpiredQuote = Boolean(
-    cart?.lines?.some((l) =>
-      isQuoteExpired(l.gecerlilik_sonu, serverClock.nowMs())
-    )
-  );
-
   const handleConfirmCheckout = async () => {
-    if (
-      cart?.lines?.some((l) =>
-        isQuoteExpired(l.gecerlilik_sonu, serverClock.nowMs())
-      )
-    ) {
-      const msg =
-        "Süresi dolmuş fiyat satırı var. Miktarı güncelleyin veya satırı kaldırıp yeniden Sepete Ekleyin.";
-      setError(msg);
-      actionToast.error("Sipariş tamamlanamadı", msg);
-      return;
-    }
     if (!checkoutAttemptRef.current) {
       checkoutAttemptRef.current = {
         checkoutKey: newIdempotencyKey(),
@@ -545,20 +516,15 @@ export function OrderWorkflowView() {
                   <TableRow>
                     <TableHead>Ürün / Stok Kodu</TableHead>
                     <TableHead className="text-right">Miktar</TableHead>
-                    <TableHead className="text-right">Birim Fiyat (Vergisiz)</TableHead>
+                    <TableHead className="text-right">Tahmini birim</TableHead>
                     <TableHead>Para Birimi</TableHead>
-                    <TableHead>Fiyat Geçerlilik Süresi</TableHead>
                     <TableHead className="text-right">İşlem</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {cart.lines.map((line) => {
-                    const expired = isQuoteExpired(line.gecerlilik_sonu);
                     return (
-                      <TableRow
-                        key={line.id}
-                        className={expired ? "bg-destructive/5" : undefined}
-                      >
+                      <TableRow key={line.id}>
                         <TableCell>
                           <div className="text-xs font-medium text-foreground">
                             {line.urun_ad || line.varyant_sku || "Ürün Kalemi"}
@@ -604,47 +570,26 @@ export function OrderWorkflowView() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums text-foreground font-medium">
-                          {formatMoney(line.birim_fiyat_vergisiz, line.para_birimi)}
+                          <div>
+                            {formatMoney(line.birim_fiyat_vergisiz, line.para_birimi)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-sans font-normal">
+                            Tahmini
+                          </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {line.para_birimi}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          <QuoteCountdown expiresAt={line.gecerlilik_sonu} />
-                        </TableCell>
                         <TableCell className="text-right">
-                          <div className="inline-flex items-center justify-end gap-1">
-                            {expired ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                disabled={requoteMutation.isPending}
-                                onClick={() => {
-                                  void requoteMutation
-                                    .mutateAsync(line.id)
-                                    .then(() =>
-                                      actionToast.success("Fiyat yenilendi")
-                                    )
-                                    .catch((err) =>
-                                      actionToast.error("Fiyat yenilenemedi", err)
-                                    );
-                                }}
-                              >
-                                Fiyatı yenile
-                              </Button>
-                            ) : null}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setRemoveLineConfirm(line.id)}
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              aria-label="Satırı kaldır"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setRemoveLineConfirm(line.id)}
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            aria-label="Satırı kaldır"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -656,18 +601,18 @@ export function OrderWorkflowView() {
 
           {cart && cart.lines.length > 0 && (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-[8px] border border-border bg-card p-4">
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Gönderdiğiniz anda fiyatlar kilitlenir, stok rezervasyonu yapılır ve sipariş onay havuzuna düşer.</p>
-                {cartHasExpiredQuote ? (
-                  <p className="text-destructive" role="alert">
-                    Süresi dolmuş fiyat satırı var. Eski satırı kaldırıp yeniden Sipariş Verin.
-                  </p>
-                ) : null}
+              <div className="text-xs text-muted-foreground space-y-1 max-w-xl">
+                <p>
+                  Gönderince sipariş onay havuzuna düşer. Gösterilen tutarlar{" "}
+                  <strong className="font-medium text-foreground">tahmini</strong>
+                  dir; kesin fiyat onayda güncel kura göre yazılır. Stok onayda ayrılır.
+                </p>
+                <p className="text-[11px]">{TAHMINI_FIYAT_ACIKLAMA}</p>
               </div>
               <Button
                 type="button"
                 onClick={() => setCheckoutModalOpen(true)}
-                disabled={isSubmittingCheckout || cartHasExpiredQuote}
+                disabled={isSubmittingCheckout}
                 className="gap-2"
               >
                 <CheckCircle2 className="h-4 w-4" />
@@ -679,7 +624,7 @@ export function OrderWorkflowView() {
       ) : activeTab === "orders" ? (
         <ListPage
           title="Sipariş Geçmişi"
-          description="Tamamlanan siparişleriniz kilitlenmiş fiyat ve miktar bilgileriyle burada saklanır."
+          description="Siparişleriniz; onay öncesi tahmini, onay sonrası kesin fiyatla burada görünür."
           searchValue={orderSearch}
           onSearchChange={(val) => {
             setOrderSearch(val);
@@ -697,9 +642,9 @@ export function OrderWorkflowView() {
               className="h-9 rounded-[6px] border border-border bg-background px-3 text-xs text-foreground"
             >
               <option value="">Tüm Durumlar</option>
-              {Object.entries(ORDER_STATUS_LABELS).map(([k, lbl]) => (
+              {ORDER_STATUSES.map((k) => (
                 <option key={k} value={k}>
-                  {lbl}
+                  {orderStatusLabel(k)}
                 </option>
               ))}
             </select>
@@ -957,10 +902,47 @@ export function OrderWorkflowView() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Kilitlenmiş Sipariş Kalemleri
+                Sipariş kalemleri
               </span>
               {renderDurumBadge(selectedOrder.durum)}
             </div>
+
+            {selectedOrder.fiyat_kesin ? (
+              <p className="text-xs text-muted-foreground">
+                Kesin toplam:{" "}
+                <span className="font-mono font-medium text-foreground">
+                  {selectedOrder.kesin_toplam_vergisiz ?? "—"}
+                </span>
+                {selectedOrder.tahmini_toplam_vergisiz ? (
+                  <>
+                    {" "}
+                    · Tahmini:{" "}
+                    <span className="line-through font-mono">
+                      {selectedOrder.tahmini_toplam_vergisiz}
+                    </span>
+                  </>
+                ) : null}
+                {selectedOrder.fark_toplam_vergisiz &&
+                selectedOrder.fark_toplam_vergisiz !== "0.00" ? (
+                  <>
+                    {" "}
+                    · Fark:{" "}
+                    <span className="font-mono text-foreground">
+                      {selectedOrder.fark_toplam_vergisiz}
+                    </span>
+                  </>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Tahmini toplam:{" "}
+                <span className="font-mono font-medium text-foreground">
+                  {selectedOrder.tahmini_toplam_vergisiz ?? "—"}
+                </span>
+                {" · "}
+                {TAHMINI_FIYAT_ACIKLAMA}
+              </p>
+            )}
 
             {selectedOrder.lines && selectedOrder.lines.length > 0 ? (
               <div className="rounded-[6px] border border-border overflow-hidden">
@@ -969,8 +951,8 @@ export function OrderWorkflowView() {
                     <TableRow>
                       <TableHead>Ürün / Stok Kodu</TableHead>
                       <TableHead className="text-right">Miktar</TableHead>
-                      <TableHead className="text-right">Birim Fiyat</TableHead>
-                      <TableHead className="text-right">Satır Tutarı</TableHead>
+                      <TableHead className="text-right">Tahmini</TableHead>
+                      <TableHead className="text-right">Kesin</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -989,17 +971,29 @@ export function OrderWorkflowView() {
                         <TableCell className="text-right font-mono tabular-nums text-xs">
                           {l.miktar} {l.birim}
                         </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-xs">
+                        <TableCell
+                          className={`text-right font-mono tabular-nums text-xs ${
+                            l.fiyat_kesin ? "line-through text-muted-foreground" : "font-semibold"
+                          }`}
+                        >
                           {formatMoney(
-                            l.snapshot_birim_fiyat_vergisiz,
+                            l.tahmini_satir_tutari_vergisiz ??
+                              l.snapshot_satir_tutari_vergisiz,
                             l.para_birimi
                           )}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums text-xs font-semibold">
-                          {formatMoney(
-                            l.snapshot_satir_tutari_vergisiz,
-                            l.para_birimi
-                          )}
+                          {l.fiyat_kesin
+                            ? formatMoney(
+                                l.snapshot_satir_tutari_vergisiz,
+                                l.para_birimi
+                              )
+                            : "—"}
+                          {l.fark_vergisiz && l.fark_vergisiz !== "0.00" ? (
+                            <div className="text-[10px] font-sans font-normal text-muted-foreground">
+                              Fark: {l.fark_vergisiz} {l.para_birimi}
+                            </div>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

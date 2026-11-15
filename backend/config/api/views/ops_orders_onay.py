@@ -25,7 +25,7 @@ from belgeler.services.siparis_belge_servisi import (
     uret_proforma,
     uret_tedarikci_irsaliye,
 )
-from finans.services.manuel_tahsilat_servisi import elle_tahsilat
+from finans.services.odeme_servisi import elle_tahsilat_tl_bridge, present_odeme
 from firmalar.services.yetki_servisi import can_view_all_tenants
 from siparis.models import Order
 from siparis.services import order_onay_servisi
@@ -38,11 +38,20 @@ def _require_ops(user):
 
 def _present_order_ops(o: Order) -> dict:
     totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    tahmini_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     lines = []
+    has_kesin = False
     for ln in o.lines.select_related("varyant", "varyant__urun").all():
         pb = (ln.para_birimi or "TRY").upper()
-        tutar = Decimal(ln.snapshot_satir_tutari_vergisiz or "0.00")
-        totals[pb] += tutar
+        tahmini = ln.tahmini_satir_tutari_vergisiz
+        kesin = ln.snapshot_satir_tutari_vergisiz
+        if tahmini is not None:
+            tahmini_totals[pb] += Decimal(tahmini)
+        if kesin is not None:
+            totals[pb] += Decimal(kesin)
+            has_kesin = True
+        elif tahmini is not None:
+            totals[pb] += Decimal(tahmini)
         lines.append(
             {
                 "id": ln.pk,
@@ -53,8 +62,15 @@ def _present_order_ops(o: Order) -> dict:
                 "miktar": str(ln.miktar),
                 "birim": ln.birim,
                 "para_birimi": pb,
-                "satir_tutari": str(ln.snapshot_satir_tutari_vergisiz),
+                "tahmini_satir_tutari": str(tahmini) if tahmini is not None else None,
+                "satir_tutari": str(kesin) if kesin is not None else (
+                    str(tahmini) if tahmini is not None else None
+                ),
+                "fiyat_kesin": kesin is not None,
                 "teslim_modeli": getattr(ln, "teslim_modeli", "PLATFORM_QC"),
+                "benzersiz_parca": bool(
+                    getattr(ln.varyant, "benzersiz_parca", False)
+                ),
             }
         )
     emirler = [
@@ -78,6 +94,10 @@ def _present_order_ops(o: Order) -> dict:
         if o.olusturma_tarihi
         else None,
         "toplamlar": {k: str(v.quantize(Decimal("0.01"))) for k, v in totals.items()},
+        "tahmini_toplamlar": {
+            k: str(v.quantize(Decimal("0.01"))) for k, v in tahmini_totals.items()
+        },
+        "fiyat_kesin": has_kesin,
         "satir_sayisi": len(lines),
         "satirlar": lines,
         "hazirlama_emirleri": emirler,
@@ -258,27 +278,22 @@ class OpsOrderTahsilatView(IdempotencyMixin, APIView):
         order = get_object_or_404(Order, pk=pk)
         idem_key = (request.headers.get("Idempotency-Key") or "").strip() or None
         try:
-            entry = elle_tahsilat(
+            kayit = elle_tahsilat_tl_bridge(
                 actor=request.user,
                 order=order,
                 tutar=request.data.get("tutar"),
                 yontem=request.data.get("yontem") or "",
                 aciklama=request.data.get("aciklama") or "",
                 dekont_ref=request.data.get("dekont_ref") or "",
-                para_birimi=request.data.get("para_birimi") or None,
                 idempotency_key=idem_key,
             )
         except (DjangoValidationError, DjangoPermissionDenied) as exc:
             if isinstance(exc, DjangoValidationError):
                 raise _django_ve_to_drf(exc) from exc
             raise PermissionDenied(str(exc)) from exc
-        resp = Response(
-            {
-                "ledger_entry_id": entry.pk,
-                "tutar": str(entry.tutar),
-                "para_birimi": entry.para_birimi,
-            }
-        )
+        body = present_odeme(kayit)
+        body["legacy"] = True
+        resp = Response(body)
         return self.idempotency_commit(request, resp) if has_idem else resp
 
 

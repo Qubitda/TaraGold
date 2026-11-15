@@ -3,11 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Gem, ShoppingCart, Eye } from "lucide-react";
 import type { BuyerCatalogDetail, BuyerCatalogItem } from "../types";
-import {
-  isQuoteExpired,
-  QuoteCountdown,
-} from "@/components/commerce/quote-countdown";
 import { formatGram, formatMoney } from "@/lib/format";
+import { TAHMINI_FIYAT_ACIKLAMA } from "@/lib/order-status";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -80,6 +77,7 @@ export function BuyerCatalogGrid({
   channelSelected,
   onOpen,
   onAddToCart,
+  onOrderBlocked,
 }: {
   items: BuyerCatalogItem[];
   prices: Record<number, CardPriceState>;
@@ -87,6 +85,7 @@ export function BuyerCatalogGrid({
   channelSelected: boolean;
   onOpen: (id: number) => void;
   onAddToCart: (item: BuyerCatalogItem, quoteId: number) => void;
+  onOrderBlocked?: (message: string) => void;
 }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
@@ -151,12 +150,15 @@ export function BuyerCatalogGrid({
                   </span>
                 ) : price?.price ? (
                   <div className="space-y-0.5">
+                    <div className="text-[10px] text-muted-foreground">
+                      Tahmini fiyat
+                    </div>
                     <div className="text-sm font-semibold font-mono tabular-nums tracking-tight">
                       {formatMoney(price.price, price.currency || "TRY")}
                     </div>
-                    {price.expiresAt ? (
-                      <QuoteCountdown expiresAt={price.expiresAt} />
-                    ) : null}
+                    <div className="text-[10px] text-muted-foreground leading-snug">
+                      {TAHMINI_FIYAT_ACIKLAMA}
+                    </div>
                   </div>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
@@ -184,14 +186,18 @@ export function BuyerCatalogGrid({
                     !purchasable ||
                     !canQuote ||
                     !channelSelected ||
-                    !price?.quoteId ||
-                    !price?.price ||
                     Boolean(price?.adding) ||
-                    Boolean(price?.added) ||
-                    isQuoteExpired(price?.expiresAt)
+                    Boolean(price?.added)
                   }
                   onClick={() => {
-                    if (price?.quoteId) onAddToCart(item, price.quoteId);
+                    if (!price?.quoteId || !price?.price) {
+                      onOrderBlocked?.(
+                        price?.error ||
+                          "Varyant için aktif fiyat yok; ops Stok & Fiyat sekmesinden girin."
+                      );
+                      return;
+                    }
+                    onAddToCart(item, price.quoteId);
                   }}
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
@@ -428,25 +434,22 @@ export function BuyerProductDetailView({
                 <p className="text-sm text-muted-foreground animate-pulse">Fiyat hesaplanıyor…</p>
               ) : st?.price ? (
                 <>
+                  <div className="text-xs text-muted-foreground">Tahmini fiyat</div>
                   <div className="text-2xl font-semibold font-mono tabular-nums tracking-tight">
                     {formatMoney(st.price, st.currency || "TRY")}
                   </div>
-                  {st.expiresAt ? (
-                    <QuoteCountdown expiresAt={st.expiresAt} />
-                  ) : null}
+                  <p className="text-[11px] text-muted-foreground">
+                    {TAHMINI_FIYAT_ACIKLAMA}
+                  </p>
                   {st.added ? (
                     <Badge variant="success" className="gap-1 text-[11px]">
                       <Check className="h-3 w-3" />
-                      Sepete eklendi
+                      Sipariş listesine eklendi
                     </Badge>
                   ) : (
                     <Button
                       className="w-full h-10 gap-2"
-                      disabled={
-                        !st.quoteId ||
-                        Boolean(st.adding) ||
-                        isQuoteExpired(st.expiresAt)
-                      }
+                      disabled={!st.quoteId || Boolean(st.adding)}
                       onClick={() => {
                         if (selectedVariantId && st.quoteId) {
                           onAddToCart(selectedVariantId, st.quoteId);

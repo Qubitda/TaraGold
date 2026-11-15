@@ -83,22 +83,21 @@ class CheckoutServiceTests(CheckoutFixtureMixin, TestCase):
         cls._build_checkout_world()
 
     def test_checkout_creates_lock_and_reservation(self):
+        """ADR-0001: checkout stok/kilit tutmaz; yalnız quote doğrular."""
         self._quote_and_cart()
+        bal_before = StockBalance.objects.get(
+            warehouse=self.wh, varyant=self.varyant
+        )
         result = checkout_servisi.checkout(
             actor=self.buyer, idempotency_key="co-ok-1"
         )
         self.assertEqual(result.attempt.durum, CheckoutAttempt.Durum.BASARILI)
         self.assertEqual(len(result.lines), 1)
-        self.assertTrue(PriceLock.objects.filter(pk=result.lines[0].lock_id).exists())
-        self.assertTrue(
-            StockReservation.objects.filter(
-                pk=result.lines[0].reservation_id,
-                durum=StockReservation.Durum.AKTIF,
-            ).exists()
-        )
+        self.assertEqual(result.lines[0].lock_id, 0)
+        self.assertEqual(result.lines[0].reservation_id, 0)
         bal = StockBalance.objects.get(warehouse=self.wh, varyant=self.varyant)
-        self.assertEqual(bal.reserved, Decimal("2"))
-        self.assertEqual(bal.on_hand, Decimal("100"))
+        self.assertEqual(bal.reserved, bal_before.reserved)
+        self.assertEqual(bal.on_hand, bal_before.on_hand)
 
     def test_checkout_idempotent(self):
         self._quote_and_cart()
@@ -109,26 +108,22 @@ class CheckoutServiceTests(CheckoutFixtureMixin, TestCase):
             actor=self.buyer, idempotency_key="co-idem"
         )
         self.assertEqual(a.attempt.pk, b.attempt.pk)
-        self.assertEqual(a.lines[0].lock_id, b.lines[0].lock_id)
+        self.assertEqual(a.lines[0].quote_id, b.lines[0].quote_id)
         self.assertEqual(
             StockReservation.objects.filter(
                 durum=StockReservation.Durum.AKTIF
             ).count(),
-            1,
+            0,
         )
 
     def test_expired_quote_fails(self):
+        """ADR-0001: quote TTL checkout'u engellemez (yaklaşık fiyat)."""
         quote = self._quote_and_cart()
         after = quote.gecerlilik_sonu + timedelta(seconds=1)
-        with self.assertRaises(ValidationError):
-            checkout_servisi.checkout(
-                actor=self.buyer, idempotency_key="co-exp", now=after
-            )
-        self.assertFalse(
-            CheckoutAttempt.objects.filter(
-                idempotency_key="co-exp", durum=CheckoutAttempt.Durum.BASARILI
-            ).exists()
+        result = checkout_servisi.checkout(
+            actor=self.buyer, idempotency_key="co-exp", now=after
         )
+        self.assertEqual(result.attempt.durum, CheckoutAttempt.Durum.BASARILI)
 
     def test_empty_cart_fails(self):
         cart_servisi.al_veya_olustur_sepet(actor=self.buyer)
