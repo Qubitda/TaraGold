@@ -94,10 +94,29 @@ class CartLineCreateView(IdempotencyMixin, APIView):
 
 
 class CartLineDetailView(IdempotencyMixin, APIView):
-    """PATCH/DELETE /api/v1/carts/me/lines/<id>/."""
+    """PATCH/DELETE /api/v1/carts/me/lines/<id>/; POST action=requote."""
 
     permission_classes = [IsBuyerCommerceWrite]
     throttle_classes = [BuyerRateThrottle]
+
+    def post(self, request, line_id: int):
+        """{action: requote} — süresi dolan quote için yeni fiyat."""
+        cached = self.idempotency_begin(request)
+        if cached is not None:
+            return cached
+        line = _get_own_line(request.user, line_id)
+        action = (request.data.get("action") or "").strip()
+        if action != "requote":
+            raise ValidationError(detail={"action": "Desteklenen: requote"})
+        try:
+            line = cart_servisi.satir_yeniden_fiyatla(actor=request.user, line=line)
+        except DjangoValidationError as exc:
+            raise_drf(exc)
+        body = {
+            "line": BuyerCartLinePresenter(line),
+            "cart": BuyerCartPresenter(line.cart),
+        }
+        return self.idempotency_commit(request, Response(body))
 
     def patch(self, request, line_id: int):
         cached = self.idempotency_begin(request)

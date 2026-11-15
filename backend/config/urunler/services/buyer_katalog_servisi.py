@@ -16,7 +16,7 @@ class BuyerCatalogNotFound(ObjectDoesNotExist):
 def _published_qs():
     return (
         Urun.objects.filter(yayin_durumu="aktif", onay_durumu="onayli")
-        .select_related("kategori", "ayar")
+        .select_related("kategori", "ayar", "ayar__metal")
         .order_by("ad", "pk")
     )
 
@@ -47,6 +47,8 @@ def liste(*, q: str = "", limit: int = 50) -> list[dict]:
             "platform_kodu": u.platform_kodu or "",
             "kategori": getattr(u.kategori, "ad", "") or "",
             "ayar": getattr(u.ayar, "ayar_kodu", "") or "",
+            "metal": getattr(getattr(u.ayar, "metal", None), "ad", "") or "",
+            "milyem": str(getattr(u.ayar, "milyem", "") or "") or None,
             "fiyat_tipi": u.fiyat_tipi,
             "varyant_count": u.varyantlar.filter(aktif=True).count(),
             "kapak_url": kapak_url,
@@ -54,6 +56,23 @@ def liste(*, q: str = "", limit: int = 50) -> list[dict]:
         assert_masked(row)
         rows.append(row)
     return rows
+
+
+def _maskeli_stok_durumu(u: Urun) -> str:
+    """Alıcıya depo/tedarikçi sızdırmaz: var | yok | siparise_ozel."""
+    if (u.temin_tipi or "") == "siparis_ozel":
+        return "siparise_ozel"
+    from stok.models import StockBalance
+
+    vids = list(u.varyantlar.filter(aktif=True).values_list("pk", flat=True))
+    if not vids:
+        return "yok"
+    for bal in StockBalance.objects.filter(varyant_id__in=vids).only(
+        "on_hand", "reserved", "blocked"
+    ):
+        if bal.available > 0:
+            return "var"
+    return "yok"
 
 
 def detay(*, urun_id: int) -> dict:
@@ -103,7 +122,21 @@ def detay(*, urun_id: int) -> dict:
         "aciklama": (u.aciklama or "")[:2000],
         "kategori": getattr(u.kategori, "ad", "") or "",
         "ayar": getattr(u.ayar, "ayar_kodu", "") or "",
+        "metal": getattr(getattr(u.ayar, "metal", None), "ad", "") or "",
+        "milyem": str(getattr(u.ayar, "milyem", "") or "") or None,
+        "taslar": [
+            {
+                "id": t.pk,
+                "tas_tipi": getattr(t.tas_tipi, "ad", "") or "",
+                "adet": t.adet,
+                "karat": str(t.karat) if t.karat is not None else None,
+            }
+            for t in u.taslar.select_related("tas_tipi").order_by("pk")
+        ],
         "fiyat_tipi": u.fiyat_tipi,
+        "temin_tipi": u.temin_tipi or "",
+        "termin_gun": u.termin_gun,
+        "stok_durumu": _maskeli_stok_durumu(u),
         "koleksiyon": getattr(getattr(u, "koleksiyon", None), "ad", "") or "",
         "hedef_kitle": u.get_hedef_kitle_display() if u.hedef_kitle else "",
         "yas_grubu": getattr(getattr(u, "yas_grubu", None), "ad", "") or "",

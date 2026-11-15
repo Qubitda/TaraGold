@@ -16,6 +16,7 @@ import {
   useOrdersPageQuery,
   useRemoveCartLineMutation,
   useReorderOrderMutation,
+  useRequoteCartLineMutation,
   useSupplierHazirlamaQuery,
   useUpdateCartLineMutation,
 } from "../hooks";
@@ -116,6 +117,7 @@ export function OrderWorkflowView() {
   const removeLineMutation = useRemoveCartLineMutation();
   const updateLineMutation = useUpdateCartLineMutation();
   const checkoutMutation = useCheckoutMutation();
+  const requoteMutation = useRequoteCartLineMutation();
   const cancelMutation = useCancelOrderMutation();
   const reorderMutation = useReorderOrderMutation();
   const bulkMutation = useBulkOrderMutation();
@@ -326,7 +328,11 @@ export function OrderWorkflowView() {
     setIsSubmittingCheckout(true);
     setError(null);
     try {
-      const createdOrder = await checkoutMutation.mutateAsync();
+      const createdOrder = await checkoutMutation.mutateAsync({
+        teslimat_adresi_id: selectedDeliveryAddr ?? undefined,
+        fatura_adresi_id: selectedInvoiceAddr ?? undefined,
+        siparis_notu: orderNotes.trim(),
+      });
       setCheckoutModalOpen(false);
       setOrderNotes("");
       await refreshData();
@@ -575,6 +581,8 @@ export function OrderWorkflowView() {
                           {line.varyant_sku ? (
                             <div className="font-mono text-[11px] text-muted-foreground">
                               {line.varyant_sku}
+                              {line.gram ? ` · ${line.gram}g` : ""}
+                              {line.fiyat_tipi ? ` · ${line.fiyat_tipi}` : ""}
                             </div>
                           ) : null}
                         </TableCell>
@@ -620,15 +628,38 @@ export function OrderWorkflowView() {
                           <QuoteCountdown expiresAt={line.gecerlilik_sonu} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setRemoveLineConfirm(line.id)}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            aria-label="Satırı sepetten sil"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="inline-flex items-center justify-end gap-1">
+                            {expired ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                disabled={requoteMutation.isPending}
+                                onClick={() => {
+                                  void requoteMutation
+                                    .mutateAsync(line.id)
+                                    .then(() =>
+                                      actionToast.success("Fiyat yenilendi")
+                                    )
+                                    .catch((err) =>
+                                      actionToast.error("Fiyat yenilenemedi", err)
+                                    );
+                                }}
+                              >
+                                Fiyatı yenile
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setRemoveLineConfirm(line.id)}
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              aria-label="Satırı sepetten sil"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

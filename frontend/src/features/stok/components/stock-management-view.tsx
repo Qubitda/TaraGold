@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -20,6 +21,7 @@ import {
 import { stokService } from "../services";
 import type { SupplierWarehouse } from "../types";
 import { fiyatlamaService } from "@/features/fiyatlama/services";
+import { urunlerService } from "@/features/urunler/services";
 import { opsFirmalarService } from "@/features/firmalar/services/ops-firmalar";
 import { useAuth } from "@/features/auth";
 import { useActionToast } from "@/hooks/use-action-toast";
@@ -47,14 +49,21 @@ import { Boxes, Plus, Warehouse } from "lucide-react";
 
 export function StockManagementView() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isOps = Boolean(user?.firma?.platform_mu || user?.capabilities?.can_view_ops);
   const actionToast = useActionToast();
 
-  const [activeTab, setActiveTab] = useState<"stock" | "warehouses">("stock");
+  const [activeTab, setActiveTab] = useState<"stock" | "warehouses">(() =>
+    searchParams.get("tab") === "warehouses" ? "warehouses" : "stock"
+  );
 
   // Stock list state
-  const [stockSearch, setStockSearch] = useState("");
-  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [stockSearch, setStockSearch] = useState(
+    () => searchParams.get("q") || ""
+  );
+  const [warehouseFilter, setWarehouseFilter] = useState(
+    () => searchParams.get("warehouse_id") || ""
+  );
   const [stockPage, setStockPage] = useState(1);
   const [stockPageSize, setStockPageSize] = useState(20);
 
@@ -106,11 +115,44 @@ export function StockManagementView() {
     resolver: zodResolver(stockAdjustmentSchema),
     defaultValues: {
       warehouse_id: undefined,
-      teklif_id: undefined,
+      varyant_id: undefined,
+      birim_fiyat: "",
       miktar: "",
       neden: "",
     },
   });
+
+  // Deep-link: /stok?q=&warehouse_id=&varyant_id=&adjust=1&tab=warehouses
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "warehouses") setActiveTab("warehouses");
+    const q = searchParams.get("q");
+    if (q) setStockSearch(q);
+    const wh = searchParams.get("warehouse_id");
+    if (wh) setWarehouseFilter(wh);
+    if (searchParams.get("adjust") === "1") {
+      const varyantRaw =
+        searchParams.get("varyant_id") || searchParams.get("teklif_id");
+      adjustForm.reset({
+        warehouse_id: wh ? Number(wh) : undefined,
+        varyant_id: varyantRaw ? Number(varyantRaw) : undefined,
+        birim_fiyat: "",
+        miktar: "",
+        neden: "",
+      });
+      setAdjustError(null);
+      setAdjustOpen(true);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("adjust");
+          return next;
+        },
+        { replace: true }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const whForm = useForm<WarehouseInput>({
     resolver: zodResolver(warehouseSchema),
@@ -130,11 +172,46 @@ export function StockManagementView() {
     setAdjustError(null);
     adjustForm.reset({
       warehouse_id: undefined,
-      teklif_id: undefined,
+      varyant_id: undefined,
+      birim_fiyat: "",
       miktar: "",
       neden: "",
     });
     setAdjustOpen(true);
+  };
+
+  /** Özellik kırılımı için fiyat satırını bul veya oluştur (UI’da teklif denmez). */
+  const ensureOfferForVariant = async (
+    varyantId: number,
+    birimFiyat?: string
+  ): Promise<number> => {
+    const fromBal = balances.find(
+      (b) => b.varyant_id === varyantId && b.teklif_id
+    );
+    if (fromBal?.teklif_id) return Number(fromBal.teklif_id);
+
+    const page = await fiyatlamaService.getSupplierOffers({ page_size: "100" });
+    const rows = (page.results ?? []).filter((o) => o.varyant_id === varyantId);
+    const existing =
+      rows.find((o) => o.durum === "YAYINDA") ||
+      rows.find((o) => o.durum === "ONAYLANDI") ||
+      rows[0];
+    if (existing) return existing.id;
+
+    const price = (birimFiyat || "").trim();
+    if (!price || Number.isNaN(Number(price)) || Number(price) <= 0) {
+      throw new Error(
+        "Bu özellik kırılımının henüz fiyatı yok. Birim fiyat alanını doldurun."
+      );
+    }
+    const created = await fiyatlamaService.createSupplierOffer({
+      varyant_id: varyantId,
+      fiyat_modeli: "SABIT_PARCA",
+      birim_fiyat: price,
+      para_birimi: "TRY",
+      temin_tipi: "HAZIR",
+    });
+    return created.id;
   };
 
   const openCreateWhModal = () => {
@@ -164,9 +241,13 @@ export function StockManagementView() {
   const onAdjustSubmit = adjustForm.handleSubmit(async (data) => {
     setAdjustError(null);
     try {
+      const teklifId = await ensureOfferForVariant(
+        Number(data.varyant_id),
+        data.birim_fiyat
+      );
       await adjustMut.mutateAsync({
         warehouse_id: Number(data.warehouse_id),
-        teklif_id: Number(data.teklif_id),
+        teklif_id: teklifId,
         miktar: data.miktar.trim(),
         neden: data.neden.trim(),
       });
@@ -264,7 +345,7 @@ export function StockManagementView() {
       {activeTab === "stock" ? (
         <ListPage
           title="Stok & Depo Yönetimi"
-          description="Depo bazlı eldeki, rezerve ve kullanılabilir stok miktarlarını yönetin."
+          description="Depo ve özellik kırılımı (renk / boy / …) bazında stok bakiyeleri. Detaylı fiyat+adet için ürün ekranındaki Stok & Fiyat sekmesini kullanın."
           createLabel="Stok Düzeltmesi"
           onCreate={openAdjustModal}
           extraActions={tabSwitcher}
@@ -273,7 +354,7 @@ export function StockManagementView() {
             setStockSearch(val);
             setStockPage(1);
           }}
-          searchPlaceholder="Ürün, stok kodu, depo veya teklif ara…"
+          searchPlaceholder="Ürün, SKU veya depo ara…"
           filters={
             <select
               value={warehouseFilter}
@@ -315,8 +396,7 @@ export function StockManagementView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Depo</TableHead>
-                <TableHead>Ürün / Varyant</TableHead>
-                <TableHead>Teklif</TableHead>
+                <TableHead>Ürün / özellik kırılımı</TableHead>
                 <TableHead>Birim</TableHead>
                 <TableHead className="text-right">Eldeki</TableHead>
                 <TableHead className="text-right">Rezerve</TableHead>
@@ -341,16 +421,13 @@ export function StockManagementView() {
                   </TableCell>
                   <TableCell className="text-xs">
                     <div className="font-medium text-foreground">
-                      {b.urun_ad || b.platform_kodu || "Katalog Ürünü"}
+                      {b.urun_ad || b.platform_kodu || "Katalog ürünü"}
                     </div>
                     {b.varyant_sku ? (
                       <div className="font-mono text-[11px] text-muted-foreground">
                         {b.varyant_sku}
                       </div>
                     ) : null}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {b.teklif_kodu || "Standart Teklif"}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{b.birim}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
@@ -372,7 +449,8 @@ export function StockManagementView() {
                         setAdjustError(null);
                         adjustForm.reset({
                           warehouse_id: b.warehouse_id ?? undefined,
-                          teklif_id: b.teklif_id ?? undefined,
+                          varyant_id: b.varyant_id ?? undefined,
+                          birim_fiyat: "",
                           miktar: "",
                           neden: "",
                         });
@@ -478,12 +556,12 @@ export function StockManagementView() {
         </ListPage>
       )}
 
-      {/* Stok Düzeltmesi Modalı */}
+      {/* Stok Düzeltmesi Modalı — teklif jargonu yok */}
       <EntityModal
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
         title="Stok Düzeltmesi"
-        description="Seçili depo ve tedarikçi teklifi için artı (+) veya eksi (-) stok hareketi kaydedin."
+        description="Depo ve ürün özellik kırılımı için artı (+) veya eksi (-) stok hareketi. Kırılım başına fiyat/adet için ürün → Stok & Fiyat sekmesi daha uygundur."
         isDirty={adjustForm.formState.isDirty}
         isSubmitting={adjustForm.formState.isSubmitting || adjustMut.isPending}
         submitLabel="Hareketi Kaydet"
@@ -531,39 +609,68 @@ export function StockManagementView() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Tedarikçi Teklifi</Label>
+            <Label>Ürün / özellik kırılımı</Label>
             <Controller
-              name="teklif_id"
+              name="varyant_id"
               control={adjustForm.control}
               render={({ field }) => (
                 <RelationSelect
                   value={field.value ?? null}
                   onChange={(val) => field.onChange(val ? Number(val) : undefined)}
-                  placeholder="Teklif seçin…"
-                  searchPlaceholder="Ürün, stok kodu veya teklif kodu ile ara…"
+                  placeholder="Renk, boy, metal… kırılımı seçin…"
+                  searchPlaceholder="Ürün adı veya SKU ile ara…"
                   loadOptions={async (q) => {
-                    const page = await fiyatlamaService.getSupplierOffers({
-                      page_size: "30",
+                    const page = await urunlerService.getOpsProducts({
+                      page_size: "20",
                       ...(q ? { q } : {}),
                     });
-                    return (page.results ?? []).map((t) => ({
-                      value: t.id,
-                      label: `${t.urun_ad || t.varyant_sku || "Ürün"} ${
-                        t.tedarikci_kodu ? `(${t.tedarikci_kodu})` : ""
-                      }`,
-                      subtitle: `${t.varyant_sku || ""} · ${t.durum} · ${
-                        t.birim_fiyat ? `${t.birim_fiyat} ${t.para_birimi}` : t.fiyat_modeli
-                      }`,
-                    }));
+                    const opts: Array<{
+                      value: number;
+                      label: string;
+                      subtitle?: string;
+                    }> = [];
+                    for (const p of page.results ?? []) {
+                      const detail =
+                        p.varyantlar && p.varyantlar.length
+                          ? p
+                          : await urunlerService.getOpsProduct(p.id);
+                      for (const v of detail.varyantlar ?? []) {
+                        if (v.aktif === false) continue;
+                        const ozellik = [v.renk, v.beden, v.gram ? `${v.gram} g` : null]
+                          .filter(Boolean)
+                          .join(" · ");
+                        opts.push({
+                          value: v.id,
+                          label: `${detail.ad || detail.platform_kodu} — ${ozellik || v.sku}`,
+                          subtitle: v.sku,
+                        });
+                      }
+                    }
+                    return opts.slice(0, 40);
                   }}
                 />
               )}
             />
-            {adjustForm.formState.errors.teklif_id ? (
+            {adjustForm.formState.errors.varyant_id ? (
               <p className="text-xs text-destructive">
-                {adjustForm.formState.errors.teklif_id.message}
+                {adjustForm.formState.errors.varyant_id.message}
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="stok-birim-fiyat">
+              Birim fiyat (yalnız ilk bağ / fiyat yoksa)
+            </Label>
+            <Input
+              id="stok-birim-fiyat"
+              placeholder="Örn: 1250"
+              className="font-mono tabular-nums"
+              {...adjustForm.register("birim_fiyat")}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Bu kırılımda fiyat yoksa buraya yazın; varsa boş bırakabilirsiniz.
+            </p>
           </div>
 
           <div className="space-y-1.5">

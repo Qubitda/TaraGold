@@ -261,6 +261,25 @@ class Urun(models.Model):
     # ------------------------------------------------------------------ #
     # Kayıt
     # ------------------------------------------------------------------ #
+    def _benzersiz_slug(self, base: str) -> str:
+        """Aynı slug doluysa -2, -3… ekler (max_length=160)."""
+        base = (base or "urun").strip("-")[:160] or "urun"
+        candidate = base
+        n = 2
+        while True:
+            qs = type(self).objects.filter(slug=candidate)
+            if self.pk is not None:
+                qs = qs.exclude(pk=self.pk)
+            if not qs.exists():
+                return candidate
+            suffix = f"-{n}"
+            candidate = f"{base[: max(1, 160 - len(suffix))]}{suffix}"
+            n += 1
+            if n > 5000:
+                import uuid
+
+                return f"{base[:140]}-{uuid.uuid4().hex[:12]}"
+
     def save(self, *args, **kwargs):
         # 1) Onay/yayın alanlarının doğrudan değiştirilmesini engelle.
         #    Sadece servisler.py üzerinden değişmeli. `QuerySet.update` her zaman
@@ -280,8 +299,13 @@ class Urun(models.Model):
         # 2) SEO teknik fallback (K-015) — pazarlama metni üretilmez
         from urunler.services.seo_servisi import teknik_aciklama_kirp, teknik_baslik
 
+        # Otomatik slug: aynı adla ikinci taslak (ör. "Yeni ürün") unique ihlali vermesin.
+        auto_slug = False
         if not self.slug and self.ad:
-            self.slug = slugify(self.ad)
+            self.slug = slugify(self.ad) or "urun"
+            auto_slug = True
+        if auto_slug and self.slug:
+            self.slug = self._benzersiz_slug(self.slug)
 
         if not self.meta_baslik and self.ad:
             self.meta_baslik = teknik_baslik(self.ad, max_len=70)

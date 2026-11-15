@@ -13,10 +13,12 @@ import type {
   OpsProductChannelItem,
   OpsProductPage,
   OpsProductCreateRequest,
+  OpsProductStone,
   OpsProductUpdateRequest,
   OpsProductVariant,
   OpsProductVariantCreateRequest,
   OpsProductVariantUpdateRequest,
+  OpsProductStockResponse,
   PricePreviewResponse,
   ProductMediaItem,
   ProductReadiness,
@@ -237,6 +239,9 @@ export const urunlerService = {
   getOpsProductReadiness(id: number | string): Promise<ProductReadiness> {
     return apiFetch<ProductReadiness>(`/ops/products/${id}/readiness/`);
   },
+  getOpsProductStock(id: number | string): Promise<OpsProductStockResponse> {
+    return apiFetch<OpsProductStockResponse>(`/ops/products/${id}/stock/`);
+  },
   getOpsProductMedia(
     id: number | string
   ): Promise<{ count: number; results: ProductMediaItem[] }> {
@@ -245,13 +250,34 @@ export const urunlerService = {
   uploadOpsProductMedia(
     id: number | string,
     file: File,
-    opts?: { kapak?: boolean; tip?: string; alt_metin?: string }
+    opts?: {
+      kapak?: boolean;
+      tip?: string;
+      alt_metin?: string;
+      varyant_id?: number | null;
+    }
   ): Promise<ProductMediaItem> {
     const fd = new FormData();
     fd.append("dosya", file);
     if (opts?.kapak) fd.append("kapak", "true");
     if (opts?.tip) fd.append("tip", opts.tip);
     if (opts?.alt_metin) fd.append("alt_metin", opts.alt_metin);
+    if (opts?.varyant_id != null) fd.append("varyant_id", String(opts.varyant_id));
+    return apiFetch(`/ops/products/${id}/media/`, {
+      method: "POST",
+      body: fd,
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  addOpsProductVideoUrl(
+    id: number | string,
+    hariciUrl: string,
+    altMetin = "Video"
+  ): Promise<ProductMediaItem> {
+    const fd = new FormData();
+    fd.append("tip", "video");
+    fd.append("harici_url", hariciUrl);
+    fd.append("alt_metin", altMetin);
     return apiFetch(`/ops/products/${id}/media/`, {
       method: "POST",
       body: fd,
@@ -275,6 +301,15 @@ export const urunlerService = {
       method: "DELETE",
     });
   },
+  reorderOpsProductMedia(
+    productId: number | string,
+    siralar: Array<{ id: number; sira: number }>
+  ): Promise<{ count: number; results: ProductMediaItem[] }> {
+    return apiFetch(`/ops/products/${productId}/media/reorder/`, {
+      method: "POST",
+      body: { siralar },
+    });
+  },
   getOpsPricePreview(
     productId: number | string,
     variantId: number | string
@@ -282,5 +317,77 @@ export const urunlerService = {
     return apiFetch(
       `/ops/products/${productId}/variants/${variantId}/price-preview/`
     );
+  },
+  copyOpsProduct(id: number | string): Promise<OpsProduct> {
+    return apiFetch<OpsProduct>(`/ops/products/${id}/copy/`, {
+      method: "POST",
+      body: {},
+      idempotencyKey: newIdempotencyKey(),
+    });
+  },
+  bulkOpsProducts(
+    action: "submit" | "delete" | "unpublish",
+    ids: number[]
+  ): Promise<{ ok: number[]; errors: Array<{ id: number; detail: string }>; action: string }> {
+    return apiFetch(`/ops/products/bulk/`, {
+      method: "POST",
+      body: { action, ids },
+    });
+  },
+  exportOpsProductsCsv(params?: Record<string, string | undefined>): string {
+    return `/api/v1/ops/products/export/${qs(params)}`;
+  },
+  getOpsProductAudit(
+    id: number | string
+  ): Promise<{
+    urun_id: number;
+    results: Array<{
+      id: number;
+      action: string;
+      success: boolean;
+      reason: string;
+      actor: string;
+      created_at: string | null;
+    }>;
+  }> {
+    return apiFetch(`/ops/products/${id}/audit/`);
+  },
+  getOpsProductStones(
+    id: number | string
+  ): Promise<{ count: number; results: OpsProductStone[] }> {
+    return apiFetch(`/ops/products/${id}/stones/`);
+  },
+  addOpsProductStone(
+    productId: number | string,
+    body: {
+      tas_tipi_id: number;
+      adet?: number;
+      karat?: string | null;
+      bedel?: string;
+      sertifika_no?: string;
+    }
+  ): Promise<OpsProductStone> {
+    return apiFetch(`/ops/products/${productId}/stones/`, {
+      method: "POST",
+      body,
+    });
+  },
+  updateOpsProductStone(
+    productId: number | string,
+    stoneId: number | string,
+    body: Record<string, unknown>
+  ): Promise<OpsProductStone> {
+    return apiFetch(`/ops/products/${productId}/stones/${stoneId}/`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  deleteOpsProductStone(
+    productId: number | string,
+    stoneId: number | string
+  ): Promise<{ deleted: boolean; id: number }> {
+    return apiFetch(`/ops/products/${productId}/stones/${stoneId}/`, {
+      method: "DELETE",
+    });
   },
 };

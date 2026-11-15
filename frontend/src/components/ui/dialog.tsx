@@ -64,13 +64,13 @@ const DialogContent = React.forwardRef<
         <AiStudioGlowLayers />
         <div
           className={cn(
-            "relative z-10 grid w-full max-h-[88vh] gap-4 overflow-y-auto rounded-[10px] bg-card p-6 text-card-foreground shadow-sm ring-1 ring-black/6 dark:ring-white/10",
+            "relative z-10 flex w-full min-w-0 max-h-[88vh] flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-[10px] bg-card p-6 text-card-foreground shadow-sm ring-1 ring-black/6 dark:ring-white/10",
             inner
           )}
         >
           {children}
         </div>
-        <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-[4px] opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+        <DialogPrimitive.Close className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-[6px] bg-card/90 text-muted-foreground opacity-90 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="h-4 w-4" />
           <span className="sr-only">Kapat</span>
         </DialogPrimitive.Close>

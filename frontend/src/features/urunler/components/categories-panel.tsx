@@ -223,28 +223,37 @@ export function CategoryEntityModal({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label>Üst Kategori (İsteğe Bağlı)</Label>
+          <Label>Üst Kategori</Label>
           <RelationSelect
             value={form.ust_id}
             onChange={(v) => setField("ust_id", String(v ?? ""))}
             options={parentOptions}
-            placeholder="Ana kategori olarak ekle"
+            placeholder="Boş = ana kategori"
             clearable
             disabled={submitting}
           />
+          <p className="text-[10px] text-muted-foreground">
+            Örn. Mücevher → Yüzük → Tektaş. En fazla 3 seviye.
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>
-            {form.ust_id ? "Fiyat Grubu (Üst Kategoriden Miras)" : "Fiyat Grubu *"}
-          </Label>
+          <Label>{form.ust_id ? "Fiyat Grubu (isteğe bağlı)" : "Fiyat Grubu *"}</Label>
           <RelationSelect
             value={form.fiyat_grubu_id}
             onChange={(v) => setField("fiyat_grubu_id", String(v ?? ""))}
             options={fgOptions}
-            placeholder="Fiyat grubu seçin"
+            placeholder={
+              form.ust_id
+                ? "Boş bırakırsanız üstten miras alınır"
+                : "Ana kategoride zorunlu"
+            }
             clearable
             disabled={submitting}
           />
+          <p className="text-[10px] text-muted-foreground">
+            Fiyat grubu, alıcı kanal fiyatlandırmasında kategori marjını belirler. Alt
+            kategoride boş bırakılırsa üst kategorinin grubu kullanılır.
+          </p>
         </div>
       </div>
 
@@ -311,13 +320,40 @@ export function CategoryEntityModal({
   );
 }
 
+function buildCategoryForest(items: CategoryItem[]): CategoryItem[] {
+  const byParent = new Map<number | null, CategoryItem[]>();
+  for (const c of items) {
+    const pid = c.ust_id ?? null;
+    const list = byParent.get(pid) ?? [];
+    list.push(c);
+    byParent.set(pid, list);
+  }
+  for (const list of byParent.values()) {
+    list.sort((a, b) => (a.sira ?? 0) - (b.sira ?? 0) || a.ad.localeCompare(b.ad, "tr"));
+  }
+  const out: CategoryItem[] = [];
+  const walk = (parentId: number | null, depth: number) => {
+    for (const c of byParent.get(parentId) ?? []) {
+      out.push({ ...c, _depth: depth } as CategoryItem & { _depth?: number });
+      walk(c.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  // Orphans (üst listede yok)
+  const seen = new Set(out.map((c) => c.id));
+  for (const c of items) {
+    if (!seen.has(c.id)) out.push(c);
+  }
+  return out;
+}
+
 export function CategoriesPanel() {
   const actionToast = useActionToast();
   const [q, setQ] = useState("");
   const [aktif, setAktif] = useState("");
   const [oneCikan, setOneCikan] = useState("");
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const pageSize = 100;
 
   const filters = useMemo(
     () => ({
@@ -338,7 +374,8 @@ export function CategoriesPanel() {
   const [editing, setEditing] = useState<CategoryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CategoryItem | null>(null);
 
-  const items = catsQ.data?.results ?? [];
+  const rawItems = catsQ.data?.results ?? [];
+  const items = useMemo(() => buildCategoryForest(rawItems), [rawItems]);
   const totalCount = catsQ.data?.count ?? 0;
 
   const toggleActive = async (cat: CategoryItem) => {
@@ -380,8 +417,8 @@ export function CategoriesPanel() {
     <>
       <ListPage
         title="Kategoriler"
-        description="Ürün kategorilerini, görüntüleme sırasını ve öne çıkan vitrin durumunu yönetin."
-        createLabel="Yeni Kategori"
+        description="Ağaç: ana kategori → alt kategori. Fiyat grubu ana kategoride zorunlu; altta boşsa üstten miras alınır."
+        createLabel="Ana / Alt Kategori"
         onCreate={() => {
           setEditing(null);
           setModalOpen(true);
@@ -441,9 +478,8 @@ export function CategoriesPanel() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Kategori (ağaç)</TableHead>
               <TableHead>Kod</TableHead>
-              <TableHead>Kategori Adı</TableHead>
-              <TableHead>Üst Kategori</TableHead>
               <TableHead>Fiyat Grubu</TableHead>
               <TableHead className="text-right">Sıra</TableHead>
               <TableHead>Vitrin</TableHead>
@@ -452,24 +488,47 @@ export function CategoriesPanel() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((cat) => (
+            {items.map((cat) => {
+              const depth = (cat as CategoryItem & { _depth?: number })._depth ?? 0;
+              const miras =
+                !cat.fiyat_grubu_id && Boolean(cat.etkin_fiyat_grubu_id);
+              return (
               <TableRow key={cat.id}>
-                <TableCell className="font-mono text-xs font-semibold">
-                  {cat.kod}
-                </TableCell>
                 <TableCell className="font-medium">
-                  <div>{cat.ad}</div>
+                  <div
+                    className="flex items-center gap-1.5"
+                    style={{ paddingLeft: `${depth * 16}px` }}
+                  >
+                    <FolderTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span>{cat.ad}</span>
+                    {depth === 0 ? (
+                      <Badge variant="outline" className="text-[9px]">
+                        Ana
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[9px]">
+                        Alt
+                      </Badge>
+                    )}
+                  </div>
                   {cat.dahili ? (
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground pl-5">
                       Dahili kategori
                     </span>
                   ) : null}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {cat.ust_ad || "—"}
+                <TableCell className="font-mono text-xs font-semibold">
+                  {cat.kod}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {cat.etkin_fiyat_grubu_ad || cat.fiyat_grubu_ad || "—"}
+                  <div>{cat.etkin_fiyat_grubu_ad || cat.fiyat_grubu_ad || "—"}</div>
+                  {miras ? (
+                    <span className="text-[10px] text-amber-700 dark:text-amber-300">
+                      Üstten miras
+                    </span>
+                  ) : cat.fiyat_grubu_id ? (
+                    <span className="text-[10px]">Kendi grubu</span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-xs">
                   {cat.sira}
@@ -509,7 +568,8 @@ export function CategoriesPanel() {
                   />
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
           </TableBody>
         </Table>
       </ListPage>

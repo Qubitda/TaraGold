@@ -47,6 +47,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </a>
         <Sidebar
           capabilities={user?.capabilities}
+          user={user}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed(!collapsed)}
         />

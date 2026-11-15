@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient, APITestCase
 
 from firmalar import roles
@@ -13,8 +16,16 @@ from firmalar.role_permissions import seed_role_permissions
 from firmalar.services.rol_servisi import sync_user_role_groups
 from fiyatlama.tests.test_price_quote import PriceQuoteFixtureMixin
 from urunler.models import Urun
+from urunler.services import gorsel_ekle
 
 User = get_user_model()
+
+
+def _png():
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), color=(200, 160, 40)).save(buf, format="PNG")
+    return SimpleUploadedFile("t.png", buf.getvalue(), content_type="image/png")
+
 
 
 class OpsProductsAdr0030Tests(PriceQuoteFixtureMixin, APITestCase):
@@ -88,6 +99,14 @@ class OpsProductsAdr0030Tests(PriceQuoteFixtureMixin, APITestCase):
         )
         self.assertEqual(var.status_code, 201, var.content)
         self.assertEqual(Decimal(var.json()["gram"]), Decimal("2.500"))
+
+        # ADR-0037: onaya göndermeden önce kapak görseli zorunlu
+        gorsel_ekle(
+            actor=self.submitter,
+            urun=Urun.objects.get(pk=pid),
+            dosya=_png(),
+            kapak=True,
+        )
 
         sub = self.api.post(
             reverse("api-ops-product-submit", kwargs={"pk": pid}),

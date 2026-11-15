@@ -12,6 +12,7 @@ import type {
   OpsProduct,
   OpsProductVariant,
   PricePreviewResponse,
+  ProductMediaItem,
   ProductReadiness,
 } from "../types";
 
@@ -21,6 +22,8 @@ type Props = {
   onChanged: () => void;
 };
 
+const ACCEPT_IMAGES = "image/jpeg,image/png,image/webp,image/gif";
+
 export function ProductP0Panel({ product, refs, onChanged }: Props) {
   const toast = useToast();
   const [step, setStep] = useState<"varyant" | "gorsel" | "fiyat" | "yayin">("varyant");
@@ -28,6 +31,8 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
   const [bedenIds, setBedenIds] = useState<number[]>([]);
   const [defaultGram, setDefaultGram] = useState("3.200");
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<PricePreviewResponse | null>(null);
   const [readiness, setReadiness] = useState<ProductReadiness | null>(
     product.hazirlik ?? null
@@ -38,6 +43,8 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
     const tip = product.olcu_tipi || "";
     return (refs?.olculer ?? []).filter((o) => !tip || o.tip === tip);
   }, [refs?.olculer, product.olcu_tipi]);
+
+  const gorseller = product.gorseller ?? [];
 
   const toggleId = (list: number[], id: number, set: (v: number[]) => void) => {
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -79,18 +86,77 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
     }
   };
 
-  const onUpload = async (file: File, kapak: boolean) => {
+  const uploadFiles = async (files: File[], kapakFirst: boolean) => {
+    if (!files.length) return;
+    setBusy(true);
+    const failed: File[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress(`${i + 1}/${files.length}: ${file.name}`);
+        try {
+          await urunlerService.uploadOpsProductMedia(product.id, file, {
+            kapak: kapakFirst && i === 0,
+            tip: kapakFirst && i === 0 ? "kapak" : "galeri",
+          });
+        } catch {
+          failed.push(file);
+        }
+      }
+      setFailedFiles(failed);
+      if (failed.length) {
+        toast.error(`${failed.length} görsel yüklenemedi — tekrar deneyin`);
+      } else {
+        toast.success(`${files.length} görsel yüklendi`);
+      }
+      await refreshReadiness();
+      onChanged();
+    } finally {
+      setUploadProgress(null);
+      setBusy(false);
+    }
+  };
+
+  const moveMedia = async (g: ProductMediaItem, dir: -1 | 1) => {
+    const sorted = [...gorseller].sort((a, b) => a.sira - b.sira || a.id - b.id);
+    const idx = sorted.findIndex((x) => x.id === g.id);
+    const swap = sorted[idx + dir];
+    if (idx < 0 || !swap) return;
     setBusy(true);
     try {
-      await urunlerService.uploadOpsProductMedia(product.id, file, {
-        kapak,
-        tip: kapak ? "kapak" : "galeri",
-      });
-      toast.success(kapak ? "Kapak yüklendi" : "Görsel yüklendi");
+      await urunlerService.reorderOpsProductMedia(product.id, [
+        { id: g.id, sira: swap.sira },
+        { id: swap.id, sira: g.sira },
+      ]);
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sıralama başarısız");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setCover = async (id: number) => {
+    setBusy(true);
+    try {
+      await urunlerService.setOpsProductMediaCover(product.id, id);
       await refreshReadiness();
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Yükleme başarısız");
+      toast.error(e instanceof Error ? e.message : "Kapak seçilemedi");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeMedia = async (id: number) => {
+    setBusy(true);
+    try {
+      await urunlerService.deleteOpsProductMedia(product.id, id);
+      await refreshReadiness();
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Silinemedi");
     } finally {
       setBusy(false);
     }
@@ -155,7 +221,7 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
               ))}
             </ul>
           ) : (
-            <p className="text-muted-foreground">Onaya göndermeye hazır.</p>
+            <p className="text-muted-foreground">Yayınlamaya hazır.</p>
           )}
         </div>
       ) : null}
@@ -204,43 +270,101 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
       {step === "gorsel" ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Kapak görseli onaya göndermek için zorunludur (ADR-0037).
+            JPEG/PNG/WebP/GIF, en fazla 8 MB. Kapak görseli yayınlamak için zorunludur.
           </p>
           <div className="flex flex-wrap gap-3">
             <Label className="cursor-pointer rounded-md border px-3 py-2 text-sm">
               Kapak yükle
               <input
                 type="file"
-                accept="image/*"
+                accept={ACCEPT_IMAGES}
                 className="hidden"
+                disabled={busy}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) void onUpload(f, true);
+                  if (f) void uploadFiles([f], true);
+                  e.target.value = "";
                 }}
               />
             </Label>
             <Label className="cursor-pointer rounded-md border px-3 py-2 text-sm">
-              Galeri görseli
+              Çoklu galeri
               <input
                 type="file"
-                accept="image/*"
+                accept={ACCEPT_IMAGES}
+                multiple
                 className="hidden"
+                disabled={busy}
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void onUpload(f, false);
+                  const list = Array.from(e.target.files ?? []);
+                  if (list.length) void uploadFiles(list, false);
+                  e.target.value = "";
                 }}
               />
             </Label>
+            {failedFiles.length ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void uploadFiles(failedFiles, false)}
+              >
+                Başarısızları tekrar dene ({failedFiles.length})
+              </Button>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {(product.gorseller ?? []).map((g) => (
-              <div key={g.id} className="w-20 text-center text-xs">
+          {uploadProgress ? (
+            <p className="text-xs text-muted-foreground">Yükleniyor: {uploadProgress}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            {gorseller.map((g) => (
+              <div key={g.id} className="w-24 space-y-1 text-center text-[10px]">
                 {g.url ? (
-                  <img src={g.url} alt={g.alt_metin || ""} className="h-20 w-20 object-cover rounded" />
+                  <img
+                    src={g.url}
+                    alt={g.alt_metin || ""}
+                    className="h-20 w-20 rounded object-cover border border-border mx-auto"
+                  />
                 ) : (
-                  <div className="h-20 w-20 rounded border border-dashed" />
+                  <div className="h-20 w-20 rounded border border-dashed mx-auto" />
                 )}
-                {g.kapak ? <span>Kapak</span> : null}
+                <div className="font-medium">{g.kapak ? "Kapak" : `Sıra ${g.sira}`}</div>
+                <div className="flex flex-wrap justify-center gap-0.5">
+                  <button
+                    type="button"
+                    className="rounded border px-1"
+                    disabled={busy}
+                    onClick={() => void moveMedia(g, -1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border px-1"
+                    disabled={busy}
+                    onClick={() => void moveMedia(g, 1)}
+                  >
+                    ↓
+                  </button>
+                  {!g.kapak ? (
+                    <button
+                      type="button"
+                      className="rounded border px-1"
+                      disabled={busy}
+                      onClick={() => void setCover(g.id)}
+                    >
+                      Kapak
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="rounded border px-1 text-destructive"
+                    disabled={busy}
+                    onClick={() => void removeMedia(g.id)}
+                  >
+                    Sil
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -284,7 +408,7 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
             Checklist yenile
           </Button>
           <p className="text-muted-foreground">
-            Onaya gönderme ürün detayındaki aksiyonlardan yapılır; eksik kapak veya varyant
+            Yayınlama ürün detayındaki «Yayınla» aksiyonundan yapılır; eksik kapak veya varyant
             engellenir.
           </p>
         </div>

@@ -103,3 +103,32 @@ class QuoteDetailView(APIView):
             raise NotFound(detail="Quote bulunamadı.") from exc
         self.check_object_permissions(request, quote)
         return Response(BuyerQuotePresenter(quote))
+
+
+class QuoteBatchPreviewView(APIView):
+    """POST /api/v1/quotes/batch/ — katalog kart/detay otomatik fiyat (motor = quote)."""
+
+    permission_classes = [IsBuyerCommerceWrite]
+    throttle_classes = [BuyerRateThrottle]
+
+    def post(self, request):
+        from fiyatlama.services.buyer_katalog_fiyat_servisi import (
+            alici_varyant_fiyatlari_toplu,
+        )
+
+        body = request.data if isinstance(request.data, dict) else {}
+        try:
+            kanal_id = int(body.get("satis_kanali_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(detail={"satis_kanali_id": "Zorunlu."}) from exc
+        raw_ids = body.get("varyant_ids") or []
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ValidationError(detail={"varyant_ids": "En az bir varyant id."})
+        pb = (body.get("para_birimi") or "TRY").upper()
+        results = alici_varyant_fiyatlari_toplu(
+            actor=request.user,
+            satis_kanali_id=kanal_id,
+            varyant_ids=raw_ids,
+            para_birimi=pb,
+        )
+        return Response({"count": len(results), "results": results})

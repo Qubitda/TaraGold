@@ -38,7 +38,7 @@ from .bulk_order import BulkOrderCreateView
 from .buyer_cart import CartLineCreateView, CartLineDetailView, CartMineView
 from .buyer_lock import PriceLockCreateView, PriceLockDetailView
 from .buyer_order import OrderCancelView, OrderFromCheckoutView, OrderReorderView
-from .buyer_quote import QuoteCreateView, QuoteDetailView
+from .buyer_quote import QuoteBatchPreviewView, QuoteCreateView, QuoteDetailView
 from .cart import CartDetailView
 from .catalog import (
     BuyerCatalogDetailView,
@@ -70,8 +70,15 @@ from .ops_products import (
     OpsProductListCreateView,
     OpsProductMediaDetailView,
     OpsProductMediaListCreateView,
+    OpsProductStoneListCreateView,
+    OpsProductStoneDetailView,
     OpsProductMediaReorderView,
     OpsProductPricePreviewView,
+    OpsProductCopyView,
+    OpsProductBulkActionView,
+    OpsProductExportView,
+    OpsProductAuditView,
+    OpsProductStockView,
     OpsProductPublishView,
     OpsProductReadinessView,
     OpsProductRejectView,
@@ -324,8 +331,15 @@ __all__ = [
     "OpsProductListCreateView",
     "OpsProductMediaDetailView",
     "OpsProductMediaListCreateView",
+    "OpsProductStoneListCreateView",
+    "OpsProductStoneDetailView",
     "OpsProductMediaReorderView",
     "OpsProductPricePreviewView",
+    "OpsProductCopyView",
+    "OpsProductBulkActionView",
+    "OpsProductExportView",
+    "OpsProductAuditView",
+    "OpsProductStockView",
     "OpsProductPublishView",
     "OpsProductReadinessView",
     "OpsProductRejectView",
@@ -364,6 +378,7 @@ __all__ = [
     "PaymentWebhookView",
     "PriceLockCreateView",
     "PriceLockDetailView",
+    "QuoteBatchPreviewView",
     "QuoteCreateView",
     "QuoteDetailView",
     "ReturnApproveView",

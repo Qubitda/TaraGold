@@ -472,6 +472,13 @@ class OpsCatalogRefsView(APIView):
         ayar_qs = AyarMilyem.objects.select_related("metal").order_by("metal_id", "milyem")
         if term:
             ayar_qs = ayar_qs.filter(Q(ayar_kodu__icontains=term) | Q(metal__ad__icontains=term))
+        from tanimlar.models import KiymetliMetal
+
+        metal_qs = KiymetliMetal.objects.order_by("ad", "pk")
+        if term:
+            metal_qs = metal_qs.filter(
+                Q(ad__icontains=term) | Q(kod__icontains=term)
+            )
 
         return Response(
             {
@@ -492,6 +499,15 @@ class OpsCatalogRefsView(APIView):
                 "berrakliklar": _list_for("berraklik"),
                 "renk_dereceleri": _list_for("renk-derecesi"),
                 "kesim_kaliteleri": _list_for("kesim-kalitesi"),
+                "metaller": [
+                    {
+                        "id": m.pk,
+                        "kod": m.kod,
+                        "ad": m.ad,
+                        "gram_bazli": bool(m.gram_bazli),
+                    }
+                    for m in metal_qs
+                ],
                 "ayarlar": [
                     {
                         "id": a.pk,
@@ -500,6 +516,8 @@ class OpsCatalogRefsView(APIView):
                         "milyem": str(a.milyem),
                         "metal_id": a.metal_id,
                         "metal_ad": a.metal.ad if a.metal_id else "",
+                        "metal_kod": a.metal.kod if a.metal_id else "",
+                        "gram_bazli": bool(a.metal.gram_bazli) if a.metal_id else True,
                     }
                     for a in ayar_qs
                 ],

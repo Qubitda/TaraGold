@@ -10,19 +10,13 @@ from urunler.services.katalog_hazirlik_servisi import urun_hazirlik_durumu
 
 
 def _allowed_actions(urun, user) -> list[str]:
+    """Ürün çift onay yok: taslak → yayın. submit/approve/reject üretilmez."""
     actions: list[str] = ["view"]
     if has_perm(user, P["submit_urun"]) and urun.yayin_durumu != "aktif":
         actions.append("edit")
-    if has_perm(user, P["submit_urun"]) and urun.onay_durumu in (
-        "taslak",
-        "reddedildi",
-    ):
-        actions.append("submit")
         actions.append("add_variant")
         actions.append("delete")
-    if has_perm(user, P["approve_urun"]) and urun.onay_durumu == "onay_bekliyor":
-        actions.extend(["approve", "reject"])
-    if has_perm(user, P["publish_urun"]) and urun.onay_durumu == "onayli":
+    if has_perm(user, P["publish_urun"]):
         if urun.yayin_durumu != "aktif":
             actions.append("publish")
         if urun.yayin_durumu in ("aktif", "yakinda"):
@@ -50,7 +44,12 @@ def present_ops_variant(v) -> dict:
 
 
 def present_ops_product(
-    urun, *, user, include_variants: bool = False, include_media: bool = False
+    urun,
+    *,
+    user,
+    include_variants: bool = False,
+    include_media: bool = False,
+    include_hazirlik: bool = False,
 ) -> dict:
     varyant_count = getattr(urun, "varyant_count", None)
     if varyant_count is None:
@@ -70,6 +69,13 @@ def present_ops_product(
         "kategori_one_cikan": bool(getattr(kat, "one_cikan", False)),
         "ayar_id": urun.ayar_id,
         "ayar": getattr(getattr(urun, "ayar", None), "ayar_kodu", "") or "",
+        "metal_id": getattr(getattr(urun, "ayar", None), "metal_id", None),
+        "metal": getattr(
+            getattr(getattr(urun, "ayar", None), "metal", None), "ad", ""
+        )
+        or "",
+        "milyem": str(getattr(getattr(urun, "ayar", None), "milyem", "") or "")
+        or None,
         "fiyat_tipi": urun.fiyat_tipi,
         "temin_tipi": urun.temin_tipi,
         "termin_gun": urun.termin_gun,
@@ -97,8 +103,27 @@ def present_ops_product(
         "olusturan_firma_id": urun.olusturan_firma_id,
         "varyant_count": int(varyant_count),
         "allowed_actions": _allowed_actions(urun, user),
-        "hazirlik": urun_hazirlik_durumu(urun),
+        "slug": urun.slug or "",
+        "meta_baslik": urun.meta_baslik or "",
+        "meta_aciklama": urun.meta_aciklama or "",
+        "canonical_url": urun.canonical_url or "",
+        "gorsel_alt_metni": urun.gorsel_alt_metni or "",
+        "olusturan_kullanici_id": urun.olusturan_kullanici_id,
+        "guncelleme_zamani": urun.guncelleme_zamani.isoformat()
+        if getattr(urun, "guncelleme_zamani", None)
+        else None,
     }
+    if include_hazirlik or include_variants:
+        data["hazirlik"] = urun_hazirlik_durumu(urun)
+    else:
+        data["hazirlik"] = None
+    if include_variants:
+        from urunler.services.urun_tasi_servisi import present_urun_tasi
+
+        data["taslar"] = [
+            present_urun_tasi(t)
+            for t in urun.taslar.select_related("tas_tipi").order_by("pk")
+        ]
     if include_media or include_variants:
         gorseller = list(urun.gorseller.all().order_by("sira", "pk"))
         data["gorseller"] = [present_gorsel(g) for g in gorseller]

@@ -16,28 +16,59 @@ export interface SalesChannelPage {
   server_now?: string;
 }
 
+/** Ops definitions veya ürün catalog-refs — `?grup=` ile eşleşir. */
 export type DefinitionCategoryId =
   | "satis-kanallari"
   | "fiyat-gruplari"
+  | "kiymetli-metaller"
   | "ayar-milyem"
   | "kur-metal"
   | "kur-doviz"
-  | "birimler";
+  | "birimler"
+  | "kategoriler"
+  | "koleksiyon"
+  | "renk"
+  | "olcu"
+  | "yas-grubu"
+  | "teknik"
+  | "stil"
+  | "ozel-gun"
+  | "zincir-tipi"
+  | "kopca-tipi"
+  | "tas-tipi"
+  | "tas-kesimi"
+  | "mihlama-tipi"
+  | "tas-mensei"
+  | "sertifika-kurumu"
+  | "berraklik"
+  | "renk-derecesi"
+  | "kesim-kalitesi";
 
 export type OpsDefinitionKaynak =
   | "satis-kanallari"
   | "fiyat-gruplari"
+  | "kiymetli-metaller"
   | "ayar-milyem"
   | "metal-kurlari"
   | "doviz-kurlari"
   | "birimler";
 
+export type DefinitionKind = "ops" | "catalog-ref" | "categories";
+
 export interface DefinitionCategoryMeta {
   id: DefinitionCategoryId;
   label: string;
   description: string;
-  kaynak: OpsDefinitionKaynak;
+  /** ops: OpsDefinitionKaynak; catalog-ref: kaynak slug; categories: "kategoriler" */
+  kaynak: string;
+  kind?: DefinitionKind;
   readOnly?: boolean;
+}
+
+export interface DefinitionNavSection {
+  id: string;
+  label: string;
+  items: DefinitionCategoryMeta[];
 }
 
 export interface OpsSatisKanali {
@@ -83,6 +114,13 @@ export interface OpsFiyatGrubu {
   ad: string;
   sira: number;
   aktif: boolean;
+}
+
+export interface OpsKiymetliMetal {
+  id: number;
+  kod: string;
+  ad: string;
+  gram_bazli: boolean;
 }
 
 export interface OpsAyarMilyem {
@@ -154,6 +192,7 @@ export interface OpsDefinitionRefs {
 export type OpsDefinitionRow =
   | OpsSatisKanali
   | OpsFiyatGrubu
+  | OpsKiymetliMetal
   | OpsAyarMilyem
   | OpsMetalKuru
   | OpsDovizKuru

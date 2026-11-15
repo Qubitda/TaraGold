@@ -69,6 +69,9 @@ def _normalize_kaynak(kaynak: str) -> str:
         "fiyatgrubu": "fiyat-gruplari",
         "ayar-milyem": "ayar-milyem",
         "ayarmilyem": "ayar-milyem",
+        "kiymetli-metaller": "kiymetli-metaller",
+        "metaller": "kiymetli-metaller",
+        "kiymetlimetal": "kiymetli-metaller",
         "metal-kurlari": "metal-kurlari",
         "metalkuru": "metal-kurlari",
         "doviz-kurlari": "doviz-kurlari",
@@ -151,6 +154,15 @@ def _present_fiyat_grubu(obj: FiyatGrubu) -> dict:
         "ad": obj.ad,
         "sira": obj.sira,
         "aktif": bool(obj.aktif),
+    }
+
+
+def _present_kiymetli_metal(obj: KiymetliMetal) -> dict:
+    return {
+        "id": obj.pk,
+        "kod": obj.kod,
+        "ad": obj.ad,
+        "gram_bazli": bool(obj.gram_bazli),
     }
 
 
@@ -279,6 +291,11 @@ class OpsDefinitionsListCreateView(APIView):
             if aktif_param in ("true", "1", "false", "0"):
                 qs = qs.filter(aktif=aktif_param in ("true", "1"))
             presenter = _present_fiyat_grubu
+        elif norm == "kiymetli-metaller":
+            qs = KiymetliMetal.objects.order_by("ad", "pk")
+            if term:
+                qs = qs.filter(Q(kod__icontains=term) | Q(ad__icontains=term))
+            presenter = _present_kiymetli_metal
         elif norm == "ayar-milyem":
             qs = AyarMilyem.objects.select_related("metal").order_by("metal_id", "milyem")
             if term:
@@ -391,6 +408,16 @@ class OpsDefinitionsListCreateView(APIView):
                     obj.full_clean()
                     obj.save()
                     presented = _present_fiyat_grubu(obj)
+                elif norm == "kiymetli-metaller":
+                    kod = (body.get("kod") or "").strip().upper()[:10]
+                    ad = (body.get("ad") or "").strip()[:50]
+                    if not kod or not ad:
+                        raise ValidationError({"kod": "kod ve ad zorunludur."})
+                    gram_bazli = _parse_bool(body.get("gram_bazli"), default=True)
+                    obj = KiymetliMetal(kod=kod, ad=ad, gram_bazli=gram_bazli)
+                    obj.full_clean()
+                    obj.save()
+                    presented = _present_kiymetli_metal(obj)
                 elif norm == "ayar-milyem":
                     metal_id = _parse_int(body.get("metal_id"), field="metal_id")
                     metal = KiymetliMetal.objects.filter(pk=metal_id).first()
@@ -505,6 +532,7 @@ class OpsDefinitionsDetailView(APIView):
         model_map = {
             "satis-kanallari": SatisKanali,
             "fiyat-gruplari": FiyatGrubu,
+            "kiymetli-metaller": KiymetliMetal,
             "ayar-milyem": AyarMilyem,
             "metal-kurlari": MetalKuru,
             "doviz-kurlari": DovizKuru,
@@ -529,6 +557,8 @@ class OpsDefinitionsDetailView(APIView):
             return _present_satis_kanali(obj)
         if norm == "fiyat-gruplari":
             return _present_fiyat_grubu(obj)
+        if norm == "kiymetli-metaller":
+            return _present_kiymetli_metal(obj)
         if norm == "ayar-milyem":
             return _present_ayar_milyem(obj)
         if norm == "metal-kurlari":
@@ -598,6 +628,13 @@ class OpsDefinitionsDetailView(APIView):
                         obj.sira = _parse_int(body["sira"], field="sira")
                     if "aktif" in body and body.get("aktif") is not None:
                         obj.aktif = _parse_bool(body["aktif"], default=obj.aktif)
+                elif norm == "kiymetli-metaller":
+                    if "kod" in body and body.get("kod") is not None:
+                        obj.kod = str(body["kod"]).strip().upper()[:10]
+                    if "ad" in body and body.get("ad") is not None:
+                        obj.ad = str(body["ad"]).strip()[:50]
+                    if "gram_bazli" in body and body.get("gram_bazli") is not None:
+                        obj.gram_bazli = _parse_bool(body["gram_bazli"], default=obj.gram_bazli)
                 elif norm == "ayar-milyem":
                     if "metal_id" in body and body.get("metal_id") not in (None, ""):
                         mid = _parse_int(body["metal_id"], field="metal_id")

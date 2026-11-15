@@ -231,7 +231,24 @@ def _son_gonderen_id(urun) -> int | None:
     return getattr(urun, "olusturan_kullanici_id", None)
 
 
+def _dort_goz_muaf(kullanici) -> bool:
+    """Solo ops: Django superuser + platform super/admin kendi gönderisini onaylayabilir.
+
+    PLATFORM_CATALOG ve diğer roller dört göze tabi kalır (ADR-0030).
+    """
+    if getattr(kullanici, "is_superuser", False):
+        return True
+    from firmalar import roles
+
+    return getattr(kullanici, "rol", None) in (
+        roles.PLATFORM_SUPER,
+        roles.PLATFORM_ADMIN,
+    )
+
+
 def _assert_dort_goz(urun, kullanici, *, action: str):
+    if _dort_goz_muaf(kullanici):
+        return
     gonderen_id = _son_gonderen_id(urun)
     if gonderen_id and gonderen_id == getattr(kullanici, "pk", None):
         _deny(
@@ -372,6 +389,7 @@ def reddet(urun, kullanici, neden):
 
 
 def yayina_al(urun, kullanici, durum="aktif"):
+    """Taslak → yayın (çift onay / dört göz yok). Yayın anında onay_durumu=onayli."""
     _require_platform_urun_perm(
         kullanici, P["publish_urun"], action="urun.yayina_al", urun=urun
     )
@@ -384,31 +402,31 @@ def yayina_al(urun, kullanici, durum="aktif"):
             reason="gecersiz_durum",
         )
     urun.refresh_from_db()
-    if urun.onay_durumu != "onayli":
-        _deny(
-            kullanici,
-            action="urun.yayina_al",
-            urun=urun,
-            exc=ValidationError("Yalnızca onaylı ürün yayına alınabilir."),
-            reason="gecersiz_durum",
-        )
-    _assert_dort_goz(urun, kullanici, action="urun.yayina_al")
 
     try:
         with domain_atomic():
             urun = _kilitle(urun)
-            if urun.onay_durumu != "onayli":
-                raise ValidationError("Yalnızca onaylı ürün yayına alınabilir.")
             if durum == "aktif" and not urun.kanallar.filter(aktif=True).exists():
                 raise ValidationError(
                     "Aktif yayın için ürünün en az bir satış kanalı seçili olmalıdır."
                 )
 
-            aday = _taslak_kopya(urun, yayin_durumu=durum)
+            aday = _taslak_kopya(
+                urun,
+                yayin_durumu=durum,
+                onay_durumu="onayli",
+                onaylayan_kullanici=kullanici,
+                onay_zamani=timezone.now(),
+                red_nedeni="",
+            )
             aday.full_clean()
 
             Urun.objects.filter(pk=urun.pk).update(
                 yayin_durumu=durum,
+                onay_durumu="onayli",
+                onaylayan_kullanici=kullanici,
+                onay_zamani=timezone.now(),
+                red_nedeni="",
                 guncelleme_zamani=timezone.now(),
             )
             urun.refresh_from_db()
@@ -441,10 +459,12 @@ def pasife_al(urun, kullanici):
 
     with domain_atomic():
         urun = _kilitle(urun)
-        if urun.yayin_durumu == "pasif":
+        if urun.yayin_durumu == "pasif" and urun.onay_durumu == "taslak":
             return urun
         Urun.objects.filter(pk=urun.pk).update(
             yayin_durumu="pasif",
+            onay_durumu="taslak",
+            red_nedeni="",
             guncelleme_zamani=timezone.now(),
         )
         urun.refresh_from_db()
@@ -458,7 +478,7 @@ def pasife_al(urun, kullanici):
         return urun
 
 
-# ADR-0006 O1 — kritik alanlar (onaylı ürün)
+# Yayınlı üründe kritik alan kilidi (onay durumuna bağlı değil)
 KRITIK_ALANLAR = (
     "kimlik_sinifi",
     "kimlik_anahtari",
@@ -470,8 +490,8 @@ KRITIK_ALANLAR = (
 
 
 def assert_onayli_kritik_kilit(urun):
-    """Onaylı üründe kritik alan değişimini engeller; taslaga_al gerekir."""
-    if getattr(urun, "onay_durumu", None) != "onayli" or not urun.pk:
+    """Aktif yayındaki üründe kritik alan değişimini engeller; önce yayından kaldır."""
+    if getattr(urun, "yayin_durumu", None) != "aktif" or not urun.pk:
         return
     eski = Urun.objects.filter(pk=urun.pk).values(*KRITIK_ALANLAR).first()
     if not eski:
@@ -479,7 +499,7 @@ def assert_onayli_kritik_kilit(urun):
     for alan in KRITIK_ALANLAR:
         if eski.get(alan) != getattr(urun, alan):
             raise ValidationError(
-                "Onaylı ürünün kritik alanı değiştirilemez; önce taslağa alın."
+                "Yayındaki ürünün kritik alanı değiştirilemez; önce yayından kaldırın."
             )
 
 

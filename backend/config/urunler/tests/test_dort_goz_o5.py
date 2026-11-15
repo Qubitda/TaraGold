@@ -1,22 +1,30 @@
-"""Faz 2.1 O5 — onayla/yayina_al dört göz (gönderen ≠ aktör)."""
+"""Ürün yayın: taslak → Yayınla (çift onay / dört göz kaldırıldı)."""
 
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
-from django.test import TestCase
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from firmalar import roles
-from firmalar.models import AuditOlay
 from firmalar.services.rol_servisi import sync_user_role_groups
 from urunler.models import UrunKanal, Varyant
+from urunler.services import gorsel_ekle
 from urunler.services import onay_servisi as svc
 from urunler.tests._base import KatalogTestTaban
 
 User = get_user_model()
 
 
-class DortGozO5Tests(KatalogTestTaban):
+def _png():
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), color=(200, 160, 40)).save(buf, format="PNG")
+    return SimpleUploadedFile("t.png", buf.getvalue(), content_type="image/png")
+
+
+class YayinTaslakO5Tests(KatalogTestTaban):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
@@ -25,40 +33,61 @@ class DortGozO5Tests(KatalogTestTaban):
             firma=cls.platform.firma,
             rol=roles.PLATFORM_SUPER,
             is_staff=True,
+            is_superuser=True,
         )
         cls.psuper.set_password("x")
         cls.psuper.save()
         sync_user_role_groups(cls.psuper)
 
+        cls.padmin = User(
+            username="padmin_o5",
+            firma=cls.platform.firma,
+            rol=roles.PLATFORM_ADMIN,
+            is_staff=True,
+        )
+        cls.padmin.set_password("x")
+        cls.padmin.save()
+        sync_user_role_groups(cls.padmin)
+
     def setUp(self):
         self.u = self.urun(
-            olusturan_firma=self.tedarikci,
-            olusturan_kullanici=self.tedarikci_user,
+            olusturan_firma=self.platform.firma,
+            olusturan_kullanici=self.platform,
         )
         Varyant.objects.create(urun=self.u, gram=Decimal("2.0"))
+        gorsel_ekle(actor=self.platform, urun=self.u, dosya=_png(), kapak=True)
 
-    def test_onayla_rejects_same_as_gonderen(self):
-        self.u.olusturan_firma = self.psuper.firma
-        self.u.save()
-        svc.onaya_gonder(self.u, self.psuper)
-        with self.assertRaises(PermissionDenied):
-            svc.onayla(self.u, self.psuper)
-        self.assertTrue(
-            AuditOlay.objects.filter(
-                action="urun.onayla", success=False, reason="dort_goz"
-            ).exists()
-        )
-
-    def test_onayla_ok_different_actor(self):
-        svc.onaya_gonder(self.u, self.tedarikci_user)
-        onayli = svc.onayla(self.u, self.platform)
-        self.assertEqual(onayli.onay_durumu, "onayli")
-
-    def test_yayina_al_rejects_gonderen(self):
-        self.u.olusturan_firma = self.psuper.firma
-        self.u.save()
-        svc.onaya_gonder(self.u, self.psuper)
-        svc.onayla(self.u, self.platform)
+    def test_yayina_al_from_taslak_same_actor(self):
+        """Aynı aktör taslaktan doğrudan yayınlayabilir (dört göz yok)."""
+        self.assertEqual(self.u.onay_durumu, "taslak")
         UrunKanal.objects.create(urun=self.u, kanal=self.kanal, aktif=True)
-        with self.assertRaises(PermissionDenied):
-            svc.yayina_al(self.u, self.psuper, durum="aktif")
+        yayin = svc.yayina_al(self.u, self.platform, durum="aktif")
+        self.assertEqual(yayin.yayin_durumu, "aktif")
+        self.assertEqual(yayin.onay_durumu, "onayli")
+
+    def test_yayina_al_requires_channel(self):
+        with self.assertRaises(ValidationError):
+            svc.yayina_al(self.u, self.platform, durum="aktif")
+
+    def test_platform_super_publish_from_taslak(self):
+        self.u.olusturan_kullanici = self.psuper
+        self.u.save(update_fields=["olusturan_kullanici"])
+        UrunKanal.objects.create(urun=self.u, kanal=self.kanal, aktif=True)
+        yayin = svc.yayina_al(self.u, self.psuper, durum="aktif")
+        self.assertEqual(yayin.yayin_durumu, "aktif")
+        self.assertEqual(yayin.onay_durumu, "onayli")
+
+    def test_pasife_al_returns_to_taslak(self):
+        UrunKanal.objects.create(urun=self.u, kanal=self.kanal, aktif=True)
+        svc.yayina_al(self.u, self.padmin, durum="aktif")
+        pasif = svc.pasife_al(self.u, self.padmin)
+        self.assertEqual(pasif.yayin_durumu, "pasif")
+        self.assertEqual(pasif.onay_durumu, "taslak")
+
+    def test_republish_after_pasife(self):
+        UrunKanal.objects.create(urun=self.u, kanal=self.kanal, aktif=True)
+        svc.yayina_al(self.u, self.platform, durum="aktif")
+        svc.pasife_al(self.u, self.platform)
+        again = svc.yayina_al(self.u, self.platform, durum="aktif")
+        self.assertEqual(again.yayin_durumu, "aktif")
+        self.assertEqual(again.onay_durumu, "onayli")

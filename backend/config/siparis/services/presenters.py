@@ -27,6 +27,8 @@ def present_order_line(line: OrderLine) -> dict:
 
 def present_order(order: Order, *, include_lines: bool = True) -> dict:
     alici = getattr(order, "alici_firma", None)
+    co = getattr(order, "checkout_attempt", None)
+    co_sonuc = (getattr(co, "sonuc", None) or {}) if co is not None else {}
     data = {
         "id": order.pk,
         "durum": order.durum,
@@ -38,6 +40,9 @@ def present_order(order: Order, *, include_lines: bool = True) -> dict:
         if order.olusturma_tarihi
         else None,
         "line_count": order.lines.count(),
+        "teslimat_adresi": co_sonuc.get("teslimat_adresi"),
+        "fatura_adresi": co_sonuc.get("fatura_adresi"),
+        "siparis_notu": co_sonuc.get("siparis_notu") or "",
     }
     if include_lines:
         data["lines"] = [

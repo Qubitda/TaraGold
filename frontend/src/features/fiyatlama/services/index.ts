@@ -106,6 +106,33 @@ export const fiyatlamaService = {
       idempotencyKey: newIdempotencyKey(),
     }).then(mapQuote);
   },
+  /** Katalog otomatik fiyat — motor = quote; başarısızsa reason_code. */
+  batchQuotes(data: {
+    satis_kanali_id: number;
+    varyant_ids: number[];
+    para_birimi?: string;
+  }): Promise<{
+    count: number;
+    results: Array<{
+      ok: boolean;
+      varyant_id: number;
+      urun_id?: number;
+      fiyat_tipi?: string;
+      reason_code?: string;
+      detail?: string;
+      uyari?: string | null;
+      quote?: BuyerQuote;
+    }>;
+  }> {
+    return apiFetch("/quotes/batch/", {
+      method: "POST",
+      body: {
+        satis_kanali_id: data.satis_kanali_id,
+        varyant_ids: data.varyant_ids,
+        para_birimi: data.para_birimi || "TRY",
+      },
+    });
+  },
   getPriceLocks(params?: Record<string, string | undefined>): Promise<PriceLockPage> {
     return apiFetch<
       Paginated<BuyerPriceLock & { varyant_sku?: string; urun_ad?: string }>

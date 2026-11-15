@@ -82,7 +82,19 @@ export function useRemoveCartLineMutation() {
 export function useCheckoutMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => siparisService.checkout(),
+    mutationFn: (data?: {
+      teslimat_adresi_id?: number;
+      fatura_adresi_id?: number;
+      siparis_notu?: string;
+    }) => siparisService.checkout(data),
+    onSuccess: () => invalidateCommerce(qc),
+  });
+}
+
+export function useRequoteCartLineMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lineId: number) => siparisService.requoteCartLine(lineId),
     onSuccess: () => invalidateCommerce(qc),
   });
 }

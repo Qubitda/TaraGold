@@ -98,12 +98,37 @@ def _record_failed_attempt(
     )
 
 
+def _adres_snapshot(*, alici_firma, adres_id, alan: str) -> dict | None:
+    """FirmaAdresi → kör snapshot (başka tenant id sızdırılmaz)."""
+    if adres_id in (None, ""):
+        return None
+    try:
+        aid = int(adres_id)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({alan: "Geçersiz adres id."}) from exc
+    from firmalar.models import FirmaAdresi
+
+    adr = FirmaAdresi.objects.filter(pk=aid, firma_id=alici_firma.pk).first()
+    if adr is None:
+        raise ValidationError({alan: "Adres bulunamadı veya firmaya ait değil."})
+    return {
+        "id": adr.pk,
+        "tip": adr.tip,
+        "il": adr.il,
+        "ilce": adr.ilce or "",
+        "adres": adr.adres,
+    }
+
+
 def checkout(
     *,
     actor,
     cart: Cart | None = None,
     idempotency_key: str,
     now=None,
+    teslimat_adresi_id=None,
+    fatura_adresi_id=None,
+    siparis_notu: str = "",
 ) -> CheckoutResult:
     """Sepeti kilitler ve rezerve eder; CheckoutAttempt (sipariş adayı) döner."""
     now = now or timezone.now()
@@ -226,6 +251,17 @@ def checkout(
                     )
                 )
 
+            teslimat = _adres_snapshot(
+                alici_firma=alici_firma,
+                adres_id=teslimat_adresi_id,
+                alan="teslimat_adresi_id",
+            )
+            fatura = _adres_snapshot(
+                alici_firma=alici_firma,
+                adres_id=fatura_adresi_id,
+                alan="fatura_adresi_id",
+            )
+            notu = (siparis_notu or "").strip()[:1000]
             sonuc = {
                 "lines": [
                     {
@@ -238,7 +274,10 @@ def checkout(
                         "birim": r.birim,
                     }
                     for r in line_results
-                ]
+                ],
+                "teslimat_adresi": teslimat,
+                "fatura_adresi": fatura,
+                "siparis_notu": notu,
             }
             attempt, _ = CheckoutAttempt.objects.update_or_create(
                 alici_firma=alici_firma,

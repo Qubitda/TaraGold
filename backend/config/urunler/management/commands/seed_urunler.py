@@ -32,7 +32,10 @@ LISTELER = [
                "Sevgililer Günü", "Yıldönümü", "Mezuniyet", "Evlilik Teklifi", "Bebek Hediyesi", "Yılbaşı"]),
     (ZincirTipi, ["Halat", "Forse", "Gurmet", "Singapur", "Venedik"]),
     (KopcaTipi, ["Kıskaç", "Bilezik Kilidi", "Vidalı", "Klips"]),
-    (TasTipi, ["Pırlanta", "Zirkon", "Safir", "Yakut", "Zümrüt", "İnci", "Ametist", "Topaz"]),
+    (TasTipi, [
+        "Pırlanta", "Elmas", "Zirkon", "Safir", "Yakut", "Zümrüt",
+        "İnci", "Ametist", "Topaz",
+    ]),
     (TasKesimi, ["Brilliant", "Princess", "Baget", "Oval", "Damla", "Markiz", "Kalp", "Zümrüt Kesim"]),
     (MihlamaTipi, ["Tırnak", "Kanal", "Bezel (Çerçeve)", "Pave", "Gizli"]),
     (TasMensei, ["Doğal", "Laboratuvar üretimi", "Simülant"]),
@@ -75,7 +78,9 @@ class Command(BaseCommand):
                 yeni += olustu
 
         # Değerli taş tiplerini işaretle (karat kontrolü için gerekli)
-        DEGERLI_TAS_TIPLERI = {"PIRLANTA", "SAFIR", "YAKUT", "ZUMRUT", "INCI", "AMETIST", "TOPAZ"}
+        DEGERLI_TAS_TIPLERI = {
+            "PIRLANTA", "ELMAS", "SAFIR", "YAKUT", "ZUMRUT", "INCI", "AMETIST", "TOPAZ",
+        }
         guncellenen = TasTipi.objects.filter(kod__in=DEGERLI_TAS_TIPLERI, degerli=False).update(degerli=True)
         if guncellenen:
             self.stdout.write(f"  {guncellenen} taş tipi 'değerli' olarak işaretlendi.")

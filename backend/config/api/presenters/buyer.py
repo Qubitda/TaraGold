@@ -34,6 +34,9 @@ def BuyerCartLinePresenter(line) -> dict:
         "varyant_id": raw["varyant_id"],
         "varyant_sku": raw.get("varyant_sku", ""),
         "urun_ad": raw.get("urun_ad", ""),
+        "fiyat_tipi": raw.get("fiyat_tipi") or "",
+        "gram": raw.get("gram"),
+        "satis_kanali_id": raw.get("satis_kanali_id"),
         "miktar": _dec(raw["miktar"]),
         "birim": raw["birim"],
         "para_birimi": raw["para_birimi"],
@@ -160,6 +163,13 @@ def BuyerCatalogItemPresenter(urun) -> dict:
             kapak_url = kapak.dosya.url
         except ValueError:
             kapak_url = ""
+    # Liste kartı için varsayılan aktif varyant (fiyat batch anahtarı)
+    v0 = (
+        urun.varyantlar.filter(aktif=True)
+        .order_by("pk")
+        .only("id", "gram")
+        .first()
+    )
     data = {
         "id": urun.pk,
         "ad": urun.ad,
@@ -169,9 +179,17 @@ def BuyerCatalogItemPresenter(urun) -> dict:
         "kategori_sira": getattr(kat, "sira", 0) or 0,
         "kategori_one_cikan": bool(getattr(kat, "one_cikan", False)),
         "ayar": getattr(getattr(urun, "ayar", None), "ayar_kodu", "") or "",
+        "metal": getattr(
+            getattr(getattr(urun, "ayar", None), "metal", None), "ad", ""
+        )
+        or "",
+        "milyem": str(getattr(getattr(urun, "ayar", None), "milyem", "") or "")
+        or None,
         "fiyat_tipi": urun.fiyat_tipi,
         "yayin_durumu": urun.yayin_durumu,
         "varyant_count": int(varyant_count),
+        "varsayilan_varyant_id": v0.pk if v0 else None,
+        "gram": str(v0.gram) if v0 and v0.gram is not None else None,
         "kapak_url": kapak_url,
         "allowed_actions": ["quote"],
     }

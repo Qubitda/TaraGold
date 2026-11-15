@@ -16,6 +16,10 @@ METALLER = [
     ("GUMUS", "Gümüş", True),
     ("PLATIN", "Platin", True),
     ("CELIK", "Çelik", False),
+    ("PIRINC", "Pirinç", False),
+    ("TITANYUM", "Titanyum", False),
+    ("BAKIR", "Bakır", False),
+    ("ALASIM", "Metal alaşımı", False),
 ]
 
 AYARLAR = [
@@ -26,8 +30,13 @@ AYARLAR = [
     ("ALTIN", "22K",    22,   0.916),
     ("ALTIN", "24K",    24,   0.995),
     ("GUMUS", "925",   925,   0.925),
+    ("GUMUS", "999",   999,   0.999),
     ("PLATIN", "950",  950,   0.950),
     ("CELIK", "Ayarsız", 0,   0.000),
+    ("PIRINC", "Ayarsız", 0,  0.000),
+    ("TITANYUM", "Ayarsız", 0, 0.000),
+    ("BAKIR", "Ayarsız", 0,   0.000),
+    ("ALASIM", "Ayarsız", 0,  0.000),
 ]
 
 KANALLAR = [

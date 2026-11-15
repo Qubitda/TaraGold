@@ -5,10 +5,13 @@ export const stockAdjustmentSchema = z.object({
     .number({ message: "Lütfen bir depo seçin." })
     .int()
     .positive("Lütfen bir depo seçin."),
-  teklif_id: z
-    .number({ message: "Lütfen bir tedarikçi teklifi seçin." })
+  /** Özellik kırılımı (varyant) — UI’da “teklif” gösterilmez */
+  varyant_id: z
+    .number({ message: "Lütfen ürün / özellik kırılımı seçin." })
     .int()
-    .positive("Lütfen bir tedarikçi teklifi seçin."),
+    .positive("Lütfen ürün / özellik kırılımı seçin."),
+  /** İlk bağ veya fiyat güncellemesi için isteğe bağlı */
+  birim_fiyat: z.string().optional(),
   miktar: z.string().trim().min(1, "Miktar zorunludur."),
   neden: z
     .string()

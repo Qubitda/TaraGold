@@ -26,7 +26,16 @@ class UrunGorsel(models.Model):
         on_delete=models.CASCADE,
         help_text="Boşsa ürün düzeyinde görsel.",
     )
-    dosya = models.ImageField("Dosya", upload_to="urunler/gorseller/")
+    dosya = models.ImageField(
+        "Dosya", upload_to="urunler/gorseller/", blank=True, null=True
+    )
+    harici_url = models.URLField(
+        "Harici URL",
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Video veya harici medya bağlantısı (dosya yoksa).",
+    )
     tip = models.CharField("Tip", max_length=16, choices=TIP, default="galeri")
     sira = models.PositiveIntegerField("Sıra", default=0)
     kapak = models.BooleanField("Kapak", default=False)

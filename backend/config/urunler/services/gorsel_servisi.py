@@ -24,19 +24,49 @@ def gorsel_ekle(
     *,
     actor,
     urun: Urun,
-    dosya,
+    dosya=None,
     tip: str = "galeri",
     alt_metin: str = "",
     kapak: bool = False,
     varyant_id: int | None = None,
     sira: int | None = None,
+    harici_url: str = "",
 ) -> UrunGorsel:
     _require_platform_submit(actor, action="urun.gorsel_ekle", urun=urun)
     tip_v = (tip or "galeri").strip()
     if tip_v not in dict(UrunGorsel.TIP):
         raise ValidationError({"tip": "Geçersiz görsel tipi."})
-    if not dosya:
+    harici = (harici_url or "").strip()
+    if tip_v == "video":
+        if not harici:
+            raise ValidationError(
+                {"harici_url": "Video için harici URL zorunludur (dosya yükleme yok)."}
+            )
+        if not (harici.startswith("http://") or harici.startswith("https://")):
+            raise ValidationError({"harici_url": "Geçerli http(s) URL girin."})
+        dosya = None
+        kapak = False
+    elif not dosya:
         raise ValidationError({"dosya": "Dosya zorunlu."})
+    else:
+        # Güvenlik: tip + boyut
+        name = (getattr(dosya, "name", "") or "").lower()
+        content_type = (getattr(dosya, "content_type", "") or "").lower()
+        allowed_ext = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+        allowed_ct = {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "image/jpg",
+        }
+        if not any(name.endswith(ext) for ext in allowed_ext) and content_type not in allowed_ct:
+            raise ValidationError(
+                {"dosya": "Yalnızca JPEG, PNG, WebP veya GIF yüklenebilir."}
+            )
+        size = getattr(dosya, "size", None)
+        if size is not None and size > 8 * 1024 * 1024:
+            raise ValidationError({"dosya": "Görsel en fazla 8 MB olabilir."})
 
     varyant = None
     if varyant_id not in (None, "", 0):
@@ -45,7 +75,7 @@ def gorsel_ekle(
             raise ValidationError({"varyant_id": "Varyant bulunamadı."})
 
     with transaction.atomic():
-        if kapak and varyant is None:
+        if kapak and varyant is None and tip_v != "video":
             UrunGorsel.objects.filter(urun=urun, varyant__isnull=True, kapak=True).update(
                 kapak=False
             )
@@ -63,9 +93,10 @@ def gorsel_ekle(
             urun=urun,
             varyant=varyant,
             dosya=dosya,
+            harici_url=harici[:500] if tip_v == "video" else "",
             tip=tip_v,
             sira=int(next_sira),
-            kapak=bool(kapak) and varyant is None,
+            kapak=bool(kapak) and varyant is None and tip_v != "video",
             alt_metin=(alt_metin or "").strip()[:255],
         )
         g.full_clean()
@@ -76,7 +107,7 @@ def gorsel_ekle(
             entity_type="UrunGorsel",
             entity_id=g.pk,
             success=True,
-            detail={"urun_id": urun.pk},
+            detail={"urun_id": urun.pk, "tip": tip_v},
         )
         return g
 
@@ -126,7 +157,8 @@ def gorsel_sil(*, actor, gorsel: UrunGorsel) -> None:
     _require_platform_submit(actor, action="urun.gorsel_sil", urun=urun)
     with transaction.atomic():
         gid = gorsel.pk
-        gorsel.dosya.delete(save=False)
+        if gorsel.dosya:
+            gorsel.dosya.delete(save=False)
         gorsel.delete()
         record_audit(
             actor=actor,
@@ -140,6 +172,7 @@ def gorsel_sil(*, actor, gorsel: UrunGorsel) -> None:
 
 def present_gorsel(g: UrunGorsel, *, request=None) -> dict:
     url = ""
+    harici = (getattr(g, "harici_url", None) or "").strip()
     if g.dosya:
         try:
             url = g.dosya.url
@@ -147,11 +180,14 @@ def present_gorsel(g: UrunGorsel, *, request=None) -> dict:
             url = ""
         if request is not None and url and not url.startswith("http"):
             url = request.build_absolute_uri(url)
+    elif harici:
+        url = harici
     return {
         "id": g.pk,
         "urun_id": g.urun_id,
         "varyant_id": g.varyant_id,
         "url": url,
+        "harici_url": harici,
         "tip": g.tip,
         "sira": g.sira,
         "kapak": bool(g.kapak),

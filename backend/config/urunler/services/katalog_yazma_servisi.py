@@ -114,6 +114,11 @@ def taslak_urun_olustur(
     teknik_ids: list[int] | None = None,
     stil_ids: list[int] | None = None,
     ozel_gun_ids: list[int] | None = None,
+    meta_baslik: str = "",
+    meta_aciklama: str = "",
+    slug: str = "",
+    canonical_url: str | None = None,
+    gorsel_alt_metni: str = "",
 ) -> Urun:
     """Platform taslak ürün — onay/yayın yalnız onay_servisi."""
     _require_platform_submit(actor, action="urun.taslak_olustur")
@@ -171,7 +176,15 @@ def taslak_urun_olustur(
                 yuzey=yz_val,
                 zincir_tipi=zincir_tipi,
                 kopca_tipi=kopca_tipi,
+                meta_baslik=(meta_baslik or "").strip()[:70],
+                meta_aciklama=(meta_aciklama or "").strip()[:160],
+                gorsel_alt_metni=(gorsel_alt_metni or "").strip(),
             )
+            slug_v = (slug or "").strip()
+            if slug_v:
+                urun.slug = slug_v[:160]
+            if canonical_url:
+                urun.canonical_url = str(canonical_url).strip()[:200] or None
             urun.full_clean()
             urun.save()
             if teknikler is not None:
@@ -228,6 +241,11 @@ def taslak_urun_guncelle(
     teknik_ids: object = _UNSET,
     stil_ids: object = _UNSET,
     ozel_gun_ids: object = _UNSET,
+    meta_baslik: object = _UNSET,
+    meta_aciklama: object = _UNSET,
+    slug: object = _UNSET,
+    canonical_url: object = _UNSET,
+    gorsel_alt_metni: object = _UNSET,
 ) -> Urun:
     """Taslak/reddedildi (veya meta açıklamalar için onaylı) ürün güncelleme."""
     _require_platform_submit(actor, action="urun.guncelle", urun=urun)
@@ -296,6 +314,18 @@ def taslak_urun_guncelle(
     teknikler = _resolve_m2m(Teknik, None if teknik_ids is _UNSET else teknik_ids, field_name="teknik_ids", label="Teknik")
     stiller = _resolve_m2m(Stil, None if stil_ids is _UNSET else stil_ids, field_name="stil_ids", label="Stil")
     ozel_gunler = _resolve_m2m(OzelGun, None if ozel_gun_ids is _UNSET else ozel_gun_ids, field_name="ozel_gun_ids", label="Özel gün")
+
+    if meta_baslik is not _UNSET:
+        urun.meta_baslik = str(meta_baslik or "").strip()[:70]
+    if meta_aciklama is not _UNSET:
+        urun.meta_aciklama = str(meta_aciklama or "").strip()[:160]
+    if slug is not _UNSET:
+        urun.slug = str(slug or "").strip()[:160]
+    if canonical_url is not _UNSET:
+        cu = str(canonical_url or "").strip()
+        urun.canonical_url = cu[:200] if cu else None
+    if gorsel_alt_metni is not _UNSET:
+        urun.gorsel_alt_metni = str(gorsel_alt_metni or "").strip()
 
     with transaction.atomic():
         urun.full_clean()
@@ -499,6 +529,117 @@ def varyant_guncelle(
             detail={"urun_id": urun.pk},
         )
         return varyant
+
+
+def urun_kopyala(*, actor, urun: Urun) -> Urun:
+    """Taslak kopya: alanlar + M2M + varyantlar + taşlar + görseller (SKU yenilenir)."""
+    from django.core.files.base import ContentFile
+
+    from urunler.models import UrunGorsel, UrunTasi
+
+    _require_platform_submit(actor, action="urun.kopyala", urun=urun)
+    urun.refresh_from_db()
+    if urun.olusturan_firma_id != actor.firma_id:
+        raise PermissionDenied("Başka firmaya ait ürün kopyalanamaz.")
+
+    with transaction.atomic():
+        kopya = Urun(
+            olusturan_firma=actor.firma,
+            olusturan_kullanici=actor,
+            ad=f"{urun.ad} (Kopya)"[:150],
+            aciklama=urun.aciklama,
+            kategori_id=urun.kategori_id,
+            ayar_id=urun.ayar_id,
+            fiyat_tipi=urun.fiyat_tipi,
+            fiyat_kaynagi=urun.fiyat_kaynagi,
+            temin_tipi=urun.temin_tipi,
+            termin_gun=urun.termin_gun,
+            renk_ekseni=urun.renk_ekseni,
+            olcu_tipi=urun.olcu_tipi,
+            koleksiyon_id=urun.koleksiyon_id,
+            hedef_kitle=urun.hedef_kitle,
+            yas_grubu_id=urun.yas_grubu_id,
+            yuzey=urun.yuzey,
+            zincir_tipi_id=urun.zincir_tipi_id,
+            kopca_tipi_id=urun.kopca_tipi_id,
+            meta_baslik=urun.meta_baslik,
+            meta_aciklama=urun.meta_aciklama,
+            gorsel_alt_metni=urun.gorsel_alt_metni,
+            onay_durumu="taslak",
+            yayin_durumu="pasif",
+            red_nedeni="",
+            kimlik_sinifi=urun.kimlik_sinifi,
+            # slug/platform_kodu save() ile yenilenir
+        )
+        kopya.full_clean()
+        kopya.save()
+        kopya.teknikler.set(urun.teknikler.all())
+        kopya.stiller.set(urun.stiller.all())
+        kopya.ozel_gunler.set(urun.ozel_gunler.all())
+        for uk in urun.kanallar.all():
+            UrunKanal.objects.create(urun=kopya, kanal_id=uk.kanal_id, aktif=uk.aktif)
+        for v in urun.varyantlar.filter(aktif=True):
+            nv = Varyant(
+                urun=kopya,
+                renk_id=v.renk_id,
+                beden_id=v.beden_id,
+                gram=v.gram,
+                gram_bandi_min=v.gram_bandi_min,
+                gram_bandi_max=v.gram_bandi_max,
+                sabit_fiyat=v.sabit_fiyat,
+                ek_bedel=v.ek_bedel,
+                tedarikci_sku=v.tedarikci_sku,
+                benzersiz_parca=v.benzersiz_parca,
+                aktif=True,
+            )
+            nv.full_clean()
+            nv.save()
+        for t in urun.taslar.select_related("tas_tipi").all():
+            UrunTasi.objects.create(
+                urun=kopya,
+                tas_tipi_id=t.tas_tipi_id,
+                adet=t.adet,
+                karat=t.karat,
+                bedel=t.bedel,
+                kesim_id=t.kesim_id,
+                mihlama_tipi_id=t.mihlama_tipi_id,
+                mensei_id=t.mensei_id,
+                berraklik_id=t.berraklik_id,
+                renk_derecesi_id=t.renk_derecesi_id,
+                kesim_kalitesi_id=t.kesim_kalitesi_id,
+                sertifika_kurumu_id=t.sertifika_kurumu_id,
+                sertifika_no=t.sertifika_no or "",
+            )
+        for g in urun.gorseller.filter(varyant__isnull=True).order_by("sira", "pk"):
+            ng = UrunGorsel(
+                urun=kopya,
+                tip=g.tip,
+                sira=g.sira,
+                kapak=g.kapak,
+                alt_metin=g.alt_metin or "",
+                harici_url=getattr(g, "harici_url", "") or "",
+            )
+            if g.dosya:
+                try:
+                    g.dosya.open("rb")
+                    content = g.dosya.read()
+                    name = g.dosya.name.rsplit("/", 1)[-1]
+                    ng.dosya.save(name, ContentFile(content), save=False)
+                finally:
+                    try:
+                        g.dosya.close()
+                    except Exception:
+                        pass
+            ng.save()
+        record_audit(
+            actor=actor,
+            action="urun.kopyala",
+            entity_type="Urun",
+            entity_id=kopya.pk,
+            success=True,
+            detail={"kaynak_id": urun.pk},
+        )
+        return kopya
 
 
 def varyant_toplu_ekle(

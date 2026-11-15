@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { OpsMarjPolitikasiCard } from "@/features/piyasa";
 import { useActionToast } from "@/hooks/use-action-toast";
@@ -16,16 +17,24 @@ import {
 import type {
   DefinitionCategoryId,
   DefinitionCategoryMeta,
+  DefinitionNavSection,
   OpsAyarMilyem,
   OpsBirim,
   OpsDefinitionKaynak,
   OpsDefinitionRow,
   OpsDovizKuru,
   OpsFiyatGrubu,
+  OpsKiymetliMetal,
   OpsMetalKuru,
   OpsSatisKanali,
   SalesChannel,
 } from "../types";
+import {
+  CatalogRefsPanel,
+  TAS_SERTIFIKA_REFS,
+  URUN_OZELLIK_REFS,
+} from "./catalog-refs-panel";
+import { CategoriesPanel } from "@/features/urunler/components/categories-panel";
 import { formatDateTime } from "@/lib/format";
 import {
   ConfirmDialog,
@@ -57,45 +66,132 @@ import { Sliders, Eye, Lock } from "lucide-react";
 
 const PAGE_SIZE = 15;
 
-const CATEGORIES: DefinitionCategoryMeta[] = [
+const OPS_CATEGORIES: DefinitionCategoryMeta[] = [
   {
     id: "satis-kanallari",
     label: "Satış Kanalları",
     description: "Kuyumcu portalı, B2B ve dağıtım kanalları yönetimi.",
     kaynak: "satis-kanallari",
+    kind: "ops",
   },
   {
     id: "fiyat-gruplari",
     label: "Fiyat Grupları",
     description: "Alıcı ve kanal fiyat grubu tanımları.",
     kaynak: "fiyat-gruplari",
+    kind: "ops",
+  },
+  {
+    id: "kiymetli-metaller",
+    label: "Metal / Materyal",
+    description: "Altın, gümüş, çelik ve diğer metal türleri.",
+    kaynak: "kiymetli-metaller",
+    kind: "ops",
   },
   {
     id: "ayar-milyem",
     label: "Ayar / Milyem",
     description: "Metal ayar ve milyem katsayı tanımları.",
     kaynak: "ayar-milyem",
+    kind: "ops",
   },
   {
     id: "kur-metal",
     label: "Metal Kurları",
     description: "Has altın ve değerli metal kur girişleri.",
     kaynak: "metal-kurlari",
+    kind: "ops",
   },
   {
     id: "kur-doviz",
     label: "Döviz Kurları",
     description: "TRY çapraz döviz kurları yönetimi.",
     kaynak: "doviz-kurlari",
+    kind: "ops",
   },
   {
     id: "birimler",
     label: "Ölçü Birimleri",
     description: "Sistemde tanımlı stok ve satış birimleri.",
     kaynak: "birimler",
+    kind: "ops",
     readOnly: true,
   },
 ];
+
+const CATALOG_REF_CATEGORIES: DefinitionCategoryMeta[] = [
+  ...URUN_OZELLIK_REFS,
+  ...TAS_SERTIFIKA_REFS,
+].map((r) => ({
+  id: r.kaynak as DefinitionCategoryId,
+  label: r.ad,
+  description: "Ürün formu seçim listesi — Tanımlar üzerinden yönetilir.",
+  kaynak: r.kaynak,
+  kind: "catalog-ref" as const,
+}));
+
+const KATEGORI_CATEGORY: DefinitionCategoryMeta = {
+  id: "kategoriler",
+  label: "Kategoriler",
+  description: "Ürün kategori ağacı — üst/alt, fiyat grubu mirası, SEO.",
+  kaynak: "kategoriler",
+  kind: "categories",
+};
+
+const ALL_CATEGORIES: DefinitionCategoryMeta[] = [
+  ...OPS_CATEGORIES,
+  KATEGORI_CATEGORY,
+  ...CATALOG_REF_CATEGORIES,
+];
+
+const NAV_SECTIONS: DefinitionNavSection[] = [
+  {
+    id: "ticari",
+    label: "Ticari",
+    items: OPS_CATEGORIES.filter((c) =>
+      ["satis-kanallari", "fiyat-gruplari"].includes(c.id)
+    ),
+  },
+  {
+    id: "katalog-yapi",
+    label: "Katalog Yapısı",
+    items: [KATEGORI_CATEGORY],
+  },
+  {
+    id: "metal-kur",
+    label: "Metal & Kur",
+    items: OPS_CATEGORIES.filter((c) =>
+      [
+        "kiymetli-metaller",
+        "ayar-milyem",
+        "kur-metal",
+        "kur-doviz",
+        "birimler",
+      ].includes(c.id)
+    ),
+  },
+  {
+    id: "urun-ozellik",
+    label: "Ürün Özellikleri",
+    items: CATALOG_REF_CATEGORIES.filter((c) =>
+      URUN_OZELLIK_REFS.some((r) => r.kaynak === c.id)
+    ),
+  },
+  {
+    id: "tas-sertifika",
+    label: "Taş & Sertifika",
+    items: CATALOG_REF_CATEGORIES.filter((c) =>
+      TAS_SERTIFIKA_REFS.some((r) => r.kaynak === c.id)
+    ),
+  },
+];
+
+function resolveCategoryId(raw: string | null): DefinitionCategoryId {
+  if (raw && ALL_CATEGORIES.some((c) => c.id === raw)) {
+    return raw as DefinitionCategoryId;
+  }
+  return "satis-kanallari";
+}
 
 interface DefinitionFormState {
   kod: string;
@@ -106,6 +202,7 @@ interface DefinitionFormState {
   quote_ttl_saniye: string;
   sira: string;
   aktif: boolean;
+  gram_bazli: boolean;
   metal_id: string;
   fiyat_kaynagi: string;
   ayar_degeri: string;
@@ -143,6 +240,7 @@ function emptyFormState(
     quote_ttl_saniye: "180",
     sira: "0",
     aktif: true,
+    gram_bazli: true,
     metal_id: defaultMetalId,
     fiyat_kaynagi: refs?.fiyat_kaynaklari?.[0] || "MIRAS",
     ayar_degeri: "",
@@ -194,6 +292,15 @@ function rowToFormState(
       aktif: r.aktif,
     };
   }
+  if (kaynak === "kiymetli-metaller") {
+    const r = row as OpsKiymetliMetal;
+    return {
+      ...base,
+      kod: r.kod,
+      ad: r.ad,
+      gram_bazli: Boolean(r.gram_bazli),
+    };
+  }
   if (kaynak === "ayar-milyem") {
     const r = row as OpsAyarMilyem;
     return {
@@ -239,6 +346,7 @@ const KANAL_TIP_ETIKET: Record<string, string> = {
 export function DefinitionsView() {
   const { user } = useAuth();
   const actionToast = useActionToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canOps = Boolean(
     user?.capabilities?.can_view_ops ||
       user?.capabilities?.can_view_ops_finance ||
@@ -252,13 +360,23 @@ export function DefinitionsView() {
     refresh: refreshBuyerChannels,
   } = useSalesChannels();
 
-  const [categoryId, setCategoryId] = useState<DefinitionCategoryId>("satis-kanallari");
+  const [categoryId, setCategoryId] = useState<DefinitionCategoryId>(() =>
+    resolveCategoryId(searchParams.get("grup"))
+  );
   const [query, setQuery] = useState("");
   const [aktifFilter, setAktifFilter] = useState<string>("");
   const [page, setPage] = useState(1);
 
-  const activeCategory = CATEGORIES.find((c) => c.id === categoryId) || CATEGORIES[0];
-  const activeKaynak = activeCategory.kaynak;
+  useEffect(() => {
+    const fromUrl = resolveCategoryId(searchParams.get("grup"));
+    setCategoryId((prev) => (prev === fromUrl ? prev : fromUrl));
+  }, [searchParams]);
+
+  const activeCategory =
+    ALL_CATEGORIES.find((c) => c.id === categoryId) || ALL_CATEGORIES[0];
+  const isCatalogRef = activeCategory.kind === "catalog-ref";
+  const isCategories = activeCategory.kind === "categories";
+  const activeKaynak = activeCategory.kaynak as OpsDefinitionKaynak;
   const isReadOnlyCategory = Boolean(activeCategory.readOnly);
 
   const queryParams = useMemo(
@@ -274,7 +392,11 @@ export function DefinitionsView() {
     [query, aktifFilter, page, activeKaynak]
   );
 
-  const opsDefQ = useOpsDefinitionsQuery(activeKaynak, canOps, queryParams);
+  const opsDefQ = useOpsDefinitionsQuery(
+    activeKaynak,
+    canOps && !isCatalogRef && !isCategories,
+    queryParams
+  );
   const createMut = useCreateOpsDefinitionMutation();
   const updateMut = useUpdateOpsDefinitionMutation();
   const deleteMut = useDeleteOpsDefinitionMutation();
@@ -320,6 +442,15 @@ export function DefinitionsView() {
     setAktifFilter("");
     setPage(1);
     setDetailRow(null);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id === "satis-kanallari") next.delete("grup");
+        else next.set("grup", id);
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const openCreateModal = () => {
@@ -375,6 +506,16 @@ export function DefinitionsView() {
         ad: formState.ad.trim(),
         sira: Number(formState.sira || "0"),
         aktif: formState.aktif,
+      };
+    } else if (activeKaynak === "kiymetli-metaller") {
+      if (!formState.kod.trim() || !formState.ad.trim()) {
+        setFormError("Metal kodu ve adı zorunludur.");
+        return;
+      }
+      body = {
+        kod: formState.kod.trim().toUpperCase(),
+        ad: formState.ad.trim(),
+        gram_bazli: formState.gram_bazli,
       };
     } else if (activeKaynak === "ayar-milyem") {
       if (!formState.metal_id || !formState.ayar_kodu.trim() || !formState.milyem.trim()) {
@@ -532,49 +673,57 @@ export function DefinitionsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] gap-4">
         <nav
-          className="rounded-[8px] border border-border bg-card p-2 h-fit"
+          className="rounded-[8px] border border-border bg-card p-1.5 h-fit max-h-[calc(100vh-8rem)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="Tanım kategorileri"
         >
-          <div className="px-2 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Tanım Grupları
           </div>
-          <ul className="flex flex-col gap-0.5">
-            {CATEGORIES.map((cat) => {
-              const selectedCat = cat.id === categoryId;
-              const requiresOps = !canOps && cat.id !== "satis-kanallari";
-              return (
-                <li key={cat.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectCategory(cat.id)}
-                    className={`w-full rounded-[6px] px-2.5 py-2 text-left transition-colors ${
-                      selectedCat
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium">{cat.label}</span>
-                      {requiresOps ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Yetkili
-                        </Badge>
-                      ) : cat.readOnly ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          Liste
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">
-                      {cat.description}
-                    </p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex flex-col gap-2">
+            {NAV_SECTIONS.map((section) => (
+              <div key={section.id} className="space-y-0.5">
+                <p className="px-2 pt-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {section.label}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {section.items.map((cat) => {
+                    const selectedCat = cat.id === categoryId;
+                    const requiresOps =
+                      !canOps && cat.id !== "satis-kanallari";
+                    return (
+                      <li key={cat.id}>
+                        <button
+                          type="button"
+                          onClick={() => onSelectCategory(cat.id)}
+                          title={cat.description}
+                          className={`w-full rounded-[5px] px-2 py-1.5 text-left transition-colors ${
+                            selectedCat
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[11px] font-medium leading-tight">
+                              {cat.label}
+                            </span>
+                            {requiresOps ? (
+                              <Lock className="h-3 w-3 shrink-0 opacity-50" />
+                            ) : cat.readOnly ? (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0">
+                                Liste
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </nav>
 
         <div className="min-w-0">
@@ -589,6 +738,14 @@ export function DefinitionsView() {
                 düzenlenebilir.
               </span>
             </div>
+          ) : isCategories ? (
+            <CategoriesPanel />
+          ) : isCatalogRef ? (
+            <CatalogRefsPanel
+              kaynak={activeCategory.kaynak}
+              title={activeCategory.label}
+              description={activeCategory.description}
+            />
           ) : (
             <ListPage
               title={activeCategory.label}
@@ -788,6 +945,42 @@ export function DefinitionsView() {
                             onEdit={() => openEditModal(row)}
                             isActive={row.aktif}
                             onToggleActive={() => void toggleAktif(row)}
+                            onDelete={() =>
+                              setDeleteTarget({ id: row.id, label: row.ad })
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : activeKaynak === "kiymetli-metaller" ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Kod</TableHead>
+                      <TableHead>Metal / Materyal</TableHead>
+                      <TableHead>Fiyatlama</TableHead>
+                      <TableHead className="text-right">İşlemler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(opsRows as OpsKiymetliMetal[]).map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="font-mono text-xs font-semibold">
+                          {row.kod}
+                        </TableCell>
+                        <TableCell className="font-medium">{row.ad}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px]">
+                            {row.gram_bazli ? "Gram bazlı" : "Gram dışı"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RowActions
+                            itemLabel={row.ad}
+                            onView={() => setDetailRow(row)}
+                            onEdit={() => openEditModal(row)}
                             onDelete={() =>
                               setDeleteTarget({ id: row.id, label: row.ad })
                             }
@@ -1259,6 +1452,43 @@ export function DefinitionsView() {
                 </label>
               </div>
             </div>
+          </>
+        ) : null}
+
+        {activeKaynak === "kiymetli-metaller" ? (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label>Metal Kodu</Label>
+              <Input
+                required
+                maxLength={10}
+                value={formState.kod}
+                onChange={(e) => updateField("kod", e.target.value)}
+                placeholder="ALTIN"
+                className="font-mono text-xs"
+                disabled={isMutating}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Metal / Materyal Adı</Label>
+              <Input
+                required
+                maxLength={50}
+                value={formState.ad}
+                onChange={(e) => updateField("ad", e.target.value)}
+                placeholder="Altın"
+                disabled={isMutating}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formState.gram_bazli}
+                onChange={(e) => updateField("gram_bazli", e.target.checked)}
+                disabled={isMutating}
+              />
+              Gram bazlı fiyatlanır
+            </label>
           </>
         ) : null}
 

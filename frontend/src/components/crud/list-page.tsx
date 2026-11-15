@@ -41,6 +41,8 @@ export interface ListPageProps {
   totalCount?: number;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
+  /** İçerik kutusuna ek class (ör. vitrin grid için border/padding kaldırma). */
+  contentClassName?: string;
   children: React.ReactNode;
 }
 
@@ -68,6 +70,7 @@ export function ListPage({
   totalCount,
   onPageChange,
   onPageSizeChange,
+  contentClassName,
   children,
 }: ListPageProps) {
   const hasToolbar =
@@ -165,7 +168,12 @@ export function ListPage({
       ) : null}
 
       {/* İçerik Alanı */}
-      <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+      <div
+        className={
+          contentClassName ??
+          "rounded-[8px] border border-border bg-card overflow-hidden"
+        }
+      >
         {loading ? (
           <div className="divide-y divide-border p-4 space-y-2" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (

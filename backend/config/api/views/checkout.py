@@ -25,18 +25,28 @@ class CheckoutCreateView(IdempotencyMixin, APIView):
             return cached
 
         key = request._idempotency["key"]
+        body_in = request.data if isinstance(request.data, dict) else {}
         try:
             result = checkout_servisi.checkout(
-                actor=request.user, idempotency_key=key
+                actor=request.user,
+                idempotency_key=key,
+                teslimat_adresi_id=body_in.get("teslimat_adresi_id"),
+                fatura_adresi_id=body_in.get("fatura_adresi_id"),
+                siparis_notu=str(body_in.get("siparis_notu") or body_in.get("notlar") or ""),
             )
         except DjangoValidationError as exc:
             raise_drf(exc)
 
+        meta = result.attempt.sonuc or {}
         body = {
             "id": result.attempt.pk,
+            "checkout_id": result.attempt.pk,
             "durum": result.attempt.durum,
             "idempotency_key": result.attempt.idempotency_key,
             "line_count": len(result.lines),
+            "teslimat_adresi": meta.get("teslimat_adresi"),
+            "fatura_adresi": meta.get("fatura_adresi"),
+            "siparis_notu": meta.get("siparis_notu") or "",
             "allowed_actions": (
                 ["create_order"]
                 if result.attempt.durum == CheckoutAttempt.Durum.BASARILI

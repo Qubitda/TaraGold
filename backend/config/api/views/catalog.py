@@ -29,6 +29,7 @@ from urunler.models import (
     TasTipi,
     Urun,
 )
+from urunler.services.katalog_filtre_servisi import apply_katalog_list_filters
 
 
 def _assert_buyer_or_ops(user) -> None:
@@ -47,29 +48,21 @@ class BuyerCatalogListView(APIView):
         _assert_buyer_or_ops(request.user)
         qs = (
             Urun.objects.filter(yayin_durumu="aktif", onay_durumu="onayli")
-            .select_related("kategori", "ayar")
+            .select_related("kategori", "ayar", "ayar__metal")
+            .prefetch_related("varyantlar", "gorseller")
             .annotate(
                 varyant_count=Count(
                     "varyantlar", filter=Q(varyantlar__aktif=True)
                 )
             )
+            # Satın alınabilir vitrin: aktif varyantsız ürün listelenmez
+            .filter(varyant_count__gte=1)
         )
         # ADR-0033: AliciKanalErisimi varsa kanal görünürlük; yoksa legacy
         if not can_view_all_tenants(request.user):
             qs = filter_buyer_catalog_queryset(qs, actor=request.user)
-        term = (request.query_params.get("q") or "").strip()
-        if term:
-            qs = qs.filter(
-                Q(ad__icontains=term) | Q(platform_kodu__icontains=term)
-            )
-        kat_id = (request.query_params.get("kategori_id") or "").strip()
-        if kat_id.isdigit():
-            qs = qs.filter(kategori_id=int(kat_id))
-        one_cikan = (request.query_params.get("one_cikan") or "").strip().lower()
-        if one_cikan in ("true", "1"):
-            qs = qs.filter(kategori__one_cikan=True)
-        elif one_cikan in ("false", "0"):
-            qs = qs.filter(kategori__one_cikan=False)
+        # Onay/yayın zaten qs'te; filtre servisi ek alanlar + SKU araması
+        qs = apply_katalog_list_filters(qs, request.query_params)
 
         raw_ord = (request.query_params.get("ordering") or "").strip()
         if not raw_ord or raw_ord == "vitrin":

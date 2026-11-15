@@ -133,9 +133,16 @@ from api.views import (
     OpsProductVariantDetailView,
     OpsProductReadinessView,
     OpsProductMediaListCreateView,
+    OpsProductStoneListCreateView,
+    OpsProductStoneDetailView,
     OpsProductMediaDetailView,
     OpsProductMediaReorderView,
     OpsProductPricePreviewView,
+    OpsProductCopyView,
+    OpsProductBulkActionView,
+    OpsProductExportView,
+    OpsProductAuditView,
+    OpsProductStockView,
     OpsRfqMatchApproveView,
     OpsRfqMatchCandidatesView,
     OpsRfqMatchListCreateView,
@@ -162,6 +169,7 @@ from api.views import (
     PriceLockDetailView,
     QuoteCreateView,
     QuoteDetailView,
+    QuoteBatchPreviewView,
     ReturnApproveView,
     ReturnCancelView,
     ReturnDetailView,
@@ -375,6 +383,11 @@ api_urlpatterns = [
         name="api-ops-piyasa-marj-politikasi",
     ),
     path("quotes/", QuoteCreateView.as_view(), name="api-quote-create"),
+    path(
+        "quotes/batch/",
+        QuoteBatchPreviewView.as_view(),
+        name="api-quote-batch",
+    ),
     path("quotes/<int:pk>/", QuoteDetailView.as_view(), name="api-quote-detail"),
     path("price-locks/", PriceLockCreateView.as_view(), name="api-price-lock-create"),
     path(
@@ -895,9 +908,29 @@ api_urlpatterns = [
         name="api-ops-products",
     ),
     path(
+        "ops/products/bulk/",
+        OpsProductBulkActionView.as_view(),
+        name="api-ops-products-bulk",
+    ),
+    path(
+        "ops/products/export/",
+        OpsProductExportView.as_view(),
+        name="api-ops-products-export",
+    ),
+    path(
         "ops/products/<int:pk>/",
         OpsProductDetailView.as_view(),
         name="api-ops-product-detail",
+    ),
+    path(
+        "ops/products/<int:pk>/copy/",
+        OpsProductCopyView.as_view(),
+        name="api-ops-product-copy",
+    ),
+    path(
+        "ops/products/<int:pk>/audit/",
+        OpsProductAuditView.as_view(),
+        name="api-ops-product-audit",
     ),
     path(
         "ops/products/<int:pk>/variants/",
@@ -923,6 +956,21 @@ api_urlpatterns = [
         "ops/products/<int:pk>/readiness/",
         OpsProductReadinessView.as_view(),
         name="api-ops-product-readiness",
+    ),
+    path(
+        "ops/products/<int:pk>/stock/",
+        OpsProductStockView.as_view(),
+        name="api-ops-product-stock",
+    ),
+    path(
+        "ops/products/<int:pk>/stones/",
+        OpsProductStoneListCreateView.as_view(),
+        name="api-ops-product-stones",
+    ),
+    path(
+        "ops/products/<int:pk>/stones/<int:sid>/",
+        OpsProductStoneDetailView.as_view(),
+        name="api-ops-product-stone-detail",
     ),
     path(
         "ops/products/<int:pk>/media/",

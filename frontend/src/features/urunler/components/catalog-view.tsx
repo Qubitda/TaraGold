@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { urunlerService } from "../services";
 import {
@@ -16,8 +16,6 @@ import {
   useOpsProductActionMutation,
   useOpsProductChannelsQuery,
   useOpsProductsQuery,
-  useTaslarQuery,
-  useUpdateOpsProductMutation,
   urunlerKeys,
 } from "../hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,7 +30,7 @@ import type {
 } from "../types";
 import { fiyatlamaService, rememberQuoteId } from "@/features/fiyatlama";
 import { siparisService } from "@/features/siparis";
-import { tanimlarService, useSalesChannelsQuery } from "@/features/tanimlar";
+import { useSalesChannelsQuery } from "@/features/tanimlar";
 import { formatGram, formatMoney } from "@/lib/format";
 import {
   ConfirmDialog,
@@ -41,10 +39,16 @@ import {
   RelationSelect,
   RowActions,
 } from "@/components/crud";
-import { CategoryEntityModal, CategoriesPanel } from "./categories-panel";
-import { CatalogRefsPanel } from "./catalog-refs-panel";
 import { ProductP0Panel } from "./product-p0-panel";
 import { VariantCompareModal } from "./variant-compare-modal";
+import {
+  BuyerCatalogGrid,
+  BuyerProductDetailView,
+} from "./buyer-storefront";
+import {
+  OpsProductWorkspace,
+  type OpsWorkspaceTab,
+} from "./ops-product-workspace";
 import {
   Table,
   TableHeader,
@@ -79,80 +83,11 @@ import {
 } from "lucide-react";
 
 type ViewMode = "table" | "cards";
-type Scope = "buyer" | "monturler" | "taslar" | "ops" | "kategoriler" | "referanslar";
-type DetailTab = "general" | "tech" | "variants" | "prepare" | "channels";
+type Scope = "buyer" | "monturler" | "ops";
+type DetailTab = OpsWorkspaceTab | "tech";
 
 const PAGE_SIZE = 20;
 
-interface ProductFormState {
-  ad: string;
-  kategori_id: string;
-  ayar_id: string;
-  aciklama: string;
-  fiyat_tipi: string;
-  temin_tipi: string;
-  termin_gun: string;
-  olcu_tipi: string;
-  renk_ekseni: boolean;
-  satis_kanali_id: string;
-  koleksiyon_id: string;
-  hedef_kitle: string;
-  yas_grubu_id: string;
-  yuzey: string;
-  zincir_tipi_id: string;
-  kopca_tipi_id: string;
-  teknik_ids: number[];
-  stil_ids: number[];
-  ozel_gun_ids: number[];
-}
-
-function emptyProductForm(): ProductFormState {
-  return {
-    ad: "",
-    kategori_id: "",
-    ayar_id: "",
-    aciklama: "",
-    fiyat_tipi: "gram",
-    temin_tipi: "hazir",
-    termin_gun: "",
-    olcu_tipi: "",
-    renk_ekseni: false,
-    satis_kanali_id: "",
-    koleksiyon_id: "",
-    hedef_kitle: "",
-    yas_grubu_id: "",
-    yuzey: "",
-    zincir_tipi_id: "",
-    kopca_tipi_id: "",
-    teknik_ids: [],
-    stil_ids: [],
-    ozel_gun_ids: [],
-  };
-}
-
-function productToForm(p: OpsProduct): ProductFormState {
-  return {
-    ad: p.ad,
-    kategori_id: p.kategori_id ? String(p.kategori_id) : "",
-    ayar_id: p.ayar_id ? String(p.ayar_id) : "",
-    aciklama: p.aciklama || "",
-    fiyat_tipi: p.fiyat_tipi || "gram",
-    temin_tipi: p.temin_tipi || "hazir",
-    termin_gun: p.termin_gun != null ? String(p.termin_gun) : "",
-    olcu_tipi: p.olcu_tipi || "",
-    renk_ekseni: Boolean(p.renk_ekseni),
-    satis_kanali_id: "",
-    koleksiyon_id: p.koleksiyon_id ? String(p.koleksiyon_id) : "",
-    hedef_kitle: p.hedef_kitle || "",
-    yas_grubu_id: p.yas_grubu_id ? String(p.yas_grubu_id) : "",
-    yuzey: p.yuzey || "",
-    zincir_tipi_id: p.zincir_tipi_id ? String(p.zincir_tipi_id) : "",
-    kopca_tipi_id: p.kopca_tipi_id ? String(p.kopca_tipi_id) : "",
-    teknik_ids: p.teknik_ids ? [...p.teknik_ids] : [],
-    stil_ids: p.stil_ids ? [...p.stil_ids] : [],
-    ozel_gun_ids: p.ozel_gun_ids ? [...p.ozel_gun_ids] : [],
-  };
-}
 
 interface VariantFormState {
   gram: string;
@@ -193,6 +128,7 @@ function variantToForm(v: OpsProductVariant): VariantFormState {
 
 export function CatalogView() {
   const { id: routeId } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const actionToast = useActionToast();
   const queryClient = useQueryClient();
@@ -204,34 +140,58 @@ export function CatalogView() {
 
   const { get, setMany, page } = useUrlState();
   const scopeParam = get("scope");
+  /** Eski tanım sekmeleri → /tanimlar (hook sonrası Navigate). */
+  const redirectToTanimlar =
+    scopeParam === "referanslar"
+      ? "/tanimlar?grup=koleksiyon"
+      : scopeParam === "kategoriler"
+        ? "/tanimlar?grup=kategoriler"
+        : scopeParam === "taslar"
+          ? "/tanimlar?grup=tas-tipi"
+          : null;
   const scope: Scope =
-    scopeParam === "referanslar" && canOps
-      ? "referanslar"
-      : scopeParam === "kategoriler" && canOps
-        ? "kategoriler"
-        : scopeParam === "ops" && canOps
-          ? "ops"
-          : scopeParam === "monturler"
-            ? "monturler"
-            : scopeParam === "taslar"
-              ? "taslar"
-              : scopeParam === "buyer"
-                ? "buyer"
-                : canOps
-                  ? "ops"
-                  : "buyer";
+    scopeParam === "ops" && canOps
+      ? "ops"
+      : scopeParam === "monturler"
+        ? "monturler"
+        : scopeParam === "buyer"
+          ? "buyer"
+          : canOps
+            ? "ops"
+            : "buyer";
 
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+
+  useEffect(() => {
+    setViewMode(scope === "ops" ? "table" : "cards");
+  }, [scope]);
 
   const q = get("q");
   const ordering = get("ordering", scope === "ops" ? "vitrin" : "vitrin") || "vitrin";
-  const onayDurumu = get("onay");
   const yayinDurumu = get("yayin");
   const kategoriFilter = get("kategori");
+  const eksikGorsel = get("eksik_gorsel");
+  const eksikVaryant = get("eksik_varyant");
+  const kanalParam = get("kanal");
   const [qInput, setQInput] = useState(q);
+  const [cardPrices, setCardPrices] = useState<
+    Record<
+      number,
+      {
+        loading?: boolean;
+        price?: string;
+        currency?: string;
+        quoteId?: number;
+        error?: string;
+        gram?: string | null;
+      }
+    >
+  >({});
+  const [selectedBuyerVariantId, setSelectedBuyerVariantId] = useState<number | null>(
+    null
+  );
 
   const createOpsMutation = useCreateOpsProductMutation();
-  const updateOpsMutation = useUpdateOpsProductMutation();
   const deleteOpsMutation = useDeleteOpsProductMutation();
   const opsActionMutation = useOpsProductActionMutation();
   const createCatalogRefMutation = useCreateCatalogRefMutation();
@@ -246,15 +206,6 @@ export function CatalogView() {
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
   // Unified Create / Edit Product modal
-  const [productModalOpen, setProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<OpsProduct | null>(null);
-  const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
-  const [productDirty, setProductDirty] = useState(false);
-  const [productFormError, setProductFormError] = useState<string | null>(null);
-  const [nestedCategoryOpen, setNestedCategoryOpen] = useState(false);
-  const [recentCreatedCategory, setRecentCreatedCategory] = useState<CategoryItem | null>(
-    null
-  );
 
   // Unified Create / Edit Variant modal
   const [variantModalOpen, setVariantModalOpen] = useState(false);
@@ -269,13 +220,13 @@ export function CatalogView() {
   const [quickRefAd, setQuickRefAd] = useState("");
   const [quickRefVal, setQuickRefVal] = useState("");
 
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+
   // Confirmations
   const [deleteProductTarget, setDeleteProductTarget] = useState<OpsProduct | null>(null);
   const [deleteVariantTarget, setDeleteVariantTarget] = useState<OpsProductVariant | null>(
     null
   );
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
 
   const [quoteState, setQuoteState] = useState<
     Record<
@@ -318,11 +269,22 @@ export function CatalogView() {
   const opsFilters = useMemo(
     () => ({
       ...catalogFilters,
-      onay_durumu: onayDurumu || undefined,
       yayin_durumu: yayinDurumu || undefined,
+      eksik_gorsel: eksikGorsel || undefined,
+      eksik_varyant: eksikVaryant || undefined,
     }),
-    [catalogFilters, onayDurumu, yayinDurumu]
+    [catalogFilters, yayinDurumu, eksikGorsel, eksikVaryant]
   );
+
+  useEffect(() => {
+    if (!variantDirty && !workspaceDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [variantDirty, workspaceDirty]);
 
   const catalogQuery = useCatalogQuery(
     catalogFilters,
@@ -332,28 +294,33 @@ export function CatalogView() {
     catalogFilters,
     scope === "monturler" && (canCatalog || canOps)
   );
-  const taslarQuery = useTaslarQuery(
-    { q: q || undefined, page: String(page), page_size: String(PAGE_SIZE) },
-    scope === "taslar" && (canCatalog || canOps)
-  );
   const opsQuery = useOpsProductsQuery(opsFilters, scope === "ops" && canOps);
 
   const buyerCatsQ = useCategoriesQuery({ page_size: "100" }, canCatalog || canOps);
   const opsCatsQ = useOpsCategoriesQuery(
     { aktif: "true", page_size: "100" },
-    canOps && (productModalOpen || scope === "ops")
+    canOps && scope === "ops"
   );
-  const refsQ = useCatalogRefsQuery(canOps && (productModalOpen || variantModalOpen || detailOpen));
-  const channelsQ = useSalesChannelsQuery(canOps && productModalOpen);
+  const refsQ = useCatalogRefsQuery(
+    canOps && (scope === "ops" || variantModalOpen || detailOpen)
+  );
+  const channelsQ = useSalesChannelsQuery(
+    (scope === "buyer" && canCatalog) || (canOps && scope === "ops")
+  );
+  const channelList = channelsQ.data?.results ?? [];
+  const selectedKanalId = useMemo(() => {
+    if (kanalParam && channelList.some((c) => String(c.id) === kanalParam)) {
+      return Number(kanalParam);
+    }
+    return channelList[0]?.id ?? null;
+  }, [kanalParam, channelList]);
   const prodChannelsQ = useOpsProductChannelsQuery(
     opsDetail?.id,
-    Boolean(opsDetail?.id) && detailOpen && detailTab === "channels" && canOps
+    Boolean(opsDetail?.id) && detailOpen && canOps
   );
 
   const buyerItems = catalogQuery.data?.results || [];
   const monturItems = monturlerQuery.data?.results || [];
-  const tasItems = taslarQuery.data?.results || [];
-  const tasReferanslar = taslarQuery.data?.referanslar;
   const opsItems = opsQuery.data?.results || [];
 
   const totalCount =
@@ -361,36 +328,28 @@ export function CatalogView() {
       ? opsQuery.data?.count ?? 0
       : scope === "monturler"
         ? monturlerQuery.data?.count ?? 0
-        : scope === "taslar"
-          ? taslarQuery.data?.count ?? 0
-          : catalogQuery.data?.count ?? 0;
+        : catalogQuery.data?.count ?? 0;
 
   const pageSize =
     (scope === "ops"
       ? opsQuery.data?.page_size
       : scope === "monturler"
         ? monturlerQuery.data?.page_size
-        : scope === "taslar"
-          ? taslarQuery.data?.page_size
-          : catalogQuery.data?.page_size) || PAGE_SIZE;
+        : catalogQuery.data?.page_size) || PAGE_SIZE;
 
   const loading =
     scope === "ops"
       ? opsQuery.isLoading || opsQuery.isFetching
       : scope === "monturler"
         ? monturlerQuery.isLoading || monturlerQuery.isFetching
-        : scope === "taslar"
-          ? taslarQuery.isLoading || taslarQuery.isFetching
-          : catalogQuery.isLoading || catalogQuery.isFetching;
+        : catalogQuery.isLoading || catalogQuery.isFetching;
 
   const listErrorObj =
     scope === "ops"
       ? opsQuery.error
       : scope === "monturler"
         ? monturlerQuery.error
-        : scope === "taslar"
-          ? taslarQuery.error
-          : catalogQuery.error;
+        : catalogQuery.error;
 
   const fetchList = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: urunlerKeys.all });
@@ -398,13 +357,16 @@ export function CatalogView() {
 
   const openBuyerDetail = async (id: number) => {
     setDetailOpen(true);
-    setDetailTab("general");
+    setDetailTab("variants");
     setLoadingDetail(true);
     setBuyerDetail(null);
     setOpsDetail(null);
+    setQuoteState({});
+    setSelectedBuyerVariantId(null);
     try {
       const d = await urunlerService.getProductDetail(id);
       setBuyerDetail(d);
+      setSelectedBuyerVariantId(d.varyantlar?.[0]?.id ?? null);
     } catch (err) {
       actionToast.error("Ürün detayı alınamadı", err);
       setDetailOpen(false);
@@ -413,18 +375,90 @@ export function CatalogView() {
     }
   };
 
-  const openOpsDetail = async (id: number) => {
+  useEffect(() => {
+    if (scope !== "buyer" || !canQuote || !selectedKanalId || !buyerItems.length) {
+      return;
+    }
+    const pairs = buyerItems
+      .map((it) => ({
+        urunId: it.id,
+        vid: it.varsayilan_varyant_id,
+      }))
+      .filter((p): p is { urunId: number; vid: number } => Boolean(p.vid));
+    if (!pairs.length) return;
+    let cancelled = false;
+    setCardPrices((prev) => {
+      const next = { ...prev };
+      for (const p of pairs) next[p.urunId] = { loading: true };
+      return next;
+    });
+    void fiyatlamaService
+      .batchQuotes({
+        satis_kanali_id: selectedKanalId,
+        varyant_ids: pairs.map((p) => p.vid),
+      })
+      .then((res) => {
+        if (cancelled) return;
+        const byVid = new Map(res.results.map((r) => [r.varyant_id, r]));
+        setCardPrices((prev) => {
+          const next = { ...prev };
+          for (const p of pairs) {
+            const r = byVid.get(p.vid);
+            if (!r) {
+              next[p.urunId] = { error: "Fiyat alınamadı" };
+              continue;
+            }
+            if (!r.ok || !r.quote) {
+              next[p.urunId] = {
+                error: r.detail || r.reason_code || "Fiyat üretilemedi",
+              };
+              continue;
+            }
+            next[p.urunId] = {
+              price: String(r.quote.toplam_vergisiz),
+              currency: r.quote.para_birimi,
+              quoteId: r.quote.id,
+              gram: r.quote.gram ?? null,
+            };
+          }
+          return next;
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : "Fiyatlar yüklenemedi";
+        setCardPrices((prev) => {
+          const next = { ...prev };
+          for (const p of pairs) next[p.urunId] = { error: msg };
+          return next;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, canQuote, selectedKanalId, catalogQuery.dataUpdatedAt]);
+
+  const openOpsDetail = async (
+    id: number,
+    opts?: { resetTab?: boolean; soft?: boolean }
+  ) => {
     setDetailOpen(true);
-    setDetailTab("general");
-    setLoadingDetail(true);
-    setBuyerDetail(null);
-    setOpsDetail(null);
+    const soft = Boolean(opts?.soft) || opsDetail?.id === id;
+    if (opts?.resetTab !== false && !soft) {
+      setDetailTab("general");
+    }
+    if (!soft) {
+      setLoadingDetail(true);
+      setBuyerDetail(null);
+      setOpsDetail(null);
+    }
     try {
       const d = await urunlerService.getOpsProduct(id);
       setOpsDetail(d);
     } catch (err) {
       actionToast.error("Ürün detayı alınamadı", err);
-      setDetailOpen(false);
+      if (!soft) setDetailOpen(false);
     } finally {
       setLoadingDetail(false);
     }
@@ -442,12 +476,10 @@ export function CatalogView() {
   const handleGetQuote = async (variantId: number) => {
     setQuoteState((prev) => ({ ...prev, [variantId]: { loading: true } }));
     try {
-      const list = await tanimlarService.getSalesChannels();
-      const channelId = list[0]?.id;
-      if (!channelId) throw new Error("Aktif satış kanalı bulunamadı.");
+      if (!selectedKanalId) throw new Error("Satış kanalı seçin.");
       const quote = await fiyatlamaService.createQuote({
         varyant_id: variantId,
-        satis_kanali_id: channelId,
+        satis_kanali_id: selectedKanalId,
       });
       const price = quote.toplam_vergisiz || quote.gram_basi_vergisiz || quote.birim_fiyat;
       if (!price) throw new Error("Fiyat bilgisi alınamadı.");
@@ -456,7 +488,7 @@ export function CatalogView() {
         ...prev,
         [variantId]: {
           loading: false,
-          price,
+          price: String(price),
           currency: quote.para_birimi,
           quoteId: quote.id,
         },
@@ -472,6 +504,16 @@ export function CatalogView() {
     }
   };
 
+  useEffect(() => {
+    if (!buyerDetail || !selectedBuyerVariantId || !canQuote || !selectedKanalId) {
+      return;
+    }
+    const st = quoteState[selectedBuyerVariantId];
+    if (st?.price || st?.loading || st?.error) return;
+    void handleGetQuote(selectedBuyerVariantId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyerDetail?.id, selectedBuyerVariantId, selectedKanalId, canQuote]);
+
   const handleAddToCart = async (variantId: number, quoteId: number) => {
     try {
       await siparisService.addCartLine(quoteId, "1");
@@ -485,107 +527,82 @@ export function CatalogView() {
     }
   };
 
-  const openCreateProduct = () => {
-    setEditingProduct(null);
-    setProductForm(emptyProductForm());
-    setProductDirty(false);
-    setProductFormError(null);
-    setProductModalOpen(true);
-  };
-
-  const openEditProduct = (p: OpsProduct) => {
-    setEditingProduct(p);
-    setProductForm(productToForm(p));
-    setProductDirty(false);
-    setProductFormError(null);
-    setProductModalOpen(true);
-  };
-
-  const onSubmitProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProductFormError(null);
-    if (!productForm.ad.trim()) {
-      setProductFormError("Ürün adı zorunludur.");
-      return;
-    }
-    if (!productForm.kategori_id) {
-      setProductFormError("Kategori seçimi zorunludur.");
-      return;
-    }
-    if (!productForm.ayar_id) {
-      setProductFormError("Ayar seçimi zorunludur.");
-      return;
-    }
-    if (
-      productForm.temin_tipi === "siparis_ozel" &&
-      (!productForm.termin_gun.trim() || Number(productForm.termin_gun) <= 0)
-    ) {
-      setProductFormError("Siparişe özel üründe termin süresi (gün) zorunludur.");
-      return;
-    }
-
-    const vitrinPayload = {
-      koleksiyon_id: productForm.koleksiyon_id ? Number(productForm.koleksiyon_id) : null,
-      hedef_kitle: productForm.hedef_kitle || "",
-      yas_grubu_id: productForm.yas_grubu_id ? Number(productForm.yas_grubu_id) : null,
-      yuzey: productForm.yuzey || "",
-      zincir_tipi_id: productForm.zincir_tipi_id ? Number(productForm.zincir_tipi_id) : null,
-      kopca_tipi_id: productForm.kopca_tipi_id ? Number(productForm.kopca_tipi_id) : null,
-      teknik_ids: productForm.teknik_ids,
-      stil_ids: productForm.stil_ids,
-      ozel_gun_ids: productForm.ozel_gun_ids,
-    };
-
+  /** Yeni ürün = aynı workspace modal (ayrı create formu yok). */
+  const openCreateProduct = async () => {
     try {
-      if (editingProduct) {
-        const updated = await updateOpsMutation.mutateAsync({
-          id: editingProduct.id,
-          data: {
-            ad: productForm.ad.trim(),
-            kategori_id: Number(productForm.kategori_id),
-            ayar_id: Number(productForm.ayar_id),
-            aciklama: productForm.aciklama.trim(),
-            fiyat_tipi: productForm.fiyat_tipi || "gram",
-            temin_tipi: productForm.temin_tipi || "hazir",
-            termin_gun: productForm.termin_gun.trim()
-              ? Number(productForm.termin_gun)
-              : null,
-            olcu_tipi: productForm.olcu_tipi,
-            renk_ekseni: productForm.renk_ekseni,
-            ...vitrinPayload,
-          },
-        });
-        actionToast.success("Ürün güncellendi");
-        setProductModalOpen(false);
-        if (opsDetail?.id === updated.id) setOpsDetail(updated);
-      } else {
-        const created = await createOpsMutation.mutateAsync({
-          ad: productForm.ad.trim(),
-          kategori_id: Number(productForm.kategori_id),
-          ayar_id: Number(productForm.ayar_id),
-          aciklama: productForm.aciklama.trim(),
-          fiyat_tipi: productForm.fiyat_tipi || "gram",
-          temin_tipi: productForm.temin_tipi || "hazir",
-          termin_gun: productForm.termin_gun.trim()
-            ? Number(productForm.termin_gun)
-            : null,
-          olcu_tipi: productForm.olcu_tipi,
-          renk_ekseni: productForm.renk_ekseni,
-          ...vitrinPayload,
-          ...(productForm.satis_kanali_id
-            ? { satis_kanali_id: Number(productForm.satis_kanali_id) }
-            : {}),
-        });
-        actionToast.success("Yeni taslak ürün oluşturuldu");
-        setProductModalOpen(false);
-        await openOpsDetail(created.id);
+      // Refs/kategori yoksa önce yükle
+      let refs = refsQ.data;
+      if (!refs) {
+        refs = await urunlerService.getCatalogRefs();
       }
+      const cats =
+        (opsCatsQ.data?.results ?? []).filter((c) => c.aktif !== false) || [];
+      const ayarlar = refs?.ayarlar ?? [];
+      const metaller = refs?.metaller ?? [];
+      if (!cats.length) {
+        actionToast.error(
+          "Kategori gerekli",
+          "Önce Tanımlar & Kanallar → Kategoriler’den en az bir kategori tanımlayın."
+        );
+        navigate("/tanimlar?grup=kategoriler");
+        return;
+      }
+      if (!ayarlar.length || !metaller.length) {
+        actionToast.error(
+          "Metal / ayar gerekli",
+          "Önce Tanımlar & Kanallar → Metal / Materyal ve Ayar / Milyem tanımlayın."
+        );
+        return;
+      }
+      const defaultMetalId = metaller[0]?.id;
+      const defaultAyar =
+        ayarlar.find((a) => a.metal_id === defaultMetalId) ?? ayarlar[0];
+      const created = await createOpsMutation.mutateAsync({
+        ad: "Yeni ürün",
+        kategori_id: cats[0].id,
+        ayar_id: defaultAyar.id,
+        fiyat_tipi: "gram",
+        temin_tipi: "hazir",
+        aciklama: "",
+        ...(selectedKanalId ? { satis_kanali_id: selectedKanalId } : {}),
+      });
+      actionToast.success("Taslak oluşturuldu — düzenlemeye devam edin");
+      setWorkspaceDirty(false);
+      setDetailTab("general");
+      await openOpsDetail(created.id);
+      await queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Ürün kaydedilemedi.";
-      setProductFormError(msg);
-      actionToast.error("Ürün kaydedilemedi", err);
+      actionToast.error("Yeni ürün açılamadı", err);
     }
   };
+
+  /** Ops: aynı detay modalında düzenle; yayındaysa önce pasife al. */
+  const startEditProduct = async (item: OpsProduct) => {
+    const acts = item.allowed_actions || [];
+    try {
+      if (!acts.includes("edit") && acts.includes("unpublish")) {
+        await opsActionMutation.mutateAsync({
+          action: "unpublish",
+          id: item.id,
+        });
+        actionToast.success("Ürün düzenleme için yayından alındı");
+      }
+      await openOpsDetail(item.id);
+      setDetailTab("general");
+      setWorkspaceDirty(false);
+    } catch (err) {
+      actionToast.error("Düzenleme açılamadı", err);
+    }
+  };
+
+  const canOpsEditProduct = (item: OpsProduct) => {
+    const acts = item.allowed_actions || [];
+    return acts.includes("edit") || acts.includes("unpublish");
+  };
+
+  const canOpsDeleteProduct = (item: OpsProduct) =>
+    (item.allowed_actions || []).includes("delete");
+
 
   const openCreateVariant = () => {
     setEditingVariant(null);
@@ -688,7 +705,7 @@ export function CatalogView() {
   };
 
   const runOpsAction = async (
-    action: "submit" | "approve" | "publish" | "unpublish",
+    action: "publish" | "unpublish",
     id: number
   ) => {
     try {
@@ -701,24 +718,6 @@ export function CatalogView() {
       if (opsDetail?.id === id) await openOpsDetail(id);
     } catch (err) {
       actionToast.error("İşlem başarısız", err);
-    }
-  };
-
-  const handleReject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!opsDetail || !rejectReason.trim()) return;
-    try {
-      await opsActionMutation.mutateAsync({
-        action: "reject",
-        id: opsDetail.id,
-        neden: rejectReason.trim(),
-      });
-      setRejectOpen(false);
-      setRejectReason("");
-      actionToast.success("Ürün reddedildi");
-      await openOpsDetail(opsDetail.id);
-    } catch (err) {
-      actionToast.error("Reddetme başarısız", err);
     }
   };
 
@@ -770,40 +769,6 @@ export function CatalogView() {
     [scope, opsCatsQ.data, buyerCatsQ.data]
   );
 
-  const kategoriOptions = useMemo(() => {
-    const base = opsCatsQ.data?.results ?? [];
-    const list =
-      recentCreatedCategory &&
-      recentCreatedCategory.aktif &&
-      !base.some((c) => c.id === recentCreatedCategory.id)
-        ? [recentCreatedCategory, ...base]
-        : base;
-    return list.map((c) => ({
-      value: String(c.id),
-      label: c.tam_ad || c.ad,
-      subtitle: c.kod,
-    }));
-  }, [opsCatsQ.data, recentCreatedCategory]);
-
-  const ayarOptions = useMemo(
-    () =>
-      (refsQ.data?.ayarlar ?? []).map((a) => ({
-        value: String(a.id),
-        label: `${a.ayar_kodu} (${a.metal_ad})`,
-        subtitle: a.milyem,
-      })),
-    [refsQ.data]
-  );
-
-  const channelOptions = useMemo(
-    () =>
-      (channelsQ.data?.results ?? []).map((c) => ({
-        value: String(c.id),
-        label: c.ad,
-        subtitle: c.kod,
-      })),
-    [channelsQ.data]
-  );
 
   const renkOptions = useMemo(
     () =>
@@ -825,63 +790,12 @@ export function CatalogView() {
     [refsQ.data]
   );
 
-  const koleksiyonOptions = useMemo(
-    () =>
-      (refsQ.data?.koleksiyonlar ?? []).map((k) => ({
-        value: String(k.id),
-        label: k.ad || k.kod || String(k.id),
-        subtitle: k.kod,
-      })),
-    [refsQ.data]
-  );
-
-  const yasGrubuOptions = useMemo(
-    () =>
-      (refsQ.data?.yas_gruplari ?? []).map((y) => ({
-        value: String(y.id),
-        label: y.ad || y.kod || String(y.id),
-        subtitle: y.kod,
-      })),
-    [refsQ.data]
-  );
-
-  const zincirTipiOptions = useMemo(
-    () =>
-      (refsQ.data?.zincir_tipleri ?? []).map((z) => ({
-        value: String(z.id),
-        label: z.ad || z.kod || String(z.id),
-        subtitle: z.kod,
-      })),
-    [refsQ.data]
-  );
-
-  const kopcaTipiOptions = useMemo(
-    () =>
-      (refsQ.data?.kopca_tipleri ?? []).map((k) => ({
-        value: String(k.id),
-        label: k.ad || k.kod || String(k.id),
-        subtitle: k.kod,
-      })),
-    [refsQ.data]
-  );
-
-  const toggleFormId = (
-    field: "teknik_ids" | "stil_ids" | "ozel_gun_ids",
-    id: number
-  ) => {
-    setProductDirty(true);
-    setProductForm((f) => {
-      const current = f[field];
-      const next = current.includes(id)
-        ? current.filter((x) => x !== id)
-        : [...current, id];
-      return { ...f, [field]: next };
-    });
-  };
-
   const activeDetail = opsDetail || buyerDetail;
   const actions = opsDetail?.allowed_actions || [];
-  const productMutating = createOpsMutation.isPending || updateOpsMutation.isPending;
+
+  if (redirectToTanimlar) {
+    return <Navigate to={redirectToTanimlar} replace />;
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -893,9 +807,6 @@ export function CatalogView() {
               canOps ? ["ops", "Ürün Yönetimi"] : null,
               ["buyer", "Satış Kataloğu"],
               ["monturler", "Montürler"],
-              ["taslar", "Taşlar & Sertifika"],
-              canOps ? ["kategoriler", "Kategoriler"] : null,
-              canOps ? ["referanslar", "Referans Tanımları"] : null,
             ].filter(Boolean) as Array<[Scope, string]>
           ).map(([key, label]) => (
             <button
@@ -911,7 +822,6 @@ export function CatalogView() {
                   scope: key,
                   page: 1,
                   ordering: "vitrin",
-                  onay: undefined,
                   yayin: undefined,
                 });
               }}
@@ -919,31 +829,43 @@ export function CatalogView() {
               {label}
             </button>
           ))}
+          {canOps ? (
+            <Link
+              to="/tanimlar?grup=kategoriler"
+              className="ml-1 rounded-[4px] px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Tanımlar →
+            </Link>
+          ) : null}
         </div>
       </div>
 
-      {scope === "referanslar" && canOps ? (
-        <CatalogRefsPanel />
-      ) : scope === "kategoriler" && canOps ? (
-        <CategoriesPanel />
-      ) : (
-        <ListPage
+      <ListPage
           title={
             scope === "ops"
               ? "Ürün Yönetimi"
               : scope === "monturler"
                 ? "Montür Kataloğu"
-                : scope === "taslar"
-                  ? "Taş & Pırlanta Referansları"
-                  : "Satış Kataloğu"
+                : "Satış Kataloğu"
           }
           description={
             scope === "ops"
-              ? "Taslak ürünleri oluşturun, varyantları tanımlayın ve yayın onay sürecini yönetin."
-              : "Onaylı ve yayındaki ürünleri inceleyin, anlık fiyat alıp sepete ekleyin."
+              ? "Yeni Ürün ile taslak açın; tüm sekmeler (genel, varyant, medya, kanal…) aynı pencerede."
+              : scope === "monturler"
+                ? "Yayındaki montür ürünleri (alıcı vitrini). Ürün oluşturmak için Ürün Yönetimi sekmesini kullanın."
+                : "Onaylı ve yayındaki ürünleri inceleyin, anlık fiyat alıp sepete ekleyin."
           }
           createLabel={scope === "ops" && canOps ? "Yeni Ürün" : undefined}
-          onCreate={scope === "ops" && canOps ? openCreateProduct : undefined}
+          onCreate={
+            scope === "ops" && canOps
+              ? () => void openCreateProduct()
+              : undefined
+          }
+          contentClassName={
+            scope === "buyer" && viewMode === "cards"
+              ? "bg-transparent overflow-visible"
+              : undefined
+          }
           loading={loading}
           error={
             listErrorObj
@@ -955,11 +877,10 @@ export function CatalogView() {
           onRetry={() => void fetchList()}
           searchValue={qInput}
           onSearchChange={setQInput}
-          searchPlaceholder="Ürün adı veya kodu ara…"
+          searchPlaceholder="Ad, platform kodu veya SKU ara…"
           filters={
             <>
-              {scope !== "taslar" ? (
-                <select
+              <select
                   value={kategoriFilter}
                   onChange={(e) => {
                     setMany({ kategori: e.target.value || undefined, page: 1 });
@@ -975,9 +896,7 @@ export function CatalogView() {
                     </option>
                   ))}
                 </select>
-              ) : null}
-              {scope !== "taslar" ? (
-                <select
+              <select
                   value={ordering}
                   onChange={(e) => setMany({ ordering: e.target.value, page: 1 })}
                   className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
@@ -989,22 +908,8 @@ export function CatalogView() {
                   <option value="-ad">Ürün Adı (Z → A)</option>
                   <option value="platform_kodu">Ürün Kodu (A → Z)</option>
                 </select>
-              ) : null}
               {scope === "ops" ? (
                 <>
-                  <select
-                    value={onayDurumu}
-                    onChange={(e) =>
-                      setMany({ onay: e.target.value || undefined, page: 1 })
-                    }
-                    className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-                  >
-                    <option value="">Tüm Onaylar</option>
-                    <option value="taslak">Taslak</option>
-                    <option value="onay_bekliyor">Onay Bekliyor</option>
-                    <option value="onayli">Onaylı</option>
-                    <option value="reddedildi">Reddedildi</option>
-                  </select>
                   <select
                     value={yayinDurumu}
                     onChange={(e) =>
@@ -1016,7 +921,59 @@ export function CatalogView() {
                     <option value="aktif">Yayında</option>
                     <option value="pasif">Pasif</option>
                   </select>
+                  <label className="flex h-9 items-center gap-1.5 rounded-[6px] border border-border px-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={eksikGorsel === "1"}
+                      onChange={(e) =>
+                        setMany({
+                          eksik_gorsel: e.target.checked ? "1" : undefined,
+                          page: 1,
+                        })
+                      }
+                    />
+                    Eksik görsel
+                  </label>
+                  <label className="flex h-9 items-center gap-1.5 rounded-[6px] border border-border px-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={eksikVaryant === "1"}
+                      onChange={(e) =>
+                        setMany({
+                          eksik_varyant: e.target.checked ? "1" : undefined,
+                          page: 1,
+                        })
+                      }
+                    />
+                    Eksik varyant
+                  </label>
+                  <a
+                    href={urunlerService.exportOpsProductsCsv(opsFilters)}
+                    className="inline-flex h-9 items-center rounded-[6px] border border-border px-2 text-xs hover:bg-muted/50"
+                  >
+                    CSV dışa aktar
+                  </a>
                 </>
+              ) : null}
+              {scope === "buyer" ? (
+                <select
+                  value={selectedKanalId != null ? String(selectedKanalId) : ""}
+                  onChange={(e) =>
+                    setMany({ kanal: e.target.value || undefined, page: 1 })
+                  }
+                  className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
+                  aria-label="Satış kanalı"
+                >
+                  {channelList.length === 0 ? (
+                    <option value="">Kanal yok</option>
+                  ) : (
+                    channelList.map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.ad || c.kod || `Kanal #${c.id}`}
+                      </option>
+                    ))
+                  )}
+                </select>
               ) : null}
               {scope === "buyer" || scope === "ops" ? (
                 <div className="flex rounded-[6px] border border-border p-0.5">
@@ -1045,14 +1002,12 @@ export function CatalogView() {
               ? buyerItems
               : scope === "monturler"
                 ? monturItems
-                : scope === "taslar"
-                  ? tasItems
-                  : opsItems
+                : opsItems
             ).length === 0
           }
           emptyTitle="Kayıt bulunamadı"
           emptyDescription={
-            q || onayDurumu || yayinDurumu || kategoriFilter
+            q || yayinDurumu || kategoriFilter
               ? "Arama veya filtre ölçütlerine uygun kayıt yok."
               : "Henüz ürün bulunmuyor."
           }
@@ -1092,84 +1047,30 @@ export function CatalogView() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs gap-1"
-                        onClick={() => void openBuyerDetail(m.id)}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        Görüntüle
-                      </Button>
+                      {canOps ? (
+                        <RowActions
+                          itemLabel={m.ad}
+                          onView={() => void openOpsDetail(m.id)}
+                          onEdit={() => {
+                            void urunlerService
+                              .getOpsProduct(m.id)
+                              .then((p) => startEditProduct(p))
+                              .catch((err) =>
+                                actionToast.error("Düzenleme açılamadı", err)
+                              );
+                          }}
+                        />
+                      ) : (
+                        <RowActions
+                          itemLabel={m.ad}
+                          onView={() => void openBuyerDetail(m.id)}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          ) : scope === "taslar" ? (
-            <div className="space-y-4 p-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Kod</TableHead>
-                    <TableHead>Taş Adı</TableHead>
-                    <TableHead>Sınıf</TableHead>
-                    <TableHead className="text-right">Sıra</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tasItems.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-mono text-xs font-semibold">
-                        {t.kod}
-                      </TableCell>
-                      <TableCell className="font-medium">{t.ad}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={t.degerli ? "success" : "outline"}
-                          className="text-[10px]"
-                        >
-                          {t.degerli ? "Değerli Taş" : "Standart"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums text-xs">
-                        {t.sira}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {tasReferanslar ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {(
-                    [
-                      ["Kesimler", tasReferanslar.kesimler],
-                      ["Berraklıklar", tasReferanslar.berrakliklar],
-                      ["Renk Dereceleri", tasReferanslar.renk_dereceleri],
-                      ["Kesim Kaliteleri", tasReferanslar.kesim_kaliteleri],
-                      ["Sertifika Kurumları", tasReferanslar.sertifika_kurumlari],
-                      ["Menşeiler", tasReferanslar.menseiler],
-                    ] as const
-                  ).map(([title, list]) =>
-                    list && list.length > 0 ? (
-                      <div
-                        key={title}
-                        className="rounded-[8px] border border-border bg-background p-3 space-y-2"
-                      >
-                        <div className="text-xs font-semibold">{title}</div>
-                        <div className="flex flex-wrap gap-1">
-                          {list.map((r) => (
-                            <Badge key={r.id} variant="outline" className="text-[10px]">
-                              {r.kod} · {r.ad}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null
-                  )}
-                </div>
-              ) : null}
-            </div>
           ) : viewMode === "table" ? (
             <Table>
               <TableHeader>
@@ -1178,7 +1079,7 @@ export function CatalogView() {
                   <TableHead>Ürün Kodu</TableHead>
                   <TableHead>Ürün Adı</TableHead>
                   <TableHead>Kategori</TableHead>
-                  <TableHead>Ayar</TableHead>
+                  <TableHead>Metal / Ayar</TableHead>
                   <TableHead className="text-right">Varyant</TableHead>
                   <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
@@ -1215,7 +1116,7 @@ export function CatalogView() {
                           {item.kategori || "—"}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
-                          {item.ayar || "—"}
+                          {[item.metal, item.ayar].filter(Boolean).join(" · ") || "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
                           {item.varyant_count}
@@ -1249,38 +1150,34 @@ export function CatalogView() {
                           {item.kategori || "—"}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
-                          {item.ayar || "—"}
+                          {[item.metal, item.ayar].filter(Boolean).join(" · ") || "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
                           {item.varyant_count}
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            <Badge variant="secondary" className="text-[10px]">
-                              {item.onay_durumu}
-                            </Badge>
-                            <Badge
-                              variant={
-                                item.yayin_durumu === "aktif" ? "success" : "outline"
-                              }
-                              className="text-[10px]"
-                            >
-                              {item.yayin_durumu === "aktif" ? "Yayında" : "Pasif"}
-                            </Badge>
-                          </div>
+                          <Badge
+                            variant={
+                              item.yayin_durumu === "aktif" ? "success" : "outline"
+                            }
+                            className="text-[10px]"
+                          >
+                            {item.yayin_durumu === "aktif" ? "Yayında" : "Taslak"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <RowActions
                             itemLabel={item.ad}
                             onView={() => void openOpsDetail(item.id)}
                             onEdit={
-                              item.yayin_durumu !== "aktif"
-                                ? () => openEditProduct(item)
+                              canOpsEditProduct(item)
+                                ? () => void startEditProduct(item)
                                 : undefined
                             }
                             isActive={item.yayin_durumu === "aktif"}
                             onToggleActive={
-                              item.onay_durumu === "onayli"
+                              (item.allowed_actions || []).includes("publish") ||
+                              (item.allowed_actions || []).includes("unpublish")
                                 ? () =>
                                     void runOpsAction(
                                       item.yayin_durumu === "aktif"
@@ -1291,8 +1188,7 @@ export function CatalogView() {
                                 : undefined
                             }
                             onDelete={
-                              item.onay_durumu !== "onayli" &&
-                              item.yayin_durumu !== "aktif"
+                              canOpsDeleteProduct(item)
                                 ? () => setDeleteProductTarget(item)
                                 : undefined
                             }
@@ -1302,926 +1198,171 @@ export function CatalogView() {
                     ))}
               </TableBody>
             </Table>
+          ) : scope === "buyer" ? (
+            <div className="py-1">
+              <BuyerCatalogGrid
+                items={buyerItems}
+                prices={cardPrices}
+                canQuote={canQuote}
+                channelSelected={Boolean(selectedKanalId)}
+                onOpen={(id) => void openBuyerDetail(id)}
+                onAddToCart={(item, quoteId) => {
+                  if (!item.varsayilan_varyant_id) return;
+                  void handleAddToCart(item.varsayilan_varyant_id, quoteId);
+                }}
+              />
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {(scope === "buyer" ? buyerItems : opsItems).map((item) => {
-                const isBuyer = scope === "buyer";
-                const buyer = item as BuyerCatalogItem;
-                const ops = item as OpsProduct;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      void (isBuyer ? openBuyerDetail(item.id) : openOpsDetail(item.id))
-                    }
-                    className="rounded-[8px] border border-border bg-card p-4 text-left hover:bg-muted/40 transition-colors space-y-3"
-                  >
-                    <div className="flex h-20 items-center justify-center rounded-[6px] border border-dashed border-border bg-muted/30 overflow-hidden">
-                      {(item as BuyerCatalogItem).kapak_url ? (
-                        <img
-                          src={(item as BuyerCatalogItem).kapak_url}
-                          alt={item.ad}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Gem className="h-7 w-7 text-muted-foreground opacity-40" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="font-mono text-[10px] text-muted-foreground">
-                        {isBuyer ? buyer.platform_kodu : ops.platform_kodu || "—"}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 p-4">
+              {opsItems.map((ops) => (
+                <button
+                  key={ops.id}
+                  type="button"
+                  onClick={() => void openOpsDetail(ops.id)}
+                  className="rounded-[10px] border border-border bg-card text-left overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  <div className="relative aspect-square bg-[linear-gradient(160deg,#f7f5f2_0%,#efeae3_100%)] overflow-hidden">
+                    {ops.kapak_url ? (
+                      <img
+                        src={ops.kapak_url}
+                        alt={ops.ad}
+                        className="absolute inset-0 h-full w-full object-contain p-3"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Gem className="h-10 w-10 text-muted-foreground/40" />
                       </div>
-                      <div className="text-sm font-semibold line-clamp-2 flex items-center gap-1">
-                        {item.ad}
-                        {item.kategori_one_cikan ? (
-                          <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
-                        ) : null}
-                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {ops.platform_kodu || "—"}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline" className="text-[10px]">
-                        {item.kategori || "—"}
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {item.varyant_count} varyant
+                    <div className="text-sm font-semibold line-clamp-2 min-h-[2.5rem]">
+                      {ops.ad}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">
+                      {[ops.metal, ops.ayar].filter(Boolean).join(" · ") ||
+                        ops.kategori ||
+                        "—"}
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      <Badge
+                        variant={ops.yayin_durumu === "aktif" ? "success" : "outline"}
+                        className="text-[10px]"
+                      >
+                        {ops.yayin_durumu === "aktif" ? "Yayında" : "Taslak"}
                       </Badge>
                     </div>
-                  </button>
-                );
-              })}
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </ListPage>
-      )}
 
       {/* Ürün Detay Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{activeDetail?.ad || "Ürün Detayı"}</DialogTitle>
-            <DialogDescription className="font-mono text-xs">
-              {buyerDetail?.platform_kodu || opsDetail?.platform_kodu || "—"}
-            </DialogDescription>
-          </DialogHeader>
-
-          {loadingDetail ? (
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(next) => {
+          if (!next && workspaceDirty) {
+            if (!window.confirm("Kaydedilmemiş değişiklikler var. Kapatılsın mı?")) return;
+            setWorkspaceDirty(false);
+          }
+          setDetailOpen(next);
+          if (!next) {
+            setOpsDetail(null);
+            setBuyerDetail(null);
+          }
+        }}
+      >
+        <DialogContent
+          className={`${
+            opsDetail || (buyerDetail && !opsDetail) ? "max-w-5xl" : "max-w-3xl"
+          } max-h-[92vh] overflow-x-hidden overflow-y-auto`}
+        >
+          {buyerDetail && !opsDetail ? (
+            <>
+              <DialogHeader className="sr-only">
+                <DialogTitle>{buyerDetail.ad}</DialogTitle>
+                <DialogDescription>{buyerDetail.platform_kodu}</DialogDescription>
+              </DialogHeader>
+              <BuyerProductDetailView
+                detail={buyerDetail}
+                loading={loadingDetail}
+                selectedVariantId={selectedBuyerVariantId}
+                onSelectVariant={(vid) => {
+                  setSelectedBuyerVariantId(vid);
+                  setQuoteState((prev) => {
+                    const next = { ...prev };
+                    delete next[vid];
+                    return next;
+                  });
+                  if (canQuote && selectedKanalId) void handleGetQuote(vid);
+                }}
+                quoteState={quoteState}
+                canQuote={canQuote}
+                channelSelected={Boolean(selectedKanalId)}
+                onRetryQuote={(vid) => void handleGetQuote(vid)}
+                onAddToCart={(vid, quoteId) => void handleAddToCart(vid, quoteId)}
+              />
+            </>
+          ) : loadingDetail ? (
             <div className="flex h-32 items-center justify-center">
               <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
-          ) : activeDetail ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-1 rounded-[6px] border border-border bg-muted/40 p-1 w-fit">
-                {(
-                  [
-                    ["general", "Genel Bilgiler"],
-                    ["tech", "Özellikler"],
-                    ["variants", "Varyantlar"],
-                    opsDetail ? ["prepare", "Hazırlık (P0)"] : null,
-                    opsDetail ? ["channels", "Satış Kanalları"] : null,
-                  ].filter(Boolean) as Array<[DetailTab, string]>
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setDetailTab(id)}
-                    className={`rounded-[4px] px-2.5 py-1.5 text-xs font-medium ${
-                      detailTab === id ? "bg-card shadow-xs" : "text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {detailTab === "general" && (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <Info label="Ürün Adı" value={activeDetail.ad} />
-                  <Info
-                    label="Ürün Kodu"
-                    value={
-                      buyerDetail?.platform_kodu || opsDetail?.platform_kodu || "—"
-                    }
-                    mono
-                  />
-                  <Info
-                    label="Kategori"
-                    value={buyerDetail?.kategori || opsDetail?.kategori || "—"}
-                  />
-                  <Info
-                    label="Ayar / Milyem"
-                    value={buyerDetail?.ayar || opsDetail?.ayar || "—"}
-                  />
-                  {opsDetail ? (
-                    <>
-                      <Info label="Onay Durumu" value={opsDetail.onay_durumu} />
-                      <Info label="Yayın Durumu" value={opsDetail.yayin_durumu} />
-                      {opsDetail.red_nedeni ? (
-                        <Info label="Red Nedeni" value={opsDetail.red_nedeni} />
-                      ) : null}
-                    </>
-                  ) : (
-                    <Info label="Yayın Durumu" value="Yayında" />
-                  )}
-                  <div className="col-span-2 rounded-[6px] border border-border px-3 py-2">
-                    <div className="text-[10px] text-muted-foreground">Açıklama</div>
-                    <p className="text-xs mt-1">
-                      {buyerDetail?.aciklama || opsDetail?.aciklama || "—"}
-                    </p>
-                  </div>
-                  {(buyerDetail?.kapak_url ||
-                    opsDetail?.kapak_url ||
-                    (buyerDetail?.gorseller?.length ?? 0) > 0) && (
-                    <div className="col-span-2 flex flex-wrap gap-2">
-                      {(buyerDetail?.gorseller?.length
-                        ? buyerDetail.gorseller
-                        : opsDetail?.gorseller?.length
-                          ? opsDetail.gorseller
-                          : buyerDetail?.kapak_url || opsDetail?.kapak_url
-                            ? [
-                                {
-                                  id: 0,
-                                  url: buyerDetail?.kapak_url || opsDetail?.kapak_url || "",
-                                  tip: "kapak",
-                                  sira: 0,
-                                  kapak: true,
-                                },
-                              ]
-                            : []
-                      ).map((g) =>
-                        g.url ? (
-                          <img
-                            key={g.id || g.url}
-                            src={g.url}
-                            alt={g.alt_metin || activeDetail.ad}
-                            className="h-24 w-24 rounded object-cover border border-border"
-                          />
-                        ) : null
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {detailTab === "prepare" && opsDetail ? (
-                <ProductP0Panel
-                  product={opsDetail}
-                  refs={refsQ.data}
-                  onChanged={() => void openOpsDetail(opsDetail.id)}
-                />
-              ) : null}
-
-              {detailTab === "tech" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <Info
-                      label="Fiyatlandırma Tipi"
-                      value={
-                        buyerDetail?.fiyat_tipi || opsDetail?.fiyat_tipi || "—"
-                      }
-                    />
-                    <Info
-                      label="Temin Tipi"
-                      value={
-                        buyerDetail?.temin_tipi || opsDetail?.temin_tipi || "—"
-                      }
-                    />
-                    <Info
-                      label="Ölçü Tipi"
-                      value={buyerDetail?.olcu_tipi || opsDetail?.olcu_tipi || "—"}
-                    />
-                    <Info
-                      label="Termin Süresi"
-                      value={
-                        (buyerDetail?.termin_gun ?? opsDetail?.termin_gun) != null
-                          ? `${buyerDetail?.termin_gun ?? opsDetail?.termin_gun} gün`
-                          : "Hazır stok"
-                      }
-                    />
-                    {opsDetail ? (
-                      <>
-                        <Info label="Koleksiyon" value={opsDetail.koleksiyon || "—"} />
-                        <Info label="Hedef Kitle" value={opsDetail.hedef_kitle || "—"} />
-                        <Info label="Yaş Grubu" value={opsDetail.yas_grubu || "—"} />
-                        <Info label="Yüzey" value={opsDetail.yuzey || "—"} />
-                        <Info label="Zincir Tipi" value={opsDetail.zincir_tipi || "—"} />
-                        <Info label="Kopça Tipi" value={opsDetail.kopca_tipi || "—"} />
-                      </>
-                    ) : null}
-                  </div>
-                  {opsDetail &&
-                  ((opsDetail.teknikler?.length ?? 0) > 0 ||
-                    (opsDetail.stiller?.length ?? 0) > 0 ||
-                    (opsDetail.ozel_gunler?.length ?? 0) > 0) ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="rounded-[6px] border border-border px-3 py-2">
-                        <div className="text-[10px] text-muted-foreground mb-1">Teknikler</div>
-                        <div className="flex flex-wrap gap-1">
-                          {(opsDetail.teknikler ?? []).length > 0
-                            ? opsDetail.teknikler!.map((t) => (
-                                <Badge key={t} variant="outline" className="text-[10px]">
-                                  {t}
-                                </Badge>
-                              ))
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="rounded-[6px] border border-border px-3 py-2">
-                        <div className="text-[10px] text-muted-foreground mb-1">Stiller</div>
-                        <div className="flex flex-wrap gap-1">
-                          {(opsDetail.stiller ?? []).length > 0
-                            ? opsDetail.stiller!.map((s) => (
-                                <Badge key={s} variant="outline" className="text-[10px]">
-                                  {s}
-                                </Badge>
-                              ))
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="rounded-[6px] border border-border px-3 py-2">
-                        <div className="text-[10px] text-muted-foreground mb-1">Özel Günler</div>
-                        <div className="flex flex-wrap gap-1">
-                          {(opsDetail.ozel_gunler ?? []).length > 0
-                            ? opsDetail.ozel_gunler!.map((o) => (
-                                <Badge key={o} variant="outline" className="text-[10px]">
-                                  {o}
-                                </Badge>
-                              ))
-                            : "—"}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              {detailTab === "variants" && (
-                <div className="space-y-3">
-                  {opsDetail &&
-                  (opsDetail.onay_durumu === "taslak" ||
-                    opsDetail.onay_durumu === "reddedildi") ? (
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs gap-1"
-                        onClick={openCreateVariant}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Yeni Varyant Ekle
-                      </Button>
-                    </div>
-                  ) : null}
-
-                  {buyerDetail ? (
-                    buyerDetail.varyantlar.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Varyant Kodu</TableHead>
-                            <TableHead>Ölçü / Beden</TableHead>
-                            <TableHead>Renk</TableHead>
-                            <TableHead className="text-right">Gram</TableHead>
-                            <TableHead className="text-right">Fiyat / Sepet</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {buyerDetail.varyantlar.map((v) => {
-                            const st = quoteState[v.id];
-                            return (
-                              <TableRow key={v.id}>
-                                <TableCell className="font-mono text-xs">{v.sku}</TableCell>
-                                <TableCell className="text-xs">{v.beden || "—"}</TableCell>
-                                <TableCell className="text-xs">{v.renk || "—"}</TableCell>
-                                <TableCell className="text-right font-mono tabular-nums text-xs">
-                                  {formatGram(v.gram)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {!canQuote ? (
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  ) : !st?.price ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs gap-1"
-                                      disabled={st?.loading}
-                                      onClick={() => void handleGetQuote(v.id)}
-                                    >
-                                      <Tag className="h-3 w-3" />
-                                      {st?.loading ? "Hesaplanıyor…" : "Fiyat Al"}
-                                    </Button>
-                                  ) : st.added ? (
-                                    <Badge variant="success" className="text-[10px] gap-1">
-                                      <Check className="h-3 w-3" />
-                                      Sepette
-                                    </Badge>
-                                  ) : (
-                                    <div className="flex items-center justify-end gap-2">
-                                      <span className="font-mono text-xs tabular-nums font-semibold">
-                                        {formatMoney(st.price, st.currency || "TRY")}
-                                      </span>
-                                      <Button
-                                        size="sm"
-                                        className="h-7 text-xs gap-1"
-                                        onClick={() =>
-                                          void handleAddToCart(v.id, st.quoteId!)
-                                        }
-                                      >
-                                        <ShoppingCart className="h-3 w-3" />
-                                        Sepete Ekle
-                                      </Button>
-                                    </div>
-                                  )}
-                                  {st?.error ? (
-                                    <div className="text-[10px] text-destructive mt-1">
-                                      {st.error}
-                                    </div>
-                                  ) : null}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Henüz varyant eklenmemiş.</p>
-                    )
-                  ) : opsDetail?.varyantlar?.length ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Varyant Kodu</TableHead>
-                          <TableHead>Renk</TableHead>
-                          <TableHead>Ölçü</TableHead>
-                          <TableHead className="text-right">Gram</TableHead>
-                          <TableHead className="text-right">Ek Bedel</TableHead>
-                          <TableHead>Durum</TableHead>
-                          <TableHead className="text-right">İşlemler</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {opsDetail.varyantlar.map((v) => (
-                          <TableRow key={v.id}>
-                            <TableCell className="font-mono text-xs">{v.sku}</TableCell>
-                            <TableCell className="text-xs">{v.renk || "—"}</TableCell>
-                            <TableCell className="text-xs">{v.beden || "—"}</TableCell>
-                            <TableCell className="text-right font-mono tabular-nums text-xs">
-                              {formatGram(v.gram)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono tabular-nums text-xs">
-                              {v.ek_bedel ?? "—"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={v.aktif ? "success" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {v.aktif ? "Aktif" : "Pasif"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <RowActions
-                                itemLabel={v.sku}
-                                onEdit={() => openEditVariant(v)}
-                                isActive={v.aktif}
-                                onToggleActive={() =>
-                                  void opsActionMutation
-                                    .mutateAsync({
-                                      action: "updateVariant",
-                                      id: opsDetail.id,
-                                      variantId: v.id,
-                                      variantUpdate: { aktif: !v.aktif },
-                                    })
-                                    .then(() => openOpsDetail(opsDetail.id))
-                                }
-                                onDelete={() => setDeleteVariantTarget(v)}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Henüz varyant eklenmemiş.</p>
-                  )}
-                </div>
-              )}
-
-              {detailTab === "channels" && opsDetail ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Bu ürünün hangi satış kanallarında görüneceğini belirleyin.
-                  </p>
-                  {prodChannelsQ.isLoading ? (
-                    <div className="text-xs text-muted-foreground">Kanallar yükleniyor…</div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {(prodChannelsQ.data?.results ?? []).map((ch) => (
-                        <label
-                          key={ch.kanal_id}
-                          className="flex items-center justify-between rounded-[6px] border border-border px-3 py-2.5 text-xs cursor-pointer hover:bg-muted/40"
-                        >
-                          <div>
-                            <div className="font-medium text-foreground">{ch.ad}</div>
-                            <div className="text-[11px] text-muted-foreground">{ch.kod}</div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={ch.aktif}
-                            onChange={(e) => {
-                              void opsActionMutation
-                                .mutateAsync({
-                                  action: "setChannel",
-                                  id: opsDetail.id,
-                                  kanalId: ch.kanal_id,
-                                  kanalAktif: e.target.checked,
-                                })
-                                .then(() => {
-                                  actionToast.success("Kanal ayarı güncellendi");
-                                  void prodChannelsQ.refetch();
-                                });
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {opsDetail ? (
-                <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-                  {opsDetail.yayin_durumu !== "aktif" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs"
-                      onClick={() => openEditProduct(opsDetail)}
-                    >
-                      Ürünü Düzenle
-                    </Button>
-                  )}
-                  {actions.includes("submit") && (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => void runOpsAction("submit", opsDetail.id)}
-                    >
-                      Onaya Gönder
-                    </Button>
-                  )}
-                  {actions.includes("approve") && (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => void runOpsAction("approve", opsDetail.id)}
-                    >
-                      Onayla
-                    </Button>
-                  )}
-                  {actions.includes("reject") && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="h-8 text-xs"
-                      onClick={() => setRejectOpen(true)}
-                    >
-                      Reddet
-                    </Button>
-                  )}
-                  {actions.includes("publish") && (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => void runOpsAction("publish", opsDetail.id)}
-                    >
-                      Yayınla
-                    </Button>
-                  )}
-                  {actions.includes("unpublish") && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs"
-                      onClick={() => void runOpsAction("unpublish", opsDetail.id)}
-                    >
-                      Yayından Kaldır
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-            </div>
+          ) : opsDetail ? (
+            <>
+              <DialogHeader className="sr-only">
+                <DialogTitle>{opsDetail.ad}</DialogTitle>
+                <DialogDescription>{opsDetail.platform_kodu}</DialogDescription>
+              </DialogHeader>
+              <OpsProductWorkspace
+                product={opsDetail}
+                refs={refsQ.data}
+                categories={opsCatsQ.data?.results ?? []}
+                channels={prodChannelsQ.data?.results ?? []}
+                channelsLoading={prodChannelsQ.isLoading}
+                canEdit={canOpsEditProduct(opsDetail)}
+                canDelete={canOpsDeleteProduct(opsDetail)}
+                tab={(detailTab === "tech" ? "features" : detailTab) as OpsWorkspaceTab}
+                onTabChange={(t) => setDetailTab(t)}
+                dirty={workspaceDirty}
+                onDirtyChange={setWorkspaceDirty}
+                onRefresh={async () => {
+                  await openOpsDetail(opsDetail.id, { soft: true, resetTab: false });
+                  await prodChannelsQ.refetch();
+                }}
+                onToast={actionToast}
+                onCopy={() => {
+                  void urunlerService
+                    .copyOpsProduct(opsDetail.id)
+                    .then(async (kopya) => {
+                      actionToast.success("Ürün kopyalandı");
+                      await queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
+                      setWorkspaceDirty(false);
+                      await openOpsDetail(kopya.id);
+                      setDetailTab("general");
+                    })
+                    .catch((err) => actionToast.error("Kopyalama başarısız", err));
+                }}
+                onDelete={() => setDeleteProductTarget(opsDetail)}
+                onPublish={
+                  actions.includes("publish")
+                    ? () => void runOpsAction("publish", opsDetail.id)
+                    : undefined
+                }
+                onUnpublish={
+                  actions.includes("unpublish")
+                    ? () => void runOpsAction("unpublish", opsDetail.id)
+                    : undefined
+                }
+                actionPending={opsActionMutation.isPending}
+              />
+            </>
           ) : null}
         </DialogContent>
       </Dialog>
-
-      {/* Unified Create / Edit Product EntityModal */}
-      <EntityModal
-        open={productModalOpen}
-        onOpenChange={(o) => {
-          setProductModalOpen(o);
-          if (!o) setEditingProduct(null);
-        }}
-        title={editingProduct ? "Ürünü Düzenle" : "Yeni Taslak Ürün"}
-        description="Kategori, ayar ve fiyatlandırma bilgilerini seçin."
-        isDirty={productDirty}
-        isSubmitting={productMutating}
-        error={productFormError}
-        onSubmit={onSubmitProduct}
-        size="lg"
-      >
-        <div className="flex flex-col gap-1.5">
-          <Label>Ürün Adı</Label>
-          <Input
-            required
-            value={productForm.ad}
-            onChange={(e) => {
-              setProductDirty(true);
-              setProductForm((f) => ({ ...f, ad: e.target.value }));
-            }}
-            placeholder="Örn: 22 Ayar Adana Burma Bilezik"
-            disabled={productMutating}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Kategori</Label>
-            <RelationSelect
-              value={productForm.kategori_id}
-              onChange={(v) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, kategori_id: String(v ?? "") }));
-              }}
-              options={kategoriOptions}
-              placeholder="Kategori seçin…"
-              emptyText="Aktif kategori bulunamadı"
-              createLabel="Yeni kategori ekle"
-              onCreateNew={() => setNestedCategoryOpen(true)}
-              disabled={productMutating}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Ayar / Milyem</Label>
-            <RelationSelect
-              value={productForm.ayar_id}
-              onChange={(v) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, ayar_id: String(v ?? "") }));
-              }}
-              options={ayarOptions}
-              placeholder="Ayar seçin…"
-              emptyText="Ayar tanımı bulunamadı"
-              disabled={productMutating}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Fiyatlandırma Tipi</Label>
-            <select
-              value={productForm.fiyat_tipi}
-              onChange={(e) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, fiyat_tipi: e.target.value }));
-              }}
-              disabled={productMutating}
-              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-            >
-              {(
-                refsQ.data?.fiyat_tipleri ?? [
-                  { kod: "gram", ad: "Gram bazlı" },
-                  { kod: "sabit", ad: "Sabit fiyat" },
-                ]
-              ).map((ft) => (
-                <option key={ft.kod} value={ft.kod}>
-                  {ft.ad}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Temin Tipi</Label>
-            <select
-              value={productForm.temin_tipi}
-              onChange={(e) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, temin_tipi: e.target.value }));
-              }}
-              disabled={productMutating}
-              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-            >
-              {(
-                refsQ.data?.temin_tipleri ?? [
-                  { kod: "hazir", ad: "Hazır stok" },
-                  { kod: "siparis_ozel", ad: "Siparişe özel üretim" },
-                ]
-              ).map((tt) => (
-                <option key={tt.kod} value={tt.kod}>
-                  {tt.ad}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Ölçü Tipi</Label>
-            <select
-              value={productForm.olcu_tipi}
-              onChange={(e) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, olcu_tipi: e.target.value }));
-              }}
-              disabled={productMutating}
-              className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-            >
-              <option value="">Ölçüsüz</option>
-              {(refsQ.data?.olcu_tipleri ?? []).map((ot) => (
-                <option key={ot.kod} value={ot.kod}>
-                  {ot.ad}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-          <div className="flex flex-col gap-1.5">
-            <Label>
-              Üretim Termin Süresi (Gün)
-              {productForm.temin_tipi === "siparis_ozel" ? " *" : ""}
-            </Label>
-            <Input
-              type="number"
-              min={1}
-              value={productForm.termin_gun}
-              onChange={(e) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, termin_gun: e.target.value }));
-              }}
-              placeholder={
-                productForm.temin_tipi === "siparis_ozel"
-                  ? "Zorunlu (ör. 7)"
-                  : "Hazır stok için boş bırakın"
-              }
-              disabled={productMutating}
-            />
-          </div>
-
-          {!editingProduct ? (
-            <div className="flex flex-col gap-1.5">
-              <Label>Başlangıç Satış Kanalı (İsteğe Bağlı)</Label>
-              <RelationSelect
-                value={productForm.satis_kanali_id}
-                onChange={(v) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, satis_kanali_id: String(v ?? "") }));
-                }}
-                options={channelOptions}
-                placeholder="Kanal seçin…"
-                clearable
-                disabled={productMutating}
-              />
-            </div>
-          ) : null}
-
-          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer pb-2">
-            <input
-              type="checkbox"
-              checked={productForm.renk_ekseni}
-              onChange={(e) => {
-                setProductDirty(true);
-                setProductForm((f) => ({ ...f, renk_ekseni: e.target.checked }));
-              }}
-              disabled={productMutating}
-            />
-            Varyantlarda renk seçimi kullanılsın
-          </label>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Açıklama</Label>
-          <Input
-            value={productForm.aciklama}
-            onChange={(e) => {
-              setProductDirty(true);
-              setProductForm((f) => ({ ...f, aciklama: e.target.value }));
-            }}
-            placeholder="Ürün detay açıklaması (isteğe bağlı)"
-            disabled={productMutating}
-          />
-        </div>
-
-        <div className="border-t border-border pt-3 space-y-3">
-          <div className="text-xs font-semibold text-foreground">
-            Vitrin & Tasarım Özellikleri
-          </div>
-          {(refsQ.data?.koleksiyonlar?.length ?? 0) === 0 &&
-          (refsQ.data?.renkler?.length ?? 0) === 0 ? (
-            <p className="text-xs text-amber-700 rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2">
-              Referans listeleri boş. Referanslar sekmesinden ekleyin veya backend’de{" "}
-              <code className="font-mono">seed_urunler</code> çalıştırın. Kayıt sonrası ürün
-              detayındaki Hazırlık (P0) sekmesinden varyant matrisi ve kapak yükleyin.
-            </p>
-          ) : null}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Koleksiyon</Label>
-              <RelationSelect
-                value={productForm.koleksiyon_id}
-                onChange={(v) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, koleksiyon_id: String(v ?? "") }));
-                }}
-                options={koleksiyonOptions}
-                placeholder="Koleksiyon seçin…"
-                clearable
-                disabled={productMutating}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Yaş Grubu</Label>
-              <RelationSelect
-                value={productForm.yas_grubu_id}
-                onChange={(v) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, yas_grubu_id: String(v ?? "") }));
-                }}
-                options={yasGrubuOptions}
-                placeholder="Yaş grubu seçin…"
-                clearable
-                disabled={productMutating}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Hedef Kitle</Label>
-              <select
-                value={productForm.hedef_kitle}
-                onChange={(e) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, hedef_kitle: e.target.value }));
-                }}
-                disabled={productMutating}
-                className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-              >
-                <option value="">Seçilmedi</option>
-                {(refsQ.data?.hedef_kitleler ?? []).map((hk) => (
-                  <option key={hk.kod} value={hk.kod}>
-                    {hk.ad}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Yüzey İşlemi</Label>
-              <select
-                value={productForm.yuzey}
-                onChange={(e) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, yuzey: e.target.value }));
-                }}
-                disabled={productMutating}
-                className="h-9 rounded-[6px] border border-border bg-background px-2 text-xs"
-              >
-                <option value="">Seçilmedi</option>
-                {(refsQ.data?.yuzeyler ?? []).map((yz) => (
-                  <option key={yz.kod} value={yz.kod}>
-                    {yz.ad}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Zincir Tipi</Label>
-              <RelationSelect
-                value={productForm.zincir_tipi_id}
-                onChange={(v) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, zincir_tipi_id: String(v ?? "") }));
-                }}
-                options={zincirTipiOptions}
-                placeholder="Zincir tipi seçin…"
-                clearable
-                disabled={productMutating}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Kopça Tipi</Label>
-              <RelationSelect
-                value={productForm.kopca_tipi_id}
-                onChange={(v) => {
-                  setProductDirty(true);
-                  setProductForm((f) => ({ ...f, kopca_tipi_id: String(v ?? "") }));
-                }}
-                options={kopcaTipiOptions}
-                placeholder="Kopça tipi seçin…"
-                clearable
-                disabled={productMutating}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Teknikler</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {(refsQ.data?.teknikler ?? []).map((t) => {
-                const selected = productForm.teknik_ids.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    disabled={productMutating}
-                    onClick={() => toggleFormId("teknik_ids", t.id)}
-                    className={`rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      selected
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t.ad || t.kod}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Stiller</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {(refsQ.data?.stiller ?? []).map((s) => {
-                const selected = productForm.stil_ids.includes(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={productMutating}
-                    onClick={() => toggleFormId("stil_ids", s.id)}
-                    className={`rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      selected
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {s.ad || s.kod}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Özel Günler</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {(refsQ.data?.ozel_gunler ?? []).map((o) => {
-                const selected = productForm.ozel_gun_ids.includes(o.id);
-                return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    disabled={productMutating}
-                    onClick={() => toggleFormId("ozel_gun_ids", o.id)}
-                    className={`rounded-[6px] border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      selected
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {o.ad || o.kod}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </EntityModal>
-
-      {/* Nested Quick Category Modal (from Product Modal) */}
-      <CategoryEntityModal
-        open={nestedCategoryOpen}
-        onOpenChange={setNestedCategoryOpen}
-        onCreated={(cat: CategoryItem) => {
-          setRecentCreatedCategory(cat);
-          if (!cat.aktif) {
-            setProductFormError(
-              "Oluşturulan kategori pasif olduğu için aktif ürüne bağlanamaz; lütfen Kategoriler sekmesinden aktifleştirin."
-            );
-            return;
-          }
-          setProductFormError(null);
-          setProductForm((f) => ({ ...f, kategori_id: String(cat.id) }));
-          setProductDirty(true);
-        }}
-      />
 
       {/* Unified Create / Edit Variant EntityModal */}
       <EntityModal
@@ -2386,45 +1527,6 @@ export function CatalogView() {
         </div>
       </EntityModal>
 
-      {/* Reject Dialog */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Ürünü Reddet</DialogTitle>
-            <DialogDescription>Lütfen red gerekçesini yazın.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleReject} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Red Gerekçesi</Label>
-              <Input
-                required
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Eksik bilgi veya hatalı ayar…"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setRejectOpen(false)}
-              >
-                Vazgeç
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                variant="destructive"
-                disabled={opsActionMutation.isPending}
-              >
-                Reddet
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       <ConfirmDialog
         open={Boolean(deleteProductTarget)}
         onOpenChange={(o) => !o && setDeleteProductTarget(null)}
@@ -2493,6 +1595,74 @@ export function CatalogView() {
         }
         onInspectItem={(id) => void openBuyerDetail(id)}
       />
+    </div>
+  );
+}
+
+function AuditPanel({ productId }: { productId: number }) {
+  const [rows, setRows] = useState<
+    Array<{
+      id: number;
+      action: string;
+      success: boolean;
+      reason: string;
+      actor: string;
+      created_at: string | null;
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void urunlerService
+      .getOpsProductAudit(productId)
+      .then((res) => {
+        if (!cancelled) setRows(res.results);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Geçmiş yüklenemedi");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  if (loading) {
+    return <p className="text-xs text-muted-foreground">Geçmiş yükleniyor…</p>;
+  }
+  if (error) {
+    return <p className="text-xs text-destructive">{error}</p>;
+  }
+  if (!rows.length) {
+    return <p className="text-xs text-muted-foreground">Kayıtlı işlem yok.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {rows.map((r) => (
+        <div
+          key={r.id}
+          className="rounded-[6px] border border-border px-3 py-2 text-xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium">{r.action}</span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {r.created_at || "—"}
+            </span>
+          </div>
+          <div className="mt-1 text-muted-foreground">
+            {r.actor || "—"}
+            {r.reason ? ` · ${r.reason}` : ""}
+            {!r.success ? " · başarısız" : ""}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

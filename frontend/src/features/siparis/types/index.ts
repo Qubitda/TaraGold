@@ -14,6 +14,9 @@ export interface BuyerCartLine {
   birim_fiyat_vergisiz: string;
   para_birimi: string;
   gecerlilik_sonu: string | null;
+  gram?: string | null;
+  fiyat_tipi?: string;
+  satis_kanali_id?: number;
 }
 
 export interface BuyerCart {
@@ -48,6 +51,21 @@ export interface BuyerOrder {
   olusturma_tarihi: string;
   allowed_actions: string[];
   lines?: BuyerOrderLine[];
+  teslimat_adresi?: {
+    id: number;
+    tip: string;
+    il: string;
+    ilce: string;
+    adres: string;
+  } | null;
+  fatura_adresi?: {
+    id: number;
+    tip: string;
+    il: string;
+    ilce: string;
+    adres: string;
+  } | null;
+  siparis_notu?: string;
 }
 
 /** OpenAPI CheckoutResult — POST /checkouts/ */

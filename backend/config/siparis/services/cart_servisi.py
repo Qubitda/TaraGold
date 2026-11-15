@@ -206,9 +206,38 @@ def present_cart_line(line: CartLine) -> dict:
         "varyant_id": line.varyant_id,
         "varyant_sku": getattr(varyant, "sku", "") or "",
         "urun_ad": getattr(urun, "ad", "") or "",
+        "fiyat_tipi": getattr(urun, "fiyat_tipi", "") or "",
+        "gram": str(getattr(varyant, "gram", None))
+        if getattr(varyant, "gram", None) is not None
+        else (str(q.gram) if q.gram is not None else None),
         "miktar": line.miktar,
         "birim": line.birim,
         "para_birimi": q.para_birimi,
         "birim_fiyat_vergisiz": q.toplam_vergisiz,
         "gecerlilik_sonu": q.gecerlilik_sonu,
+        "satis_kanali_id": q.satis_kanali_id,
     }
+
+
+def satir_yeniden_fiyatla(*, actor, line: CartLine, now=None) -> CartLine:
+    """Süresi dolan / yenilenecek satır için aynı kanalda yeni quote + satır güncelle."""
+    from fiyatlama.services.pricing_service import quote as create_quote
+
+    _require_own_cart(actor, line.cart)
+    alici_firma = line.cart.alici_firma
+    _assert_buyer_actor(actor, alici_firma)
+    now = now or timezone.now()
+    old = line.price_quote
+    varyant = old.varyant
+    kanal = old.satis_kanali
+    yeni = create_quote(
+        alici_firma=alici_firma,
+        satis_kanali=kanal,
+        varyant=varyant,
+        kullanici=actor,
+        para_birimi=old.para_birimi or "TRY",
+        now=now,
+    )
+    return satir_ekle(
+        actor=actor, price_quote=yeni, miktar=line.miktar, now=now
+    )

@@ -17,6 +17,8 @@ export interface BuyerCatalogItem {
   kategori_sira?: number;
   kategori_one_cikan?: boolean;
   ayar: string;
+  metal?: string;
+  milyem?: string | null;
   varyant_count: number;
   fiyat_tipi: string;
   temin_tipi?: string;
@@ -24,6 +26,36 @@ export interface BuyerCatalogItem {
   yayin_durumu: string;
   allowed_actions: string[];
   kapak_url?: string;
+  varsayilan_varyant_id?: number | null;
+  gram?: string | null;
+  /** FE: batch quote sonrası doldurulur */
+  fiyat_ozet?: {
+    loading?: boolean;
+    price?: string;
+    currency?: string;
+    quoteId?: number;
+    error?: string;
+    gram?: string | null;
+  };
+}
+
+export interface BuyerPriceBatchResult {
+  ok: boolean;
+  varyant_id: number;
+  urun_id?: number;
+  fiyat_tipi?: string;
+  reason_code?: string;
+  detail?: string;
+  uyari?: string | null;
+  quote?: {
+    id: number;
+    toplam_vergisiz: string;
+    para_birimi: string;
+    gram?: string | null;
+    gram_basi_vergisiz?: string | null;
+    expires_at?: string;
+    varyant_id?: number;
+  };
 }
 
 export interface ProductMediaItem {
@@ -31,6 +63,7 @@ export interface ProductMediaItem {
   urun_id?: number;
   varyant_id?: number | null;
   url: string;
+  harici_url?: string;
   tip: string;
   sira: number;
   kapak: boolean;
@@ -73,6 +106,30 @@ export interface PricePreviewResponse {
   };
 }
 
+export interface OpsProductStockRow {
+  balance_id: number;
+  varyant_id: number;
+  sku: string;
+  renk?: string;
+  beden?: string;
+  warehouse_id: number;
+  warehouse_kod: string;
+  warehouse_ad?: string;
+  teklif_id?: number | null;
+  teklif_kodu?: string;
+  birim: string;
+  on_hand: string;
+  reserved: string;
+  blocked: string;
+  available: string;
+}
+
+export interface OpsProductStockResponse {
+  urun_id: number;
+  count: number;
+  results: OpsProductStockRow[];
+}
+
 export interface BuyerCatalogDetail {
   id: number;
   ad: string;
@@ -82,10 +139,20 @@ export interface BuyerCatalogDetail {
   kategori_sira?: number;
   kategori_one_cikan?: boolean;
   ayar: string;
+  metal?: string;
+  milyem?: string | null;
+  taslar?: Array<{
+    id: number;
+    tas_tipi: string;
+    adet: number;
+    karat?: string | null;
+  }>;
   aciklama?: string;
   fiyat_tipi: string;
   temin_tipi?: string;
   termin_gun?: number | null;
+  /** Maskeli: var | yok | siparise_ozel — depo/tedarikçi yok */
+  stok_durumu?: "var" | "yok" | "siparise_ozel" | string;
   olcu_tipi?: string;
   renk_ekseni?: boolean;
   allowed_actions: string[];
@@ -142,6 +209,10 @@ export interface OpsProduct {
   kategori_one_cikan?: boolean;
   ayar_id: number;
   ayar?: string;
+  metal_id?: number | null;
+  metal?: string;
+  milyem?: string | null;
+  taslar?: OpsProductStone[];
   fiyat_tipi?: string;
   temin_tipi?: string;
   termin_gun?: number | null;
@@ -171,9 +242,28 @@ export interface OpsProduct {
   kanallar?: Array<{ kanal_id: number; kod: string; ad: string; aktif: boolean }>;
   allowed_actions?: string[];
   varyantlar?: OpsProductVariant[];
-  hazirlik?: ProductReadiness;
+  hazirlik?: ProductReadiness | null;
   gorseller?: ProductMediaItem[];
   kapak_url?: string;
+  slug?: string;
+  meta_baslik?: string;
+  meta_aciklama?: string;
+  canonical_url?: string;
+  gorsel_alt_metni?: string;
+  olusturan_kullanici_id?: number | null;
+  guncelleme_zamani?: string | null;
+}
+
+export interface OpsProductStone {
+  id: number;
+  urun_id: number;
+  tas_tipi_id: number;
+  tas_tipi: string;
+  tas_tipi_degerli?: boolean;
+  adet: number;
+  karat?: string | null;
+  bedel: string;
+  sertifika_no?: string;
 }
 
 export interface OpsProductPage {
@@ -205,6 +295,11 @@ export interface OpsProductCreateRequest {
   stil_ids?: number[];
   ozel_gun_ids?: number[];
   satis_kanali_id?: number;
+  meta_baslik?: string;
+  meta_aciklama?: string;
+  slug?: string;
+  canonical_url?: string;
+  gorsel_alt_metni?: string;
 }
 
 export interface OpsProductUpdateRequest {
@@ -226,6 +321,11 @@ export interface OpsProductUpdateRequest {
   teknik_ids?: number[];
   stil_ids?: number[];
   ozel_gun_ids?: number[];
+  meta_baslik?: string;
+  meta_aciklama?: string;
+  slug?: string;
+  canonical_url?: string;
+  gorsel_alt_metni?: string;
 }
 
 export interface OpsProductVariantCreateRequest {
@@ -332,6 +432,12 @@ export interface CatalogRefsResponse {
   berrakliklar?: CatalogRefItem[];
   renk_dereceleri?: CatalogRefItem[];
   kesim_kaliteleri?: CatalogRefItem[];
+  metaller?: Array<{
+    id: number;
+    kod: string;
+    ad: string;
+    gram_bazli?: boolean;
+  }>;
   ayarlar: Array<{
     id: number;
     ayar_kodu: string;
@@ -339,6 +445,8 @@ export interface CatalogRefsResponse {
     milyem: string;
     metal_id: number;
     metal_ad: string;
+    metal_kod?: string;
+    gram_bazli?: boolean;
   }>;
   birimler: Array<{ kod: string; ad: string }>;
   olcu_tipleri: Array<{ kod: string; ad: string }>;

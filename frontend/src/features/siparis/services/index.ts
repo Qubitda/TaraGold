@@ -35,11 +35,18 @@ export const siparisService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  /** POST /checkouts/ — EmptyRequest; adres alanları sözleşmede yok. */
-  createCheckout(): Promise<CheckoutResult> {
-    return apiFetch<CheckoutResult>("/checkouts/", {
+  createCheckout(data?: {
+    teslimat_adresi_id?: number;
+    fatura_adresi_id?: number;
+    siparis_notu?: string;
+  }): Promise<CheckoutResult & { id?: number }> {
+    return apiFetch<CheckoutResult & { id?: number }>("/checkouts/", {
       method: "POST",
-      body: {},
+      body: {
+        teslimat_adresi_id: data?.teslimat_adresi_id,
+        fatura_adresi_id: data?.fatura_adresi_id,
+        siparis_notu: data?.siparis_notu || "",
+      },
       idempotencyKey: newIdempotencyKey(),
     });
   },
@@ -50,13 +57,28 @@ export const siparisService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  /** Checkout + order oluşturma zinciri (OpenAPI B2). */
-  async checkout(): Promise<BuyerOrder> {
-    const result = await this.createCheckout();
+  /** Checkout + order oluşturma zinciri. */
+  async checkout(data?: {
+    teslimat_adresi_id?: number;
+    fatura_adresi_id?: number;
+    siparis_notu?: string;
+  }): Promise<BuyerOrder> {
+    const result = await this.createCheckout(data);
     if (result.order_id) {
       return this.getOrderDetail(result.order_id);
     }
-    return this.createOrderFromCheckout(result.checkout_id);
+    const checkoutId = result.checkout_id ?? result.id;
+    if (!checkoutId) {
+      throw new Error("Checkout id alınamadı.");
+    }
+    return this.createOrderFromCheckout(checkoutId);
+  },
+  requoteCartLine(lineId: number): Promise<BuyerCart> {
+    return apiFetch<{ cart: BuyerCart }>(`/carts/me/lines/${lineId}/`, {
+      method: "POST",
+      body: { action: "requote" },
+      idempotencyKey: newIdempotencyKey(),
+    }).then((res) => res.cart);
   },
   getOrders(params?: Record<string, string>): Promise<Paginated<BuyerOrder>> {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
