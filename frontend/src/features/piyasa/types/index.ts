@@ -3,9 +3,18 @@ export type PiyasaOlcek = "GRAM" | "ONS" | "KG" | string;
 export interface PiyasaPanoSatir {
   kod: string;
   ad?: string;
+  bolum?: string;
   fiyat: string;
+  alis?: string | null;
+  satis?: string | null;
+  alis_goster?: boolean;
+  satis_goster?: boolean;
+  yon_alis?: string;
+  yon_satis?: string;
   para_birimi: string;
   olcek?: PiyasaOlcek;
+  ondalik?: number;
+  ticker_da_goster?: boolean;
   kaynak: string;
   guncelleme?: string | null;
   banner?: string | null;
@@ -14,6 +23,10 @@ export interface PiyasaPanoSatir {
 export interface PiyasaPano {
   server_now: string;
   olcek?: string | null;
+  kaynak?: string;
+  gecikmeli?: boolean;
+  referans_ibaresi?: string;
+  banner?: string | null;
   satirlar: PiyasaPanoSatir[];
 }
 

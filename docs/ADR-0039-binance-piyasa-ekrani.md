@@ -102,7 +102,7 @@ Seed (16 kalem, marj 0): 22A bilezik, Gram/Has, Çeyrek/Yarım/Tam (Yeni), Cumhu
 1. ADR + Binance sembol doğrulama ✅  
 2. Marj semantiği + model/migration + birim test ✅ (`0007`/`0008`, `hesap`+`piyasa_fiyat` 28 OK)  
 3. Binance provider + ingest + anomali/bayat ✅ (`ingest_binance_piyasa`, tick cache, 30/300 hide)  
-4. Pano API + SSE + ops detay  
+4. Pano API + SSE + ops detay ✅ (+ FE Canlı Piyasa menü + kayan ticker + `/piyasa` 3 panel)  
 5. Global ticker  
 6. Pano sayfası + admin marj  
 7. E2E / mevcut test yeşil / OpenAPI  

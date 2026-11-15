@@ -26,7 +26,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { MeResponse } from "@/lib/api/types";
-import { PiyasaPanoStrip } from "@/features/piyasa";
 import { authService } from "@/features/auth/services/auth-service";
 import { clearClientSession } from "@/lib/session-clear";
 import { useAuth } from "@/features/auth";
@@ -43,6 +42,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/firmalar": "Firmalar",
   "/tanimlar": "Tanımlar & Kanallar",
   "/urunler": "Ürünler & Katalog",
+  "/piyasa": "Canlı Piyasa",
   "/fiyatlama": "Fiyatlandırma",
   "/stok": "Stok & Depolar",
   "/siparis": "Sipariş Listem",
@@ -148,7 +148,6 @@ export function Header({ user, onLogout }: HeaderProps) {
           <h1 className="text-base font-semibold tracking-tight text-foreground shrink-0">
             {currentTitle}
           </h1>
-          {user ? <PiyasaPanoStrip /> : null}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

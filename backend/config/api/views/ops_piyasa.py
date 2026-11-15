@@ -512,3 +512,122 @@ class OpsMarjKuraliDetailView(APIView):
                 detail={"id": rid},
             )
         return Response({"deleted": True, "id": pk})
+
+
+class OpsPiyasaPanoDetayView(APIView):
+    """GET /api/v1/ops/piyasa/pano-detay/ — ham/marj/nihai (ADR-0039)."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def get(self, request):
+        _require_piyasa_read(request.user)
+        from piyasa.selectors.pano import present_ops_pano_detay
+
+        return Response(present_ops_pano_detay())
+
+
+class OpsPiyasaUrunPatchView(APIView):
+    """PATCH /api/v1/ops/piyasa/urunler/<id>/ — marj/görünürlük; audit."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def patch(self, request, pk: int):
+        from piyasa.models import PiyasaUrun
+
+        _require_piyasa_write(request.user)
+        enforce_csrf(request)
+        try:
+            urun = PiyasaUrun.objects.get(pk=pk)
+        except PiyasaUrun.DoesNotExist as exc:
+            raise NotFound(detail="Piyasa ürünü yok.") from exc
+
+        body = request.data if isinstance(request.data, dict) else {}
+        eski = {
+            "marj_tipi": urun.marj_tipi,
+            "alis_marj": str(urun.alis_marj),
+            "satis_marj": str(urun.satis_marj),
+            "alis_goster": urun.alis_goster,
+            "satis_goster": urun.satis_goster,
+            "aliciya_alis_goster": urun.aliciya_alis_goster,
+            "aliciya_goster": urun.aliciya_goster,
+            "ticker_da_goster": urun.ticker_da_goster,
+            "sira": urun.sira,
+            "aktif": urun.aktif,
+            "yuvarlama_adimi": str(urun.yuvarlama_adimi),
+        }
+        allowed = {
+            "marj_tipi",
+            "alis_marj",
+            "satis_marj",
+            "alis_goster",
+            "satis_goster",
+            "aliciya_alis_goster",
+            "aliciya_goster",
+            "ticker_da_goster",
+            "sira",
+            "aktif",
+            "yuvarlama_adimi",
+            "yuvarlama_yontemi",
+            "ondalik",
+            "bolum",
+            "ad",
+        }
+        for key, val in body.items():
+            if key not in allowed:
+                continue
+            if key in {"alis_marj", "satis_marj", "yuvarlama_adimi"}:
+                try:
+                    setattr(urun, key, Decimal(str(val)))
+                except (InvalidOperation, TypeError, ValueError) as exc:
+                    raise ValidationError({key: "Geçersiz sayı."}) from exc
+            elif key in {
+                "alis_goster",
+                "satis_goster",
+                "aliciya_alis_goster",
+                "aliciya_goster",
+                "ticker_da_goster",
+                "aktif",
+            }:
+                setattr(urun, key, _parse_bool(val, default=True))
+            elif key == "sira":
+                setattr(urun, key, int(val))
+            elif key == "ondalik":
+                setattr(urun, key, int(val))
+            else:
+                setattr(urun, key, val)
+
+        try:
+            with domain_atomic():
+                urun.full_clean()
+                urun.save()
+                yeni = {
+                    "marj_tipi": urun.marj_tipi,
+                    "alis_marj": str(urun.alis_marj),
+                    "satis_marj": str(urun.satis_marj),
+                    "alis_goster": urun.alis_goster,
+                    "satis_goster": urun.satis_goster,
+                    "aliciya_alis_goster": urun.aliciya_alis_goster,
+                    "aliciya_goster": urun.aliciya_goster,
+                    "ticker_da_goster": urun.ticker_da_goster,
+                    "sira": urun.sira,
+                    "aktif": urun.aktif,
+                    "yuvarlama_adimi": str(urun.yuvarlama_adimi),
+                }
+                record_audit(
+                    actor=request.user,
+                    action="piyasa.urun_guncellendi",
+                    entity_type="PiyasaUrun",
+                    entity_id=str(urun.pk),
+                    success=True,
+                    detail={"eski": eski, "yeni": yeni},
+                )
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+
+        from piyasa.selectors.pano import present_ops_pano_detay
+
+        detay = present_ops_pano_detay()
+        row = next((s for s in detay["satirlar"] if s["kod"] == urun.kod), None)
+        return Response({"urun_id": urun.pk, "kod": urun.kod, "satir": row})

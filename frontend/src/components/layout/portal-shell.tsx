@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { PiyasaPanoStrip } from "@/features/piyasa";
 import { RequireAuth, useAuth } from "@/features/auth";
 import { authService } from "@/features/auth/services/auth-service";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         />
 
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+          {user ? (
+            <div className="sticky top-0 z-[60] shrink-0">
+              <PiyasaPanoStrip />
+            </div>
+          ) : null}
           <Header
             user={user}
             onLogout={() => {

@@ -29,6 +29,7 @@ import BelgelerPage from "@/app/(portal)/belgeler/page";
 import ProfilPage from "@/app/(portal)/profil/page";
 import RaporlarPage from "@/app/(portal)/raporlar/page";
 import EpostaAyarlariPage from "@/app/(portal)/ayarlar/eposta/page";
+import PiyasaPage from "@/app/(portal)/piyasa/page";
 
 const queryClient = createAppQueryClient();
 
@@ -94,6 +95,7 @@ export default function App() {
 
                     <Route element={<PortalLayout />}>
                       <Route index element={<HomePage />} />
+                      <Route path="piyasa" element={<PiyasaPage />} />
                       <Route path="profil" element={<ProfilPage />} />
 
                       <Route

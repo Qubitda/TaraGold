@@ -197,7 +197,7 @@ class PiyasaUrun(models.Model):
             not self.metal_id or self.metal_id != self.ayar.metal_id
         ):
             self.metal_id = self.ayar.metal_id
-        # Önizleme: ham=1000 varsayımı ile makas kapısı (kayıt anı)
+        # Önizleme: eşit ham ile makas kapısı (kayıt anı).
         # Lazy import — model ↔ services döngüsünü kırar.
         from piyasa.services import hesap
 
@@ -208,8 +208,8 @@ class PiyasaUrun(models.Model):
                 marj_modu=self.marj_tipi or hesap.YUZDE,
                 alis_marj=self.alis_marj or 0,
                 satis_marj=self.satis_marj or 0,
-                yuvarlama_adimi=self.yuvarlama_adimi or 0,
-                yuvarlama_yontemi=self.yuvarlama_yontemi or hesap.YAKIN,
+                yuvarlama_adimi=0,  # yuvarlama makas kontrolünü yanıltmasın
+                yuvarlama_yontemi=hesap.YAKIN,
             )
         except ValueError as exc:
             raise ValidationError({"__all__": str(exc)}) from exc

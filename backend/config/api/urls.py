@@ -56,6 +56,7 @@ from api.views import (
     HealthView,
     ReadyView,
     PiyasaPanoView,
+    PiyasaPanoStreamView,
     SalesChannelListView,
     MeView,
     OpsAliciKanalErisimiDetailView,
@@ -74,6 +75,8 @@ from api.views import (
     OpsFinanceTedarikciOdemeView,
     OpsFiyatGrubuListView,
     OpsCanliPiyasaView,
+    OpsPiyasaPanoDetayView,
+    OpsPiyasaUrunPatchView,
     OpsEmailSendTestView,
     OpsEmailSettingsView,
     OpsEmailTestConnectionView,
@@ -357,9 +360,24 @@ api_urlpatterns = [
     ),
     path("piyasa/pano/", PiyasaPanoView.as_view(), name="api-piyasa-pano"),
     path(
+        "piyasa/pano/stream/",
+        PiyasaPanoStreamView.as_view(),
+        name="api-piyasa-pano-stream",
+    ),
+    path(
         "ops/piyasa/canli/",
         OpsCanliPiyasaView.as_view(),
         name="api-ops-piyasa-canli",
+    ),
+    path(
+        "ops/piyasa/pano-detay/",
+        OpsPiyasaPanoDetayView.as_view(),
+        name="api-ops-piyasa-pano-detay",
+    ),
+    path(
+        "ops/piyasa/urunler/<int:pk>/",
+        OpsPiyasaUrunPatchView.as_view(),
+        name="api-ops-piyasa-urun-patch",
     ),
     path(
         "ops/piyasa/marj-kurallari/",

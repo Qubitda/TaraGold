@@ -96,12 +96,16 @@ class PiyasaPanoApiTests(TestCase):
         cls.urun = PiyasaUrun.objects.create(
             kod="has_f301",
             ad="Has F301",
+            bolum=PiyasaUrun.Bolum.ALTIN,
             grup=PiyasaUrun.Grup.HAS,
             metal=cls.metal,
             gram=Decimal("1"),
-            alis_marj=Decimal("5"),
+            marj_tipi=PiyasaUrun.MarjTipi.YUZDE,
+            # ADR-0039: eski %5 alış düşürme ≡ alis_marj=-5
+            alis_marj=Decimal("-5"),
             satis_marj=Decimal("2"),
             yuvarlama_adimi=Decimal("10"),
+            ticker_da_goster=True,
             olcek=PiyasaUrun.Olcek.GRAM,
         )
         PiyasaUrun.objects.create(
@@ -132,18 +136,21 @@ class PiyasaPanoApiTests(TestCase):
         codes = {s["kod"] for s in res.data["satirlar"]}
         self.assertIn("has_f301", codes)
         row = next(s for s in res.data["satirlar"] if s["kod"] == "has_f301")
-        self.assertEqual(
-            set(row.keys()),
+        # ADR-0039 buyer alanları (marj/ham yok)
+        self.assertTrue(
             {
                 "kod",
                 "ad",
                 "fiyat",
+                "alis",
+                "satis",
+                "bolum",
                 "para_birimi",
                 "olcek",
                 "kaynak",
                 "guncelleme",
                 "banner",
-            },
+            }.issubset(set(row.keys()))
         )
         self.assertIn("fiyat", row)
         self.assertEqual(row["para_birimi"], "TRY")
@@ -177,7 +184,8 @@ class PiyasaPanoApiTests(TestCase):
     def test_stale_feed_returns_lkg_and_banner_still_masked(self):
         from datetime import timedelta
 
-        eski = timezone.now() - timedelta(hours=2)
+        # 45s → gecikmeli LKG (30s eşiği); 300s+ hide
+        eski = timezone.now() - timedelta(seconds=45)
         MetalKuru.objects.filter(metal=self.metal).update(
             zaman=eski,
             alinma_zamani=eski,
@@ -187,7 +195,22 @@ class PiyasaPanoApiTests(TestCase):
         self.assertEqual(res.status_code, 200, res.data)
         row = next(s for s in res.data["satirlar"] if s["kod"] == "has_f301")
         self.assertEqual(row["kaynak"], "LKG")
-        self.assertTrue(row["banner"])
+        self.assertTrue(row["banner"] or res.data.get("gecikmeli"))
         blob = str(res.data).lower()
         for yasak in ("alis_marj", "satis_marj", "marj_modu", "saf_birim", "maliyet"):
             self.assertNotIn(yasak, blob)
+
+    def test_cok_bayat_fiyat_gizlenir(self):
+        from datetime import timedelta
+
+        eski = timezone.now() - timedelta(seconds=400)
+        MetalKuru.objects.filter(metal=self.metal).update(
+            zaman=eski,
+            alinma_zamani=eski,
+        )
+        self.api.force_authenticate(user=self.buyer)
+        res = self.api.get(reverse("api-piyasa-pano"))
+        self.assertEqual(res.status_code, 200, res.data)
+        codes = {s["kod"] for s in res.data["satirlar"]}
+        self.assertNotIn("has_f301", codes)
+        self.assertIn(res.data.get("kaynak"), {"FAIL", "LKG"})

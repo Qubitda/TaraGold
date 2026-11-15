@@ -14,6 +14,7 @@ import {
   Users,
   BarChart3,
   Mail,
+  LineChart,
 } from "lucide-react";
 import type { Capabilities } from "@/lib/api/types";
 
@@ -40,6 +41,12 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "genel",
     label: "Genel",
     items: [
+      {
+        id: "piyasa",
+        href: "/piyasa",
+        label: "Canlı Piyasa",
+        icon: LineChart,
+      },
       {
         id: "overview",
         href: "/",

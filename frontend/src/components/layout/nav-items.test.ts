@@ -26,7 +26,7 @@ describe("nav-items IA", () => {
   it("capability yokken yalnızca herkese açık öğeleri bırakır", () => {
     const groups = filterVisibleNavGroups(caps({}));
     const ids = groups.flatMap((g) => g.items.map((i) => i.id));
-    expect(ids).toEqual(["overview"]);
+    expect(ids).toEqual(["piyasa", "overview"]);
     expect(groups.map((g) => g.id)).toEqual(["genel"]);
   });
 
