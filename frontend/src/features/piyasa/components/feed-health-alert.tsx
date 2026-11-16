@@ -87,8 +87,8 @@ export function FeedHealthAlert({
         <p className="mt-0.5 text-xs opacity-90">
           {sanitizeBanner(banner) ||
             (fail
-              ? "Canlı bağlantı yok. Fiyat vererek işlem yapmayın — risk kritik."
-              : "Bağlantı yavaş; son bilinen fiyat gösteriliyor.")}
+              ? "Altın/ons fiyatı yok veya çok bayat. Fiyat vererek işlem yapmayın — risk kritik."
+              : "Bağlantı yavaş; ekranda görünen son bilinen fiyat kullanılıyor. Yenilenene kadar işlemde dikkat.")}
         </p>
       </div>
     </div>

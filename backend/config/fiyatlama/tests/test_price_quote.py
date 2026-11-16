@@ -134,7 +134,10 @@ class PriceQuoteFixtureMixin:
         urun.refresh_from_db()
         cls.urun = urun
         cls.varyant = Varyant.objects.create(
-            urun=urun, gram=Decimal("2.500"), ek_bedel=Decimal("10.00")
+            urun=urun,
+            gram=Decimal("2.500"),
+            ek_bedel=Decimal("10.00"),
+            ayar=cls.ayar,
         )
 
         bas, bit = date.today(), date.today() + timedelta(days=60)

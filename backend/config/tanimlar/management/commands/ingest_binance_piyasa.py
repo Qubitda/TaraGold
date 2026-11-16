@@ -54,14 +54,17 @@ class Command(BaseCommand):
             return
 
         result = run_rest_poll_once(kaynak="api")
-        if not result.ok and not result.persisted:
+        # Tek sembol (GBP 0 book vb.) tüm ingest'i düşürmesin; metal yazıldıysa OK.
+        metal_ok = any(str(p).startswith("metal:") for p in (result.persisted or []))
+        if not result.persisted and not result.ticks:
             raise CommandError(
                 "; ".join(result.errors + result.rejected) or "Ingest başarısız."
             )
+        style = self.style.SUCCESS if (result.ok or metal_ok) else self.style.WARNING
         self.stdout.write(
-            self.style.SUCCESS(
-                f"ticks={len(result.ticks)} persisted={result.persisted} "
-                f"rejected={len(result.rejected)} "
+            style(
+                f"ok={result.ok} ticks={len(result.ticks)} "
+                f"persisted={result.persisted} rejected={len(result.rejected)} "
                 f"gram={result.gram_alis}/{result.gram_satis}"
             )
         )

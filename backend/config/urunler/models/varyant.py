@@ -35,6 +35,16 @@ class Varyant(models.Model):
         "urunler.OlcuDegeri", verbose_name="Beden / ölçü", related_name="varyantlar",
         null=True, blank=True, on_delete=models.PROTECT,
     )
+    ayar = models.ForeignKey(
+        "tanimlar.AyarMilyem",
+        verbose_name="Ayar / milyem",
+        related_name="varyantlar",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        help_text="Metal tiplerde (HAM_ALTIN/MONTUR/TASLI) zorunlu; TAS muaf. "
+        "Ürün varsayılanı Urun.ayar; fiyat motoru metal varyantta bunu okur.",
+    )
 
     class Tip(models.TextChoices):
         HAM_ALTIN = "HAM_ALTIN", "Ham altın"
@@ -85,12 +95,41 @@ class Varyant(models.Model):
         "Benzersiz parça", default=False,
         help_text="Tek adet, tekrar üretilmeyen parça (ör. sertifikalı tek taş).",
     )
-    # ADR-0044 — montür uyumluluk (sıkı: boşsa imalata alınmaz)
+    class ParcaRolu(models.TextChoices):
+        FULL = "FULL", "Tam montür"
+        HEAD = "HEAD", "Baş / yuva"
+        BAND = "BAND", "Gövde / band"
+
+    # ADR-0044 — montür parça + stil (görsel sihirbaz; etiket değil)
+    parca_rolu = models.CharField(
+        "Parça rolü",
+        max_length=8,
+        choices=ParcaRolu.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="MONTUR: FULL|HEAD|BAND. Boşsa FULL sayılır (geriye uyum).",
+    )
+    bas_stil = models.CharField(
+        "Baş stili",
+        max_length=48,
+        blank=True,
+        default="",
+        help_text="MONTUR FULL/HEAD: örn. DIAMOND_TULIP, CLASSIC_HALO.",
+    )
+    govde_stil = models.CharField(
+        "Gövde stili",
+        max_length=48,
+        blank=True,
+        default="",
+        help_text="MONTUR FULL/BAND: örn. KNIFE_EDGE_SOLITAIRE.",
+    )
+    # ADR-0044 — montür uyumluluk (sıkı: boşsa imalata alınmaz; FULL/HEAD)
     yuva_adedi = models.PositiveSmallIntegerField(
         "Yuva adedi",
         null=True,
         blank=True,
-        help_text="MONTUR: kaç taş yuvası.",
+        help_text="MONTUR FULL/HEAD: kaç taş yuvası. BAND’da kullanılmaz.",
     )
     izinli_kesimler = models.JSONField(
         "İzinli taş kesimleri",
@@ -135,20 +174,63 @@ class Varyant(models.Model):
         verbose_name_plural = "Varyantlar"
         ordering = ["urun", "renk", "beden"]
         constraints = [
-            # Aynı ürün içinde aynı eksen kombinasyonu iki kez olamaz. NULL'lar
-            # PostgreSQL'de birbirinden farklı sayıldığı için dört durum ayrı yazılır.
-            models.UniqueConstraint(fields=["urun", "renk", "beden"], name="benzersiz_varyant_renk_beden"),
+            # Eksen + ayar. NULL'lar PG'de birbirinden farklı → partial'lar.
             models.UniqueConstraint(
-                fields=["urun", "beden"], condition=models.Q(renk__isnull=True),
-                name="benzersiz_varyant_beden_renksiz",
+                fields=["urun", "renk", "beden", "ayar"],
+                condition=models.Q(
+                    renk__isnull=False, beden__isnull=False, ayar__isnull=False
+                ),
+                name="benzersiz_varyant_renk_beden_ayar",
             ),
             models.UniqueConstraint(
-                fields=["urun", "renk"], condition=models.Q(beden__isnull=True),
-                name="benzersiz_varyant_renk_bedensiz",
+                fields=["urun", "beden", "ayar"],
+                condition=models.Q(
+                    renk__isnull=True, beden__isnull=False, ayar__isnull=False
+                ),
+                name="benzersiz_varyant_beden_ayar_renksiz",
             ),
             models.UniqueConstraint(
-                fields=["urun"], condition=models.Q(renk__isnull=True, beden__isnull=True),
-                name="benzersiz_varyant_eksensiz",
+                fields=["urun", "renk", "ayar"],
+                condition=models.Q(
+                    renk__isnull=False, beden__isnull=True, ayar__isnull=False
+                ),
+                name="benzersiz_varyant_renk_ayar_bedensiz",
+            ),
+            models.UniqueConstraint(
+                fields=["urun", "ayar"],
+                condition=models.Q(
+                    renk__isnull=True, beden__isnull=True, ayar__isnull=False
+                ),
+                name="benzersiz_varyant_ayar_eksensiz",
+            ),
+            # TAS (ayar null) partial'ları
+            models.UniqueConstraint(
+                fields=["urun", "renk", "beden"],
+                condition=models.Q(
+                    renk__isnull=False, beden__isnull=False, ayar__isnull=True
+                ),
+                name="benzersiz_varyant_renk_beden_ayarsiz",
+            ),
+            models.UniqueConstraint(
+                fields=["urun", "beden"],
+                condition=models.Q(
+                    renk__isnull=True, beden__isnull=False, ayar__isnull=True
+                ),
+                name="benzersiz_varyant_beden_ayarsiz",
+            ),
+            models.UniqueConstraint(
+                fields=["urun", "renk"],
+                condition=models.Q(
+                    renk__isnull=False, beden__isnull=True, ayar__isnull=True
+                ),
+                name="benzersiz_varyant_renk_ayarsiz",
+            ),
+            models.UniqueConstraint(
+                fields=["urun"],
+                condition=models.Q(
+                    renk__isnull=True, beden__isnull=True, ayar__isnull=True
+                ),
+                name="benzersiz_varyant_eksensiz_ayarsiz",
             ),
             models.CheckConstraint(
                 condition=models.Q(gram__isnull=True) | models.Q(gram__gt=0),
@@ -172,8 +254,12 @@ class Varyant(models.Model):
                 ),
                 name="varyant_tip_gecerli",
             ),
+            # Metal tiplerde ayar zorunlu; TAS muaf
+            models.CheckConstraint(
+                condition=models.Q(tip="TAS") | models.Q(ayar__isnull=False),
+                name="varyant_metal_ayar_zorunlu",
+            ),
         ]
-
     @property
     def net_altin_gram(self) -> Decimal | None:
         if self.gram is None:
@@ -222,14 +308,24 @@ class Varyant(models.Model):
                 errors["tas_agirligi"] = "taş_agirligi < gram olmalı (ADR-0001 B4)."
 
         if self.tip == self.Tip.MONTUR:
+            rol = (self.parca_rolu or "").strip().upper() or self.ParcaRolu.FULL
+            if rol not in {c.value for c in self.ParcaRolu}:
+                errors["parca_rolu"] = "FULL, HEAD veya BAND olmalı."
+            else:
+                self.parca_rolu = rol
             if self.karat_min is not None and self.karat_max is not None:
                 if Decimal(self.karat_min) > Decimal(self.karat_max):
                     errors["karat_max"] = "karat_max ≥ karat_min olmalı."
         if self.tip == self.Tip.TAS:
             if self.karat is not None and Decimal(self.karat) <= 0:
                 errors["karat"] = "Karat pozitif olmalı."
+            # TAS metal yolu kullanmaz — ayar yok sayılır
+            if self.ayar_id:
+                self.ayar = None
+        elif not self.ayar_id:
+            errors["ayar"] = "Metal tipinde ayar zorunludur."
 
-        # --- Eksen kuralları: renk ---
+        # --- Eksen kuralları: renk (metal rengi) ---
         if urun.renk_ekseni:
             if not self.renk_id:
                 errors["renk"] = "Bu ürün renk seçenekli; renk zorunludur."
@@ -302,6 +398,13 @@ class Varyant(models.Model):
     # Kayıt
     # ------------------------------------------------------------------ #
     def save(self, *args, **kwargs):
+        # Metal: ayar yoksa ürün varsayılanı; TAS: ayar yok sayılır (FAZ 1).
+        if self.tip == self.Tip.TAS:
+            self.ayar_id = None
+        elif not self.ayar_id and self.urun_id:
+            urun = self._urun_veya_none()
+            if urun is not None and urun.ayar_id:
+                self.ayar_id = urun.ayar_id
         yeni = self.pk is None
         super().save(*args, **kwargs)
         if yeni and not self.sku:

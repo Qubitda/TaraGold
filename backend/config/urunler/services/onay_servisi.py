@@ -54,7 +54,7 @@ def _deny(kullanici, *, action, urun, exc, reason, detail=None):
 
 
 def _assert_submit_ownership(urun, kullanici, *, action="urun.onaya_gonder"):
-    """K-004: sahip firma + submit permission; IDOR engeli (atomic dışı)."""
+    """Sahip firma veya platform + submit; IDOR engeli (atomic dışı)."""
     if not getattr(kullanici, "firma_id", None):
         _deny(
             kullanici,
@@ -63,19 +63,21 @@ def _assert_submit_ownership(urun, kullanici, *, action="urun.onaya_gonder"):
             exc=ValidationError("Kullanıcının firması tanımlı olmalıdır."),
             reason="firma_yok",
         )
-    # ADR-0005 K-004: onay öncesi yalnız oluşturan firma (taslak sahipliği)
-    if urun.olusturan_firma_id != kullanici.firma_id:
-        _deny(
-            kullanici,
-            action=action,
-            urun=urun,
-            exc=PermissionDenied("Başka firmaya ait ürüne işlem yapılamaz."),
-            reason="sahiplik_uyusmazligi",
-            detail={
-                "urun_olusturan_firma_id": urun.olusturan_firma_id,
-                "user_firma_id": kullanici.firma_id,
-            },
-        )
+    firma = getattr(kullanici, "firma", None)
+    # Platform ops herhangi sahipli ürüne submit; tedarikçi yalnız kendi ürünü
+    if not (firma is not None and getattr(firma, "platform_mu", False)):
+        if urun.olusturan_firma_id != kullanici.firma_id:
+            _deny(
+                kullanici,
+                action=action,
+                urun=urun,
+                exc=PermissionDenied("Başka firmaya ait ürüne işlem yapılamaz."),
+                reason="sahiplik_uyusmazligi",
+                detail={
+                    "urun_olusturan_firma_id": urun.olusturan_firma_id,
+                    "user_firma_id": kullanici.firma_id,
+                },
+            )
     try:
         require_perm(kullanici, P["submit_urun"], message="Ürün gönderim yetkiniz yok.")
     except PermissionDenied as exc:

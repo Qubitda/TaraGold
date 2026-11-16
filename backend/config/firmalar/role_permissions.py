@@ -194,6 +194,8 @@ ROLE_PERMISSION_MATRIX = {
     ),
     roles.PLATFORM_OPS: (
         P["view_all_tenants"],
+        P["submit_urun"],  # Ürün sihirbazı / ops products yazma
+        P["publish_urun"],
         P["approve_teklif"],
         P["manage_warehouse"],
         P["manage_return"],

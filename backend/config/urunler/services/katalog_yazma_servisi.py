@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -42,20 +43,83 @@ def _deny(actor, *, action, urun, exc, reason, detail=None):
     raise exc
 
 
-def _require_platform_submit(actor, *, action, urun=None):
+def _require_katalog_yazma(actor, *, action, urun=None):
+    """Platform veya tedarikçi + submit_urun (ADR sahiplik / kör havuz)."""
     try:
         require_perm(actor, P["submit_urun"], message="Ürün yazma yetkiniz yok.")
     except PermissionDenied as exc:
         _deny(actor, action=action, urun=urun, exc=exc, reason="yetki_yok")
     firma = getattr(actor, "firma", None)
-    if not (getattr(actor, "firma_id", None) and firma and firma.platform_mu):
+    if not getattr(actor, "firma_id", None) or firma is None:
         _deny(
             actor,
             action=action,
             urun=urun,
-            exc=PermissionDenied("Bu işlem yalnızca platform firması kullanıcılarınındır."),
-            reason="platform_firma_degil",
+            exc=PermissionDenied("Firma bağınız yok."),
+            reason="firma_yok",
         )
+    if getattr(firma, "platform_mu", False):
+        return
+    if getattr(firma, "tedarikci_mi", False):
+        return
+    _deny(
+        actor,
+        action=action,
+        urun=urun,
+        exc=PermissionDenied(
+            "Ürün yazma yalnız platform veya tedarikçi firması kullanıcılarınındır."
+        ),
+        reason="firma_rol_degil",
+    )
+
+
+def _require_platform_submit(actor, *, action, urun=None):
+    """Geriye uyum adı — katalog yazma (platform veya tedarikçi)."""
+    _require_katalog_yazma(actor, action=action, urun=urun)
+
+
+def _assert_urun_sahiplik_yazma(actor, urun, *, action: str) -> None:
+    """Platform her sahipli ürüne; tedarikçi yalnız kendi olusturan_firma ürününe."""
+    firma = getattr(actor, "firma", None)
+    if firma is not None and getattr(firma, "platform_mu", False):
+        return
+    if urun.olusturan_firma_id != getattr(actor, "firma_id", None):
+        _deny(
+            actor,
+            action=action,
+            urun=urun,
+            exc=PermissionDenied("Başka firmaya ait ürüne yazılamaz."),
+            reason="sahiplik_uyusmazligi",
+        )
+
+
+def _resolve_sahiplik_firma(actor, sahiplik_firma_id):
+    """Platform: zorunlu tedarikçi firma. Tedarikçi: actor.firma (client id yok sayılır)."""
+    from firmalar.models import Firma
+
+    firma = getattr(actor, "firma", None)
+    if firma is not None and getattr(firma, "tedarikci_mi", False) and not getattr(
+        firma, "platform_mu", False
+    ):
+        return firma
+    if firma is None or not getattr(firma, "platform_mu", False):
+        raise ValidationError(
+            {"sahiplik_firma_id": "Sahiplik yalnız platform veya tedarikçi ile atanır."}
+        )
+    if sahiplik_firma_id in (None, "", 0, "0"):
+        raise ValidationError(
+            {"sahiplik_firma_id": "Platform kullanıcıları tedarikçi firma seçmelidir."}
+        )
+    try:
+        pk = int(sahiplik_firma_id)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({"sahiplik_firma_id": "Geçersiz firma."}) from exc
+    hedef = Firma.objects.filter(pk=pk, aktif=True, tedarikci_mi=True).first()
+    if hedef is None:
+        raise ValidationError(
+            {"sahiplik_firma_id": "Aktif tedarikçi firma bulunamadı."}
+        )
+    return hedef
 
 
 def _resolve_fk(model_cls, raw_id, *, field_name: str, label: str):
@@ -119,9 +183,11 @@ def taslak_urun_olustur(
     slug: str = "",
     canonical_url: str | None = None,
     gorsel_alt_metni: str = "",
+    sahiplik_firma_id: int | None = None,
+    montur_grup_id=None,
 ) -> Urun:
-    """Platform taslak ürün — onay/yayın yalnız onay_servisi."""
-    _require_platform_submit(actor, action="urun.taslak_olustur")
+    """Taslak ürün — sahiplik: platform seçer / tedarikçi kendi firması."""
+    _require_katalog_yazma(actor, action="urun.taslak_olustur")
     ad = (ad or "").strip()
     if not ad:
         raise ValidationError({"ad": "Ürün adı zorunludur."})
@@ -135,6 +201,8 @@ def taslak_urun_olustur(
     yz_val = (yuzey or "").strip()
     if yz_val and yz_val not in dict(Urun.YUZEY):
         raise ValidationError({"yuzey": "Geçersiz yüzey değeri."})
+
+    sahiplik = _resolve_sahiplik_firma(actor, sahiplik_firma_id)
 
     kategori = Kategori.objects.filter(pk=kategori_id, aktif=True).first()
     if kategori is None:
@@ -159,7 +227,7 @@ def taslak_urun_olustur(
     try:
         with transaction.atomic():
             urun = Urun(
-                olusturan_firma=actor.firma,
+                olusturan_firma=sahiplik,
                 olusturan_kullanici=actor,
                 ad=ad,
                 aciklama=(aciklama or "").strip(),
@@ -179,6 +247,7 @@ def taslak_urun_olustur(
                 meta_baslik=(meta_baslik or "").strip()[:70],
                 meta_aciklama=(meta_aciklama or "").strip()[:160],
                 gorsel_alt_metni=(gorsel_alt_metni or "").strip(),
+                montur_grup_id=montur_grup_id,
             )
             slug_v = (slug or "").strip()
             if slug_v:
@@ -216,6 +285,153 @@ def taslak_urun_olustur(
         raise
 
 
+def _varyant_row_kwargs(row: dict) -> dict:
+    if not isinstance(row, dict):
+        raise ValidationError({"varyantlar": "Her satır nesne olmalı."})
+    return {
+        "gram": row.get("gram"),
+        "renk_id": row.get("renk_id"),
+        "beden_id": row.get("beden_id"),
+        "ayar_id": row.get("ayar_id"),
+        "ek_bedel": row.get("ek_bedel"),
+        "sabit_fiyat": row.get("sabit_fiyat"),
+        "tedarikci_sku": row.get("tedarikci_sku") or "",
+        "benzersiz_parca": bool(row.get("benzersiz_parca") or False),
+        "tip": row.get("tip"),
+        "parca_rolu": row.get("parca_rolu"),
+        "bas_stil": row.get("bas_stil"),
+        "govde_stil": row.get("govde_stil"),
+        "yuva_adedi": row.get("yuva_adedi"),
+        "izinli_kesimler": row.get("izinli_kesimler"),
+        "karat_min": row.get("karat_min"),
+        "karat_max": row.get("karat_max"),
+        "karat": row.get("karat"),
+        "kesim_kod": row.get("kesim_kod"),
+    }
+
+
+def ops_urun_olustur_atomic(
+    *,
+    actor,
+    ad: str,
+    kategori_id: int,
+    ayar_id: int | None = None,
+    varyantlar: list | None = None,
+    montur_modu: str | None = None,
+    parcalar: list | None = None,
+    **urun_kwargs,
+) -> dict:
+    """Tek atomic create: ≥1 varyant; HEAD+BAND → iki Urun + ortak montur_grup_id.
+
+    Dönüş: {urun, peer, montur_grup_id} — peer yalnız HEAD+BAND'de dolu (BAND).
+    Ana ürün HEAD (veya tek ürün).
+    """
+    modu = (montur_modu or "").strip().upper().replace("_", "+")
+    if modu in ("HEAD+BAND", "HEADBAND"):
+        if not isinstance(parcalar, (list, tuple)) or len(parcalar) != 2:
+            raise ValidationError(
+                {"parcalar": "HEAD+BAND için tam 2 parça (HEAD ve BAND) gerekli."}
+            )
+        roles = []
+        for p in parcalar:
+            if not isinstance(p, dict):
+                raise ValidationError({"parcalar": "Her parça nesne olmalı."})
+            rol = (p.get("parca_rolu") or "").strip().upper()
+            roles.append(rol)
+        if sorted(roles) != ["BAND", "HEAD"]:
+            raise ValidationError(
+                {"parcalar": "Parçalar HEAD ve BAND olmalı (birer tane)."}
+            )
+        grup = uuid.uuid4()
+        with transaction.atomic():
+            created = {}
+            for p in parcalar:
+                rol = (p.get("parca_rolu") or "").strip().upper()
+                pad = (p.get("ad") or "").strip() or (
+                    f"{ad} — Baş" if rol == "HEAD" else f"{ad} — Gövde"
+                )
+                paid = p.get("ayar_id") if p.get("ayar_id") not in (None, "") else ayar_id
+                if paid in (None, ""):
+                    raise ValidationError(
+                        {"ayar_id": f"{rol} parçası için ayar_id zorunlu."}
+                    )
+                vrows = p.get("varyantlar")
+                if not isinstance(vrows, (list, tuple)) or not vrows:
+                    # Tek satır: parça alanlarından varyant üret
+                    vrows = [
+                        {
+                            "gram": p.get("gram"),
+                            "renk_id": p.get("renk_id"),
+                            "beden_id": p.get("beden_id"),
+                            "ayar_id": paid,
+                            "tip": p.get("tip") or Varyant.Tip.MONTUR,
+                            "parca_rolu": rol,
+                            "bas_stil": p.get("bas_stil"),
+                            "govde_stil": p.get("govde_stil"),
+                            "yuva_adedi": p.get("yuva_adedi"),
+                            "izinli_kesimler": p.get("izinli_kesimler"),
+                            "karat_min": p.get("karat_min"),
+                            "karat_max": p.get("karat_max"),
+                            "sabit_fiyat": p.get("sabit_fiyat"),
+                        }
+                    ]
+                urun = taslak_urun_olustur(
+                    actor=actor,
+                    ad=pad,
+                    kategori_id=kategori_id,
+                    ayar_id=int(paid),
+                    montur_grup_id=grup,
+                    renk_ekseni=bool(
+                        urun_kwargs.get("renk_ekseni")
+                        or any(r.get("renk_id") for r in vrows if isinstance(r, dict))
+                    ),
+                    olcu_tipi=urun_kwargs.get("olcu_tipi") or "",
+                    fiyat_tipi=urun_kwargs.get("fiyat_tipi") or "gram",
+                    temin_tipi=urun_kwargs.get("temin_tipi") or "hazir",
+                    termin_gun=urun_kwargs.get("termin_gun"),
+                    satis_kanali_id=urun_kwargs.get("satis_kanali_id"),
+                    sahiplik_firma_id=urun_kwargs.get("sahiplik_firma_id"),
+                    aciklama=urun_kwargs.get("aciklama") or "",
+                )
+                for row in vrows:
+                    kw = _varyant_row_kwargs(row)
+                    if not kw.get("tip"):
+                        kw["tip"] = Varyant.Tip.MONTUR
+                    if not kw.get("parca_rolu"):
+                        kw["parca_rolu"] = rol
+                    if kw.get("ayar_id") in (None, ""):
+                        kw["ayar_id"] = paid
+                    varyant_ekle(actor=actor, urun=urun, **kw)
+                created[rol] = urun
+            return {
+                "urun": created["HEAD"],
+                "peer": created["BAND"],
+                "montur_grup_id": grup,
+            }
+
+    # Tek ürün
+    if not isinstance(varyantlar, (list, tuple)) or len(varyantlar) < 1:
+        raise ValidationError({"varyantlar": "En az bir varyant gerekli."})
+    if ayar_id in (None, ""):
+        # İlk metal varyanttan veya zorunlu
+        first = varyantlar[0] if isinstance(varyantlar[0], dict) else {}
+        ayar_id = first.get("ayar_id")
+    if ayar_id in (None, ""):
+        raise ValidationError({"ayar_id": "Ayar seçimi zorunludur."})
+
+    with transaction.atomic():
+        urun = taslak_urun_olustur(
+            actor=actor,
+            ad=ad,
+            kategori_id=kategori_id,
+            ayar_id=int(ayar_id),
+            **{k: v for k, v in urun_kwargs.items() if k != "montur_grup_id"},
+        )
+        for row in varyantlar:
+            varyant_ekle(actor=actor, urun=urun, **_varyant_row_kwargs(row))
+        return {"urun": urun, "peer": None, "montur_grup_id": None}
+
+
 _UNSET = object()
 
 
@@ -250,14 +466,7 @@ def taslak_urun_guncelle(
     """Taslak/reddedildi (veya meta açıklamalar için onaylı) ürün güncelleme."""
     _require_platform_submit(actor, action="urun.guncelle", urun=urun)
     urun.refresh_from_db()
-    if urun.olusturan_firma_id != actor.firma_id:
-        _deny(
-            actor,
-            action="urun.guncelle",
-            urun=urun,
-            exc=PermissionDenied("Başka firmaya ait ürün güncellenemez."),
-            reason="sahiplik_uyusmazligi",
-        )
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.guncelle")
     if urun.yayin_durumu == "aktif":
         raise ValidationError({"detail": "Yayında olan ürün düzenlenmeden önce pasife alınmalıdır."})
 
@@ -349,14 +558,7 @@ def taslak_urun_guncelle(
 def taslak_urun_sil(*, actor, urun: Urun) -> None:
     _require_platform_submit(actor, action="urun.sil", urun=urun)
     urun.refresh_from_db()
-    if urun.olusturan_firma_id != actor.firma_id:
-        _deny(
-            actor,
-            action="urun.sil",
-            urun=urun,
-            exc=PermissionDenied("Başka firmaya ait ürün silinemez."),
-            reason="sahiplik_uyusmazligi",
-        )
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.sil")
     if urun.yayin_durumu == "aktif" or urun.onay_durumu == "onayli":
         raise ValidationError({"detail": "Onaylı veya yayında olan ürün silinemez; pasife alabilirsiniz."})
     try:
@@ -383,11 +585,15 @@ def varyant_ekle(
     gram: Decimal | str | None = None,
     renk_id: int | None = None,
     beden_id: int | None = None,
+    ayar_id: int | None = None,
     ek_bedel: Decimal | str | None = None,
     sabit_fiyat: Decimal | str | None = None,
     tedarikci_sku: str = "",
     benzersiz_parca: bool = False,
     tip: str | None = None,
+    parca_rolu: str | None = None,
+    bas_stil: str | None = None,
+    govde_stil: str | None = None,
     yuva_adedi: int | None = None,
     izinli_kesimler: list | None = None,
     karat_min: Decimal | str | None = None,
@@ -398,14 +604,7 @@ def varyant_ekle(
     """Taslak/reddedildi ürüne aktif varyant ekle (onaya_gonder önkoşulu)."""
     _require_platform_submit(actor, action="urun.varyant_ekle", urun=urun)
     urun.refresh_from_db()
-    if urun.olusturan_firma_id != actor.firma_id:
-        _deny(
-            actor,
-            action="urun.varyant_ekle",
-            urun=urun,
-            exc=PermissionDenied("Başka firmaya ait ürüne varyant eklenemez."),
-            reason="sahiplik_uyusmazligi",
-        )
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.varyant_ekle")
     if urun.onay_durumu not in ("taslak", "reddedildi"):
         _deny(
             actor,
@@ -459,6 +658,17 @@ def varyant_ekle(
             {"tip": f"Geçersiz tip. İzin verilen: {', '.join(sorted(allowed_tips))}"}
         )
 
+    ayar = None
+    if tip_v == Varyant.Tip.TAS:
+        ayar = None
+    else:
+        aid = ayar_id if ayar_id not in (None, "", 0) else urun.ayar_id
+        if aid in (None, "", 0):
+            raise ValidationError({"ayar_id": "Metal tipinde ayar zorunludur."})
+        ayar = AyarMilyem.objects.filter(pk=int(aid)).first()
+        if ayar is None:
+            raise ValidationError({"ayar_id": "Ayar bulunamadı."})
+
     def _dec_opt(raw, field: str):
         if raw in (None, ""):
             return None
@@ -478,6 +688,16 @@ def varyant_ekle(
     karat_max_v = _dec_opt(karat_max, "karat_max")
     karat_v = _dec_opt(karat, "karat")
     kesim_kod_v = (kesim_kod or "").strip().upper()[:32]
+    parca_v = (parca_rolu or "").strip().upper()
+    if tip_v == Varyant.Tip.MONTUR:
+        if not parca_v:
+            parca_v = Varyant.ParcaRolu.FULL
+        if parca_v not in {c.value for c in Varyant.ParcaRolu}:
+            raise ValidationError({"parca_rolu": "FULL, HEAD veya BAND olmalı."})
+    else:
+        parca_v = ""
+    bas_stil_v = (bas_stil or "").strip().upper()[:48]
+    govde_stil_v = (govde_stil or "").strip().upper()[:48]
 
     try:
         with transaction.atomic():
@@ -487,10 +707,14 @@ def varyant_ekle(
                 gram=gram_v,
                 renk=renk,
                 beden=beden,
+                ayar=ayar,
                 sabit_fiyat=sabit_v,
                 ek_bedel=ek,
                 tedarikci_sku=(tedarikci_sku or "").strip()[:50],
                 benzersiz_parca=bool(benzersiz_parca),
+                parca_rolu=parca_v,
+                bas_stil=bas_stil_v,
+                govde_stil=govde_stil_v,
                 yuva_adedi=yuva_v,
                 izinli_kesimler=kesimler_v,
                 karat_min=karat_min_v,
@@ -530,12 +754,16 @@ def varyant_guncelle(
     gram: Decimal | str | None = None,
     renk_id: int | None = None,
     beden_id: int | None = None,
+    ayar_id=None,
     ek_bedel: Decimal | str | None = None,
     sabit_fiyat: Decimal | str | None = None,
     tedarikci_sku: str | None = None,
     benzersiz_parca: bool | None = None,
     aktif: bool | None = None,
     tip: str | None = None,
+    parca_rolu=None,
+    bas_stil=None,
+    govde_stil=None,
     yuva_adedi=None,
     izinli_kesimler=None,
     karat_min=None,
@@ -545,8 +773,7 @@ def varyant_guncelle(
 ) -> Varyant:
     urun = varyant.urun
     _require_platform_submit(actor, action="urun.varyant_guncelle", urun=urun)
-    if urun.olusturan_firma_id != actor.firma_id:
-        raise PermissionDenied("Başka firmaya ait varyant güncellenemez.")
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.varyant_guncelle")
 
     if gram is not None:
         varyant.gram = Decimal(str(gram)) if str(gram).strip() else None
@@ -558,6 +785,14 @@ def varyant_guncelle(
         varyant.renk = Renk.objects.filter(pk=int(renk_id)).first() if renk_id else None
     if beden_id is not None:
         varyant.beden = OlcuDegeri.objects.filter(pk=int(beden_id)).first() if beden_id else None
+    if ayar_id is not None:
+        if ayar_id in ("", 0, "0"):
+            varyant.ayar = None
+        else:
+            ayar = AyarMilyem.objects.filter(pk=int(ayar_id)).first()
+            if ayar is None:
+                raise ValidationError({"ayar_id": "Ayar bulunamadı."})
+            varyant.ayar = ayar
     if tedarikci_sku is not None:
         varyant.tedarikci_sku = tedarikci_sku.strip()[:50]
     if benzersiz_parca is not None:
@@ -572,6 +807,23 @@ def varyant_guncelle(
                 {"tip": f"Geçersiz tip. İzin verilen: {', '.join(sorted(allowed_tips))}"}
             )
         varyant.tip = tip_v
+    # Metal tipte ayar yoksa ürün varsayılanına düş
+    if varyant.tip != Varyant.Tip.TAS and not varyant.ayar_id:
+        if urun.ayar_id:
+            varyant.ayar_id = urun.ayar_id
+        else:
+            raise ValidationError({"ayar_id": "Metal tipinde ayar zorunludur."})
+    if varyant.tip == Varyant.Tip.TAS:
+        varyant.ayar = None
+    if parca_rolu is not None:
+        rol = str(parca_rolu or "").strip().upper()
+        if rol and rol not in {c.value for c in Varyant.ParcaRolu}:
+            raise ValidationError({"parca_rolu": "FULL, HEAD veya BAND olmalı."})
+        varyant.parca_rolu = rol
+    if bas_stil is not None:
+        varyant.bas_stil = str(bas_stil or "").strip().upper()[:48]
+    if govde_stil is not None:
+        varyant.govde_stil = str(govde_stil or "").strip().upper()[:48]
     if yuva_adedi is not None:
         if yuva_adedi in ("",):
             varyant.yuva_adedi = None
@@ -616,12 +868,11 @@ def urun_kopyala(*, actor, urun: Urun) -> Urun:
 
     _require_platform_submit(actor, action="urun.kopyala", urun=urun)
     urun.refresh_from_db()
-    if urun.olusturan_firma_id != actor.firma_id:
-        raise PermissionDenied("Başka firmaya ait ürün kopyalanamaz.")
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.kopyala")
 
     with transaction.atomic():
         kopya = Urun(
-            olusturan_firma=actor.firma,
+            olusturan_firma=urun.olusturan_firma,
             olusturan_kullanici=actor,
             ad=f"{urun.ad} (Kopya)"[:150],
             aciklama=urun.aciklama,
@@ -658,8 +909,10 @@ def urun_kopyala(*, actor, urun: Urun) -> Urun:
         for v in urun.varyantlar.filter(aktif=True):
             nv = Varyant(
                 urun=kopya,
+                tip=v.tip,
                 renk_id=v.renk_id,
                 beden_id=v.beden_id,
+                ayar_id=None if v.tip == Varyant.Tip.TAS else (v.ayar_id or urun.ayar_id),
                 gram=v.gram,
                 gram_bandi_min=v.gram_bandi_min,
                 gram_bandi_max=v.gram_bandi_max,
@@ -667,6 +920,15 @@ def urun_kopyala(*, actor, urun: Urun) -> Urun:
                 ek_bedel=v.ek_bedel,
                 tedarikci_sku=v.tedarikci_sku,
                 benzersiz_parca=v.benzersiz_parca,
+                parca_rolu=v.parca_rolu,
+                bas_stil=v.bas_stil,
+                govde_stil=v.govde_stil,
+                yuva_adedi=v.yuva_adedi,
+                izinli_kesimler=list(v.izinli_kesimler or []),
+                karat_min=v.karat_min,
+                karat_max=v.karat_max,
+                karat=v.karat,
+                kesim_kod=v.kesim_kod,
                 aktif=True,
             )
             nv.full_clean()
@@ -741,8 +1003,7 @@ def varyant_toplu_ekle(
     """Renk×ölçü matrisi — atomic; stok otomatik açılmaz (ADR-0037)."""
     _require_platform_submit(actor, action="urun.varyant_toplu_ekle", urun=urun)
     urun.refresh_from_db()
-    if urun.olusturan_firma_id != actor.firma_id:
-        raise PermissionDenied("Başka firmaya ait ürüne varyant eklenemez.")
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.varyant_toplu_ekle")
     if urun.onay_durumu not in ("taslak", "reddedildi"):
         raise ValidationError("Yalnızca taslak/reddedildi ürüne varyant eklenir.")
     if not isinstance(satirlar, (list, tuple)) or not satirlar:
@@ -798,14 +1059,36 @@ def varyant_toplu_ekle(
                     gram=row.get("gram"),
                     renk_id=row.get("renk_id"),
                     beden_id=row.get("beden_id"),
+                    ayar_id=row.get("ayar_id"),
                     ek_bedel=row.get("ek_bedel"),
                     sabit_fiyat=row.get("sabit_fiyat"),
                     tedarikci_sku=row.get("tedarikci_sku") or "",
                     benzersiz_parca=bool(row.get("benzersiz_parca") or False),
+                    tip=row.get("tip"),
                 )
             except ValidationError as exc:
+                alan = "satir"
+                detail = _validation_error_flat(exc)
+                if hasattr(exc, "message_dict") and isinstance(exc.message_dict, dict):
+                    first_key = next(iter(exc.message_dict.keys()), None)
+                    if first_key:
+                        alan = str(first_key)
+                        msgs = exc.message_dict[first_key]
+                        if isinstance(msgs, (list, tuple)) and msgs:
+                            detail = str(msgs[0])
+                        elif msgs:
+                            detail = str(msgs)
                 raise ValidationError(
-                    {"satirlar": f"Satır {i + 1}: {_validation_error_flat(exc)}"}
+                    {
+                        "satirlar": f"Satır {i + 1}: {detail}",
+                        "satir_hatalari": [
+                            {
+                                "satir_index": i,
+                                "alan": alan,
+                                "detail": detail,
+                            }
+                        ],
+                    }
                 ) from None
             created.append(v)
         record_audit(
@@ -822,8 +1105,7 @@ def varyant_toplu_ekle(
 def varyant_sil(*, actor, varyant: Varyant) -> None:
     urun = varyant.urun
     _require_platform_submit(actor, action="urun.varyant_sil", urun=urun)
-    if urun.olusturan_firma_id != actor.firma_id:
-        raise PermissionDenied("Başka firmaya ait varyant silinemez.")
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.varyant_sil")
     try:
         with transaction.atomic():
             vid = varyant.pk
@@ -850,6 +1132,7 @@ def urun_kanal_ekle_guncelle(
     aktif: bool = True,
 ) -> UrunKanal:
     _require_platform_submit(actor, action="urun.kanal_guncelle", urun=urun)
+    _assert_urun_sahiplik_yazma(actor, urun, action="urun.kanal_guncelle")
     kanal = SatisKanali.objects.filter(pk=kanal_id).first()
     if kanal is None:
         raise ValidationError({"kanal_id": "Satış kanalı bulunamadı."})

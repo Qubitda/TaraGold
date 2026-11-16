@@ -22,11 +22,12 @@ export const siparisService = {
       idempotencyKey: newIdempotencyKey(),
     });
   },
-  /** ADR-0043 — montür + taş(lar) bileşim satırı. */
+  /** ADR-0043/0044A — FULL|HEAD[+BAND] + taş(lar) bileşim satırı. */
   addCartLineBilesim(input: {
     montur_quote_id: number;
     taslar: { quote_id: number; miktar: string }[];
     miktar?: string;
+    band_quote_id?: number | null;
   }): Promise<{ line: unknown; cart: BuyerCart }> {
     return apiFetch<{ line: unknown; cart: BuyerCart }>("/carts/me/lines/", {
       method: "POST",
@@ -34,6 +35,9 @@ export const siparisService = {
         montur_quote_id: input.montur_quote_id,
         taslar: input.taslar,
         miktar: input.miktar ?? "1",
+        ...(input.band_quote_id
+          ? { band_quote_id: input.band_quote_id }
+          : {}),
       },
       idempotencyKey: newIdempotencyKey(),
     });

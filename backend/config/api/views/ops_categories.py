@@ -19,6 +19,7 @@ from api.pagination import apply_ordering, paginate_queryset
 from api.permissions import IsAuthenticatedWithFirma
 from api.throttles import BuyerRateThrottle, OpsRateThrottle
 from api.views.auth import _django_ve_to_drf
+from firmalar.models import Firma
 from firmalar.role_permissions import P
 from firmalar.services.audit_servisi import domain_atomic, record_audit
 from firmalar.services.yetki_servisi import can_view_all_tenants, has_perm
@@ -435,7 +436,8 @@ class OpsCatalogRefsView(APIView):
         def _list_for(key: str):
             model_cls, _ = _REF_MODEL_MAP[key]
             qs = model_cls.objects.order_by("sira", "ad")
-            if not include_inactive and not kaynak_param:
+            # Seçiciler: include_inactive yoksa pasif listelenmez (kaynak=? olsa da)
+            if not include_inactive:
                 qs = qs.filter(aktif=True)
             if term:
                 qs = qs.filter(Q(ad__icontains=term) | Q(kod__icontains=term))
@@ -443,7 +445,7 @@ class OpsCatalogRefsView(APIView):
             return [_present_ref_row(o, is_tas_tipi=is_tt) for o in qs]
 
         olcu_qs = OlcuDegeri.objects.order_by("tip", "sayisal_deger", "sira")
-        if not include_inactive and not kaynak_param:
+        if not include_inactive:
             olcu_qs = olcu_qs.filter(aktif=True)
         if term:
             olcu_qs = olcu_qs.filter(Q(deger__icontains=term) | Q(tip__icontains=term))
@@ -538,6 +540,12 @@ class OpsCatalogRefsView(APIView):
                 ],
                 "yuzeyler": [
                     {"kod": c[0], "ad": str(c[1])} for c in Urun.YUZEY
+                ],
+                "tedarikci_firmalar": [
+                    {"id": f.pk, "ad": f.ad, "kod": f.firma_kodu or ""}
+                    for f in Firma.objects.filter(aktif=True, tedarikci_mi=True).order_by(
+                        "ad", "pk"
+                    )
                 ],
                 "kaynaklar": _REF_META,
                 "server_now": timezone.now().isoformat(),

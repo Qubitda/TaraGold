@@ -7,7 +7,7 @@ from io import StringIO
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -38,8 +38,8 @@ from urunler.services import (
     pasife_al,
     present_gorsel,
     reddet,
+    ops_urun_olustur_atomic,
     taslak_urun_guncelle,
-    taslak_urun_olustur,
     taslak_urun_sil,
     urun_hazirlik_durumu,
     urun_kanal_ekle_guncelle,
@@ -68,12 +68,46 @@ def _can_ops_products(user) -> bool:
     )
 
 
-def _require_ops_products(user) -> None:
+def _can_ops_products_read(user) -> bool:
+    """Liste/detay: platform (tenant view) veya yazma yetkisi olan tedarikçi."""
+    from firmalar.services.yetki_servisi import can_view_all_tenants
+
     firma = getattr(user, "firma", None)
-    if not (firma and getattr(firma, "platform_mu", False)):
-        raise PermissionDenied(detail="Ops ürün yalnız platform.")
-    if not _can_ops_products(user):
-        raise PermissionDenied(detail="Ürün ops yetkisi yok.")
+    if firma is not None and getattr(firma, "platform_mu", False):
+        return can_view_all_tenants(user) or _can_ops_products(user)
+    if firma is not None and getattr(firma, "tedarikci_mi", False):
+        return has_perm(user, P["submit_urun"])
+    return False
+
+
+def _require_ops_products(user) -> None:
+    """Yazma uçları — submit/approve/publish (platform) veya tedarikçi submit."""
+    firma = getattr(user, "firma", None)
+    if firma is None:
+        raise PermissionDenied(detail="Firma bağınız yok.")
+    if getattr(firma, "platform_mu", False):
+        if not _can_ops_products(user):
+            raise PermissionDenied(detail="Ürün ops yetkisi yok.")
+        return
+    if getattr(firma, "tedarikci_mi", False):
+        if not has_perm(user, P["submit_urun"]):
+            raise PermissionDenied(detail="Ürün ops yetkisi yok.")
+        return
+    raise PermissionDenied(detail="Ops ürün yalnız platform veya tedarikçi.")
+
+
+def _require_ops_products_read(user) -> None:
+    if not _can_ops_products_read(user):
+        raise PermissionDenied(detail="Ürün ops görüntüleme yetkisi yok.")
+
+
+def _assert_ops_urun_gorunur(user, urun: Urun) -> None:
+    """Tedarikçi yalnız kendi sahipli ürününü görür/yazar (yabancı → 404)."""
+    firma = getattr(user, "firma", None)
+    if firma is not None and getattr(firma, "platform_mu", False):
+        return
+    if urun.olusturan_firma_id != getattr(user, "firma_id", None):
+        raise NotFound(detail="Ürün bulunamadı.")
 
 
 def _get_urun(pk: int) -> Urun:
@@ -91,6 +125,9 @@ def _get_urun(pk: int) -> Urun:
         .prefetch_related(
             "varyantlar__renk",
             "varyantlar__beden",
+            "varyantlar__ayar",
+            "varyantlar__ayar__metal",
+            "varyantlar__fiyatlar",
             "kanallar__kanal",
             "teknikler",
             "stiller",
@@ -106,6 +143,25 @@ def _get_urun(pk: int) -> Urun:
     return urun
 
 
+def _get_urun_for_user(user, pk: int) -> Urun:
+    """Pk’li ops ürün — sahiplik yoksa varlık sızdırmadan 404."""
+    urun = _get_urun(pk)
+    _assert_ops_urun_gorunur(user, urun)
+    return urun
+
+
+def _scope_ops_urun_qs(qs, user):
+    """Liste/export — tedarikçi yalnız kendi olusturan_firma ürünleri."""
+    firma = getattr(user, "firma", None)
+    if (
+        firma is not None
+        and getattr(firma, "tedarikci_mi", False)
+        and not getattr(firma, "platform_mu", False)
+    ):
+        return qs.filter(olusturan_firma_id=user.firma_id)
+    return qs
+
+
 class OpsProductListCreateView(IdempotencyMixin, APIView):
     """GET liste; POST taslak create."""
 
@@ -113,7 +169,7 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
     throttle_classes = [OpsRateThrottle]
 
     def get(self, request):
-        _require_ops_products(request.user)
+        _require_ops_products_read(request.user)
         qs = (
             Urun.objects.select_related(
                 "kategori",
@@ -123,6 +179,7 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
                 "yas_grubu",
                 "zincir_tipi",
                 "kopca_tipi",
+                "olusturan_firma",
             )
             .prefetch_related(
                 "kanallar__kanal",
@@ -134,9 +191,16 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
             .annotate(
                 varyant_count=Count(
                     "varyantlar", filter=Q(varyantlar__aktif=True)
-                )
+                ),
+                peer_id=Subquery(
+                    Urun.objects.filter(montur_grup_id=OuterRef("montur_grup_id"))
+                    .exclude(pk=OuterRef("pk"))
+                    .filter(montur_grup_id__isnull=False)
+                    .values("pk")[:1]
+                ),
             )
         )
+        qs = _scope_ops_urun_qs(qs, request.user)
         qs = apply_katalog_list_filters(qs, request.query_params)
         raw_ord = (request.query_params.get("ordering") or "").strip()
         if raw_ord == "vitrin":
@@ -163,19 +227,23 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
         body = request.data if isinstance(request.data, dict) else {}
         try:
             kid = int(body.get("kategori_id"))
-            aid = int(body.get("ayar_id"))
         except (TypeError, ValueError) as exc:
             raise ValidationError(
-                detail={"kategori_id": "Kategori ve ayar seçimi zorunludur."}
+                detail={"kategori_id": "Kategori seçimi zorunludur."}
             ) from exc
+        aid_raw = body.get("ayar_id")
+        aid = int(aid_raw) if aid_raw not in (None, "") else None
         try:
             sk = body.get("satis_kanali_id")
             tg = body.get("termin_gun")
-            urun = taslak_urun_olustur(
+            result = ops_urun_olustur_atomic(
                 actor=request.user,
                 ad=body.get("ad") or "",
                 kategori_id=kid,
                 ayar_id=aid,
+                varyantlar=body.get("varyantlar"),
+                montur_modu=body.get("montur_modu"),
+                parcalar=body.get("parcalar"),
                 aciklama=body.get("aciklama") or "",
                 fiyat_tipi=(body.get("fiyat_tipi") or "gram").strip() or "gram",
                 temin_tipi=(body.get("temin_tipi") or "hazir").strip() or "hazir",
@@ -197,22 +265,27 @@ class OpsProductListCreateView(IdempotencyMixin, APIView):
                 slug=body.get("slug") or "",
                 canonical_url=body.get("canonical_url"),
                 gorsel_alt_metni=body.get("gorsel_alt_metni") or "",
+                sahiplik_firma_id=body.get("sahiplik_firma_id"),
             )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc
         except DjangoPermissionDenied as exc:
             raise PermissionDenied(detail=str(exc)) from exc
-        response = Response(
-            present_ops_product(
-                _get_urun(urun.pk),
-                user=request.user,
-                request=request,
-                include_variants=True,
-                include_media=True,
-                include_hazirlik=True,
-            ),
-            status=status.HTTP_201_CREATED,
+        urun = result["urun"]
+        peer = result["peer"]
+        payload = present_ops_product(
+            _get_urun(urun.pk),
+            user=request.user,
+            request=request,
+            include_variants=True,
+            include_media=True,
+            include_hazirlik=True,
+            peer_id=peer.pk if peer is not None else None,
         )
+        if peer is not None:
+            payload["peer_id"] = peer.pk
+            payload["montur_grup_id"] = str(result["montur_grup_id"])
+        response = Response(payload, status=status.HTTP_201_CREATED)
         return self.idempotency_commit(request, response)
 
 
@@ -221,8 +294,8 @@ class OpsProductDetailView(IdempotencyMixin, APIView):
     throttle_classes = [OpsRateThrottle]
 
     def get(self, request, pk: int):
-        _require_ops_products(request.user)
-        urun = _get_urun(pk)
+        _require_ops_products_read(request.user)
+        urun = _get_urun_for_user(request.user, pk)
         return Response(
             present_ops_product(urun, user=request.user, request=request, include_variants=True, include_media=True, include_hazirlik=True)
         )
@@ -230,7 +303,7 @@ class OpsProductDetailView(IdempotencyMixin, APIView):
     def patch(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = _get_urun(pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         kwargs: dict[str, object] = {}
         for key in (
@@ -283,7 +356,7 @@ class OpsProductDetailView(IdempotencyMixin, APIView):
     def delete(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = _get_urun(pk)
+        urun = _get_urun_for_user(request.user, pk)
         try:
             taslak_urun_sil(actor=request.user, urun=urun)
         except DjangoValidationError as exc:
@@ -303,22 +376,27 @@ class OpsProductVariantCreateView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         renk_id = body.get("renk_id")
         beden_id = body.get("beden_id")
+        ayar_id = body.get("ayar_id")
         try:
             v = varyant_ekle(
                 actor=request.user,
                 urun=urun,
                 gram=body.get("gram"),
                 renk_id=int(renk_id) if renk_id not in (None, "") else None,
+                ayar_id=int(ayar_id) if ayar_id not in (None, "") else None,
                 beden_id=int(beden_id) if beden_id not in (None, "") else None,
                 ek_bedel=body.get("ek_bedel"),
                 sabit_fiyat=body.get("sabit_fiyat"),
                 tedarikci_sku=str(body.get("tedarikci_sku") or ""),
                 benzersiz_parca=bool(body.get("benzersiz_parca", False)),
                 tip=str(body.get("tip") or "").strip() or None,
+                parca_rolu=body.get("parca_rolu"),
+                bas_stil=body.get("bas_stil"),
+                govde_stil=body.get("govde_stil"),
                 yuva_adedi=body.get("yuva_adedi"),
                 izinli_kesimler=body.get("izinli_kesimler"),
                 karat_min=body.get("karat_min"),
@@ -343,6 +421,7 @@ class OpsProductVariantDetailView(APIView):
     def patch(self, request, pk: int, vid: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         v = get_object_or_404(Varyant.objects.select_related("urun"), pk=vid, urun_id=pk)
         body = request.data if isinstance(request.data, dict) else {}
         try:
@@ -352,12 +431,16 @@ class OpsProductVariantDetailView(APIView):
                 gram=body.get("gram") if "gram" in body else None,
                 renk_id=body.get("renk_id") if "renk_id" in body else None,
                 beden_id=body.get("beden_id") if "beden_id" in body else None,
+                ayar_id=body.get("ayar_id") if "ayar_id" in body else None,
                 ek_bedel=body.get("ek_bedel") if "ek_bedel" in body else None,
                 sabit_fiyat=body.get("sabit_fiyat") if "sabit_fiyat" in body else None,
                 tedarikci_sku=body.get("tedarikci_sku") if "tedarikci_sku" in body else None,
                 benzersiz_parca=body.get("benzersiz_parca") if "benzersiz_parca" in body else None,
                 aktif=body.get("aktif") if "aktif" in body else None,
                 tip=body.get("tip") if "tip" in body else None,
+                parca_rolu=body.get("parca_rolu") if "parca_rolu" in body else None,
+                bas_stil=body.get("bas_stil") if "bas_stil" in body else None,
+                govde_stil=body.get("govde_stil") if "govde_stil" in body else None,
                 yuva_adedi=body.get("yuva_adedi") if "yuva_adedi" in body else None,
                 izinli_kesimler=body.get("izinli_kesimler")
                 if "izinli_kesimler" in body
@@ -376,6 +459,7 @@ class OpsProductVariantDetailView(APIView):
     def delete(self, request, pk: int, vid: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         v = get_object_or_404(Varyant.objects.select_related("urun"), pk=vid, urun_id=pk)
         try:
             varyant_sil(actor=request.user, varyant=v)
@@ -394,7 +478,7 @@ class OpsProductChannelsView(APIView):
 
     def get(self, request, pk: int):
         _require_ops_products(request.user)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         existing = {uk.kanal_id: uk for uk in UrunKanal.objects.filter(urun=urun)}
         kanallar = SatisKanali.objects.order_by("sira", "ad")
         return Response(
@@ -417,7 +501,7 @@ class OpsProductChannelsView(APIView):
     def post(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         try:
             kanal_id = int(body.get("kanal_id"))
@@ -454,7 +538,7 @@ class OpsProductSubmitView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         try:
             urun = onaya_gonder(urun, request.user)
         except DjangoValidationError as exc:
@@ -477,7 +561,7 @@ class OpsProductApproveView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         try:
             urun = onayla(urun, request.user)
         except DjangoValidationError as exc:
@@ -500,7 +584,7 @@ class OpsProductRejectView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         neden = body.get("neden") or body.get("reason") or ""
         try:
@@ -525,7 +609,7 @@ class OpsProductPublishView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         durum = (body.get("durum") or "aktif").strip() or "aktif"
         try:
@@ -550,7 +634,7 @@ class OpsProductUnpublishView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         try:
             urun = pasife_al(urun, request.user)
         except DjangoValidationError as exc:
@@ -575,7 +659,7 @@ class OpsProductVariantBulkCreateView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         try:
             created = varyant_toplu_ekle(
@@ -605,8 +689,8 @@ class OpsProductReadinessView(APIView):
     throttle_classes = [OpsRateThrottle]
 
     def get(self, request, pk: int):
-        _require_ops_products(request.user)
-        urun = _get_urun(pk)
+        _require_ops_products_read(request.user)
+        urun = _get_urun_for_user(request.user, pk)
         return Response(urun_hazirlik_durumu(urun))
 
 
@@ -617,8 +701,8 @@ class OpsProductStockView(APIView):
     throttle_classes = [OpsRateThrottle]
 
     def get(self, request, pk: int):
-        _require_ops_products(request.user)
-        urun = _get_urun(pk)
+        _require_ops_products_read(request.user)
+        urun = _get_urun_for_user(request.user, pk)
         from stok.models import StockBalance
 
         vids = list(urun.varyantlar.values_list("pk", flat=True))
@@ -663,7 +747,7 @@ class OpsProductMediaListCreateView(APIView):
 
     def get(self, request, pk: int):
         _require_ops_products(request.user)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         rows = [
             present_gorsel(g, request=request)
             for g in urun.gorseller.order_by("sira", "pk")
@@ -673,7 +757,7 @@ class OpsProductMediaListCreateView(APIView):
     def post(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         dosya = request.FILES.get("dosya") or request.FILES.get("file")
         kapak_raw = request.data.get("kapak")
         kapak = str(kapak_raw).lower() in ("1", "true", "yes", "on")
@@ -711,6 +795,7 @@ class OpsProductMediaDetailView(APIView):
         """Kapak yap: {\"action\": \"set_cover\"} veya sıralama body ile list view kullan."""
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         g = get_object_or_404(UrunGorsel, pk=gid, urun_id=pk)
         action = (request.data.get("action") or "set_cover").strip()
         try:
@@ -727,6 +812,7 @@ class OpsProductMediaDetailView(APIView):
     def delete(self, request, pk: int, gid: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         g = get_object_or_404(UrunGorsel, pk=gid, urun_id=pk)
         try:
             gorsel_sil(actor=request.user, gorsel=g)
@@ -746,7 +832,7 @@ class OpsProductMediaReorderView(APIView):
     def post(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         try:
             rows = gorsel_sirala(
@@ -773,6 +859,7 @@ class OpsProductPricePreviewView(APIView):
 
     def get(self, request, pk: int, vid: int):
         _require_ops_products(request.user)
+        _get_urun_for_user(request.user, pk)
         v = get_object_or_404(
             Varyant.objects.select_related("urun", "urun__ayar"),
             pk=vid,
@@ -797,7 +884,7 @@ class OpsProductCopyView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
-        src = get_object_or_404(Urun, pk=pk)
+        src = _get_urun_for_user(request.user, pk)
         try:
             kopya = urun_kopyala(actor=request.user, urun=src)
         except DjangoValidationError as exc:
@@ -847,6 +934,14 @@ class OpsProductBulkActionView(APIView):
             if urun is None:
                 errors.append({"id": pk, "detail": "Bulunamadı"})
                 continue
+            firma = getattr(request.user, "firma", None)
+            if (
+                firma is not None
+                and not getattr(firma, "platform_mu", False)
+                and urun.olusturan_firma_id != request.user.firma_id
+            ):
+                errors.append({"id": pk, "detail": "Bulunamadı"})
+                continue
             try:
                 if action == "submit":
                     onaya_gonder(urun, request.user)
@@ -871,7 +966,7 @@ class OpsProductExportView(APIView):
     throttle_classes = [OpsRateThrottle]
 
     def get(self, request):
-        _require_ops_products(request.user)
+        _require_ops_products_read(request.user)
         qs = (
             Urun.objects.select_related("kategori", "ayar", "koleksiyon")
             .annotate(
@@ -879,6 +974,7 @@ class OpsProductExportView(APIView):
             )
             .order_by("-pk")
         )
+        qs = _scope_ops_urun_qs(qs, request.user)
         qs = apply_katalog_list_filters(qs, request.query_params)[:5000]
         buf = StringIO()
         w = csv.writer(buf)
@@ -926,7 +1022,7 @@ class OpsProductAuditView(APIView):
 
     def get(self, request, pk: int):
         _require_ops_products(request.user)
-        get_object_or_404(Urun, pk=pk)
+        _get_urun_for_user(request.user, pk)
         rows = (
             AuditOlay.objects.filter(entity_type="Urun", entity_id=str(pk))
             .select_related("actor")
@@ -960,7 +1056,7 @@ class OpsProductStoneListCreateView(APIView):
 
     def get(self, request, pk: int):
         _require_ops_products(request.user)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         rows = [
             present_urun_tasi(t)
             for t in urun.taslar.select_related("tas_tipi").order_by("pk")
@@ -970,7 +1066,7 @@ class OpsProductStoneListCreateView(APIView):
     def post(self, request, pk: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
-        urun = get_object_or_404(Urun, pk=pk)
+        urun = _get_urun_for_user(request.user, pk)
         body = request.data if isinstance(request.data, dict) else {}
         try:
             row = tas_ekle(actor=request.user, urun=urun, body=body)
@@ -990,6 +1086,7 @@ class OpsProductStoneDetailView(APIView):
     def patch(self, request, pk: int, sid: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         row = get_object_or_404(
             UrunTasi.objects.select_related("urun", "tas_tipi"), pk=sid, urun_id=pk
         )
@@ -1005,6 +1102,7 @@ class OpsProductStoneDetailView(APIView):
     def delete(self, request, pk: int, sid: int):
         _require_ops_products(request.user)
         enforce_csrf(request)
+        _get_urun_for_user(request.user, pk)
         row = get_object_or_404(UrunTasi, pk=sid, urun_id=pk)
         try:
             tas_sil(actor=request.user, row=row)

@@ -41,6 +41,12 @@ class Adr0037KatalogP0Tests(TestCase):
         ensure_platform_firma()
         seed_role_permissions()
         platform = Firma.objects.get(platform_mu=True)
+        cls.ted = Firma.objects.create(
+            ad="P0 Ted",
+            firma_kodu="P0TED",
+            tedarikci_mi=True,
+            aktif=True,
+        )
         cls.ops = User.objects.create_user(
             username="ops_p0",
             password="DemoPortal1!",
@@ -72,6 +78,7 @@ class Adr0037KatalogP0Tests(TestCase):
             fiyat_tipi="gram",
             renk_ekseni=True,
             olcu_tipi="yuzuk_no",
+            sahiplik_firma_id=self.ted.pk,
         )
 
     def test_hazirlik_requires_variant_and_cover(self):

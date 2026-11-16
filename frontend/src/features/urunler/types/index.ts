@@ -1,3 +1,7 @@
+import type { OpsVariantTipFromSchema } from "../schemas";
+
+export type OpsVariantTip = OpsVariantTipFromSchema;
+
 export interface BuyerCatalogVariant {
   id: number;
   sku: string;
@@ -183,9 +187,6 @@ export interface BuyerCatalogPage {
   results: BuyerCatalogItem[];
 }
 
-/** ADR-0043 — varyant katalog tipi */
-export type OpsVariantTip = "HAM_ALTIN" | "MONTUR" | "TAS" | "TASLI";
-
 export interface OpsProductVariant {
   id: number;
   sku: string;
@@ -200,7 +201,10 @@ export interface OpsProductVariant {
   sabit_fiyat?: string | null;
   tedarikci_sku?: string;
   benzersiz_parca?: boolean;
-  /** ADR-0044 — montür uyumluluk */
+  /** ADR-0044 — montür parça + uyumluluk */
+  parca_rolu?: "FULL" | "HEAD" | "BAND" | string;
+  bas_stil?: string;
+  govde_stil?: string;
   yuva_adedi?: number | null;
   izinli_kesimler?: string[];
   karat_min?: string | null;
@@ -209,6 +213,11 @@ export interface OpsProductVariant {
   karat?: string | null;
   kesim_kod?: string;
   imalata_acik?: boolean;
+  ayar_id?: number | null;
+  ayar?: string;
+  metal_id?: number | null;
+  metal?: string;
+  metal_rengi?: string;
 }
 
 export interface OpsProductChannelItem {
@@ -260,6 +269,8 @@ export interface OpsProduct {
   yayin_durumu: string;
   red_nedeni?: string;
   olusturan_firma_id: number;
+  sahiplik_firma_id?: number;
+  sahiplik_firma_ad?: string;
   varyant_count: number;
   kanallar?: Array<{ kanal_id: number; kod: string; ad: string; aktif: boolean }>;
   allowed_actions?: string[];
@@ -274,6 +285,8 @@ export interface OpsProduct {
   gorsel_alt_metni?: string;
   olusturan_kullanici_id?: number | null;
   guncelleme_zamani?: string | null;
+  montur_grup_id?: string | null;
+  peer_id?: number | null;
 }
 
 export interface OpsProductStone {
@@ -297,31 +310,20 @@ export interface OpsProductPage {
   results: OpsProduct[];
 }
 
-export interface OpsProductCreateRequest {
-  ad: string;
-  kategori_id: number;
-  ayar_id: number;
-  aciklama?: string;
-  fiyat_tipi?: string;
-  temin_tipi?: string;
-  termin_gun?: number | null;
-  renk_ekseni?: boolean;
-  olcu_tipi?: string;
-  koleksiyon_id?: number | null;
-  hedef_kitle?: string;
-  yas_grubu_id?: number | null;
-  yuzey?: string;
-  zincir_tipi_id?: number | null;
-  kopca_tipi_id?: number | null;
-  teknik_ids?: number[];
-  stil_ids?: number[];
-  ozel_gun_ids?: number[];
-  satis_kanali_id?: number;
-  meta_baslik?: string;
-  meta_aciklama?: string;
-  slug?: string;
-  canonical_url?: string;
-  gorsel_alt_metni?: string;
+/** İstek tipleri — tek kaynak: `schemas/index.ts` (zod). */
+export type {
+  OpsProductCreateInput as OpsProductCreateRequest,
+  OpsVariantCreateInput as OpsProductVariantCreateRequest,
+  OpsVariantCreateInput as OpsProductVariantCreateRow,
+  OpsMonturParcaInput as OpsProductCreateMonturParca,
+  BulkVariantErrorInput as BulkVariantError,
+} from "../schemas";
+
+export interface OpsProductCreateResponse {
+  id: number;
+  peer_id?: number | null;
+  montur_grup_id?: string | null;
+  hazirlik?: ProductReadiness;
 }
 
 export interface OpsProductUpdateRequest {
@@ -350,24 +352,25 @@ export interface OpsProductUpdateRequest {
   gorsel_alt_metni?: string;
 }
 
-export interface OpsProductVariantCreateRequest {
+export interface OpsProductVariantUpdateRequest {
   tip?: OpsVariantTip | string;
   gram?: string;
   renk_id?: number | null;
   beden_id?: number | null;
+  ayar_id?: number;
   ek_bedel?: string;
   sabit_fiyat?: string;
   tedarikci_sku?: string;
   benzersiz_parca?: boolean;
+  parca_rolu?: "FULL" | "HEAD" | "BAND" | string;
+  bas_stil?: string;
+  govde_stil?: string;
   yuva_adedi?: number | null;
   izinli_kesimler?: string[];
   karat_min?: string | null;
   karat_max?: string | null;
   karat?: string | null;
   kesim_kod?: string;
-}
-
-export interface OpsProductVariantUpdateRequest extends OpsProductVariantCreateRequest {
   aktif?: boolean;
 }
 
@@ -483,6 +486,7 @@ export interface CatalogRefsResponse {
   temin_tipleri: Array<{ kod: string; ad: string }>;
   hedef_kitleler?: Array<{ kod: string; ad: string }>;
   yuzeyler?: Array<{ kod: string; ad: string }>;
+  tedarikci_firmalar?: Array<{ id: number; ad: string; kod: string }>;
   kaynaklar?: CatalogRefKaynakMeta[];
   server_now?: string;
 }
@@ -495,6 +499,9 @@ export interface MonturCatalogVariant {
   renk: string;
   beden: string;
   imalata_acik?: boolean;
+  parca_rolu?: string;
+  bas_stil?: string;
+  govde_stil?: string;
   yuva_adedi?: number | null;
   izinli_kesimler?: string[];
   karat_min?: string | null;

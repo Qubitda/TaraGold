@@ -123,7 +123,20 @@ def quote(
     ttl = kur_servisi.kanal_quote_ttl_saniye(satis_kanali)
 
     urun = varyant.urun
-    ayar = urun.ayar
+    # Metal varyant: doğrudan varyant.ayar (ADR-0044 / FAZ 1). TAS metal yolu yok.
+    tip = getattr(varyant, "tip", None) or "HAM_ALTIN"
+    if tip == "TAS":
+        ayar = None
+    else:
+        ayar = getattr(varyant, "ayar", None)
+        if ayar is None and getattr(varyant, "ayar_id", None):
+            from tanimlar.models import AyarMilyem
+
+            ayar = AyarMilyem.objects.filter(pk=varyant.ayar_id).first()
+        if ayar is None:
+            raise ValidationError(
+                "Metal varyantında ayar zorunlu; fiyat hesaplanamaz."
+            )
     metal = ayar.metal if ayar is not None else None
     milyem = ayar.milyem if ayar is not None else None
 

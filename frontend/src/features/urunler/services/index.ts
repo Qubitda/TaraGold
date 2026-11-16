@@ -1,7 +1,8 @@
-import { apiFetch, newIdempotencyKey } from "@/lib/api/client";
+import { ApiError, apiFetch, apiFetchBlob, newIdempotencyKey } from "@/lib/api/client";
 import type {
   BuyerCatalogPage,
   BuyerCatalogDetail,
+  BulkVariantError,
   CatalogRefItem,
   CatalogRefsResponse,
   CatalogRefsSinglePage,
@@ -13,6 +14,7 @@ import type {
   OpsProductChannelItem,
   OpsProductPage,
   OpsProductCreateRequest,
+  OpsProductCreateResponse,
   OpsProductStone,
   OpsProductUpdateRequest,
   OpsProductVariant,
@@ -24,6 +26,45 @@ import type {
   ProductReadiness,
   TaslarPage,
 } from "../types";
+
+/** Bulk varyant 400 gövdesinden satır hatalarını çıkar. */
+export function parseBulkVariantErrors(err: unknown): BulkVariantError[] {
+  if (!(err instanceof ApiError)) return [];
+  const errors = err.problem.errors;
+  if (!errors || typeof errors !== "object") return [];
+  const raw = (errors as Record<string, unknown>).satir_hatalari;
+  if (!Array.isArray(raw)) {
+    // Geriye uyum: { satirlar: "Satır N: …" }
+    const flat = (errors as Record<string, unknown>).satirlar;
+    if (typeof flat === "string") {
+      const m = /Satır\s+(\d+)\s*:\s*(.*)/i.exec(flat);
+      if (m) {
+        return [
+          {
+            satir_index: Math.max(0, Number(m[1]) - 1),
+            alan: "satir",
+            detail: m[2] || flat,
+          },
+        ];
+      }
+      return [{ satir_index: 0, alan: "satirlar", detail: flat }];
+    }
+    return [];
+  }
+  return raw
+    .map((row): BulkVariantError | null => {
+      if (!row || typeof row !== "object") return null;
+      const r = row as Record<string, unknown>;
+      const idx = Number(r.satir_index);
+      if (!Number.isFinite(idx)) return null;
+      return {
+        satir_index: idx,
+        alan: String(r.alan || "satir"),
+        detail: String(r.detail || ""),
+      };
+    })
+    .filter((x): x is BulkVariantError => x != null);
+}
 
 function qs(params?: Record<string, string | undefined>): string {
   if (!params) return "";
@@ -76,13 +117,23 @@ export const urunlerService = {
       method: "DELETE",
     });
   },
+  /**
+   * Seçici listeleri — varsayılan yalnız aktif=true (include_inactive gönderme).
+   * Pasif kayıtlar için `include_inactive=1` geç.
+   */
   getCatalogRefs(params?: Record<string, string | undefined>): Promise<CatalogRefsResponse> {
-    return apiFetch<CatalogRefsResponse>(`/ops/catalog-refs/${qs(params)}`);
+    const next = { ...params };
+    // Seçiciler pasif görmesin; açıkça istenmedikçe include_inactive silinir
+    if (next.include_inactive !== "1" && next.include_inactive !== "true") {
+      delete next.include_inactive;
+    }
+    return apiFetch<CatalogRefsResponse>(`/ops/catalog-refs/${qs(next)}`);
   },
   getCatalogRefItems(
     kaynak: string,
     params?: { q?: string; include_inactive?: string }
   ): Promise<CatalogRefsSinglePage> {
+    // Tanımlar paneli: pasifler de (varsayılan include_inactive=1)
     return apiFetch<CatalogRefsSinglePage>(
       `/ops/catalog-refs/${qs({ kaynak, include_inactive: params?.include_inactive ?? "1", q: params?.q })}`
     );
@@ -120,8 +171,8 @@ export const urunlerService = {
   getOpsProduct(id: number | string): Promise<OpsProduct> {
     return apiFetch<OpsProduct>(`/ops/products/${id}/`);
   },
-  createOpsProduct(data: OpsProductCreateRequest): Promise<OpsProduct> {
-    return apiFetch<OpsProduct>("/ops/products/", {
+  createOpsProduct(data: OpsProductCreateRequest): Promise<OpsProductCreateResponse> {
+    return apiFetch<OpsProductCreateResponse>("/ops/products/", {
       method: "POST",
       body: data,
       idempotencyKey: newIdempotencyKey(),
@@ -334,8 +385,11 @@ export const urunlerService = {
       body: { action, ids },
     });
   },
-  exportOpsProductsCsv(params?: Record<string, string | undefined>): string {
-    return `/api/v1/ops/products/export/${qs(params)}`;
+  /** Session+CSRF ile CSV Blob; yetki hatasında ApiError (çağıran toast eder). */
+  downloadOpsProductsCsv(
+    params?: Record<string, string | undefined>
+  ): Promise<Blob> {
+    return apiFetchBlob(`/ops/products/export/${qs(params)}`, "text/csv,*/*");
   },
   getOpsProductAudit(
     id: number | string

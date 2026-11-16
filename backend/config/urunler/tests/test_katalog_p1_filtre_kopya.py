@@ -38,6 +38,12 @@ class KatalogP1FiltreKopyaTests(TestCase):
         ensure_platform_firma()
         seed_role_permissions()
         platform = Firma.objects.get(platform_mu=True)
+        cls.ted = Firma.objects.create(
+            ad="P1F Ted",
+            firma_kodu="P1FTED",
+            tedarikci_mi=True,
+            aktif=True,
+        )
         cls.ops = User.objects.create_user(
             username="ops_p1f",
             password="DemoPortal1!",
@@ -63,6 +69,7 @@ class KatalogP1FiltreKopyaTests(TestCase):
             ad="Kaynak Alyans",
             kategori_id=self.kat.pk,
             ayar_id=self.ayar.pk,
+            sahiplik_firma_id=self.ted.pk,
             fiyat_tipi="gram",
             renk_ekseni=True,
             olcu_tipi="yuzuk_no",
@@ -93,12 +100,14 @@ class KatalogP1FiltreKopyaTests(TestCase):
             ad="Yeni ürün",
             kategori_id=self.kat.pk,
             ayar_id=self.ayar.pk,
+            sahiplik_firma_id=self.ted.pk,
         )
         b = taslak_urun_olustur(
             actor=self.ops,
             ad="Yeni ürün",
             kategori_id=self.kat.pk,
             ayar_id=self.ayar.pk,
+            sahiplik_firma_id=self.ted.pk,
         )
         self.assertEqual(a.slug, "yeni-urun")
         self.assertEqual(b.slug, "yeni-urun-2")
@@ -110,6 +119,7 @@ class KatalogP1FiltreKopyaTests(TestCase):
             ad="Filtre A",
             kategori_id=self.kat.pk,
             ayar_id=self.ayar.pk,
+            sahiplik_firma_id=self.ted.pk,
             renk_ekseni=True,
             olcu_tipi="yuzuk_no",
         )
@@ -118,6 +128,7 @@ class KatalogP1FiltreKopyaTests(TestCase):
             ad="Filtre B",
             kategori_id=self.kat.pk,
             ayar_id=self.ayar.pk,
+            sahiplik_firma_id=self.ted.pk,
             renk_ekseni=True,
             olcu_tipi="yuzuk_no",
         )

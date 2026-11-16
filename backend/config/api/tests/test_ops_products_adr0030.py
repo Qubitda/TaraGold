@@ -79,6 +79,8 @@ class OpsProductsAdr0030Tests(PriceQuoteFixtureMixin, APITestCase):
                 "ayar_id": self.ayar.pk,
                 "aciklama": "ADR-0030",
                 "satis_kanali_id": self.kanal.pk,
+                "sahiplik_firma_id": self.ted.pk,
+                "varyantlar": [{"gram": "2.500", "ek_bedel": "5.00"}],
             },
             format="json",
             **self._idem("ops-p-create-1"),
@@ -87,18 +89,14 @@ class OpsProductsAdr0030Tests(PriceQuoteFixtureMixin, APITestCase):
         body = create.json()
         self.assertEqual(body["onay_durumu"], "taslak")
         self.assertEqual(body["yayin_durumu"], "pasif")
-        self.assertEqual(body["olusturan_firma_id"], self.platform.pk)
-        self.assertNotIn("tedarikci_sku", str(body))
+        self.assertEqual(body["olusturan_firma_id"], self.ted.pk)
+        self.assertEqual(body["sahiplik_firma_id"], self.ted.pk)
+        self.assertEqual(body["sahiplik_firma_ad"], self.ted.ad)
+        # Ops varyant DTO alanı boş gelebilir; alıcıya sızan maliyet alanı yok.
+        self.assertNotIn("maliyet", str(body).lower())
         pid = body["id"]
-
-        var = self.api.post(
-            reverse("api-ops-product-variants", kwargs={"pk": pid}),
-            {"gram": "2.500", "ek_bedel": "5.00"},
-            format="json",
-            **self._idem("ops-p-var-1"),
-        )
-        self.assertEqual(var.status_code, 201, var.content)
-        self.assertEqual(Decimal(var.json()["gram"]), Decimal("2.500"))
+        self.assertGreaterEqual(len(body.get("varyantlar") or []), 1)
+        self.assertEqual(Decimal(body["varyantlar"][0]["gram"]), Decimal("2.500"))
 
         # ADR-0037: onaya göndermeden önce kapak görseli zorunlu
         gorsel_ekle(

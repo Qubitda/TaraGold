@@ -60,6 +60,7 @@ nihai\_satis &= ham\_satis + satis\_marj && \text{(TL)} \\
 - Son tick Redis (yoksa DB scratch); `feed_*_kaydet` **throttle** (≈5 sn veya %0.05 değişim).
 - Anomali: tek tick %N (varsayılan 2) sıçrama / bid>ask / ≤0 → red, LKG korunur, alert.
 - Bayat: `max_gecikme` (öneri **30 sn**) → `FEED_STALE_LKG` + “gecikmeli”; **300 sn** → fiyat gizlenir, **ödeme kur snapshot reddedilir** (sessiz fallback yok). Mevcut LKG/banner ile uyumlu.
+- **Okuma güvenliği (2026-11-16):** `present_buyer_pano` → `ensure_fresh_feed_for_read` (throttled REST poll). Ingest süreci düşse bile HAS/ONS boş `—` kalmasın. Altın satırı yokken yalnız döviz → `kaynak=FAIL` (yanlış “son bilinen” yok). İşletim: `python manage.py ingest_binance_piyasa --loop`.
 
 ## 5. Karar — model / katalog
 

@@ -131,13 +131,10 @@ class BuyerCatalogMonturListView(APIView):
 
         def _present_montur(u: Urun) -> dict:
             from urunler.models import Varyant as V
-            from urunler.services.uyumluluk_servisi import (
-                montur_imalata_acik,
-                present_uyumluluk,
-            )
+            from urunler.services.uyumluluk_servisi import present_uyumluluk
 
             item = BuyerCatalogItemPresenter(u)
-            # ADR-0044 sıkı: uyumluluk boşsa imalat listesine girmez
+            # Tüm MONTUR parçaları (FULL/HEAD/BAND); imalata_acik bayrağı FE filtreler
             item["varyantlar"] = [
                 {
                     "id": v.pk,
@@ -149,7 +146,7 @@ class BuyerCatalogMonturListView(APIView):
                     **present_uyumluluk(v),
                 }
                 for v in u.varyantlar.all()
-                if v.aktif and v.tip == V.Tip.MONTUR and montur_imalata_acik(v)
+                if v.aktif and v.tip == V.Tip.MONTUR
             ]
             assert_masked(item, context="buyer")
             return item

@@ -21,13 +21,19 @@ export const piyasaKeys = {
     [...piyasaKeys.all, "ops-marj-kurallari", params ?? {}] as const,
 };
 
-/** Canlı/LKG board — 30s refetch; marj alanı yok. */
+/** Canlı/LKG board — sağlıklıyken 30s; gecikme/kopukta 5s (müşteri boş fiyat görmesin). */
 export function usePiyasaPano(olcek?: PiyasaOlcek) {
   return useQuery({
     queryKey: piyasaKeys.pano(olcek),
     queryFn: () => piyasaService.getPano(olcek),
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      if (!d || d.gecikmeli || d.kaynak === "LKG" || d.kaynak === "FAIL") {
+        return 5_000;
+      }
+      return 30_000;
+    },
+    staleTime: 5_000,
   });
 }
 

@@ -123,7 +123,13 @@ class BinanceBookTickerProvider:
     def fetch_book_tickers(
         self, items: list[tuple[str, str]]
     ) -> dict[str, BookTicker]:
+        """Sembol bazında yumuşak hata: GBP 0 book tüm poll'u düşürmesin."""
         out: dict[str, BookTicker] = {}
         for symbol, market in items:
-            out[symbol.upper()] = self.fetch_book_ticker(symbol, market=market)
+            sym = symbol.upper()
+            try:
+                out[sym] = self.fetch_book_ticker(symbol, market=market)
+            except (ValidationError, ValueError) as exc:
+                logger.warning("Binance bookTicker atlandı (%s): %s", sym, exc)
+                continue
         return out

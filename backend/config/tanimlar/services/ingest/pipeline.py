@@ -450,11 +450,15 @@ def run_rest_poll_once(
         try:
             kur_servisi.set_feed_health(
                 health="FEED_FAIL",
-                banner=f"Canlı veri kopuk: {exc}",
+                banner="Canlı veri kopuk; fiyat kullanmayın.",
             )
         except Exception:  # noqa: BLE001
             logger.exception("FEED_FAIL yazılamadı")
         return result
+
+    wanted = {sym for sym, _m in _symbol_items()}
+    for sym in sorted(wanted - set(ticks)):
+        result.rejected.append(f"{sym}: bookTicker yok/atlandı")
 
     for sym, tick in ticks.items():
         ok, reason = apply_tick(tick, source=provider.name)
@@ -550,3 +554,61 @@ def feed_age_banner(*, now=None) -> dict[str, Any]:
             "hide": False,
         }
     return {"health": "FEED_OK", "banner": "", "age": max_age, "hide": False}
+
+
+_LAZY_POLL_THROTTLE_KEY = "piyasa:lazy_rest_poll:throttle"
+_LAZY_POLL_LOCK_KEY = "piyasa:lazy_rest_poll:lock"
+
+
+def ensure_fresh_feed_for_read(*, force: bool = False) -> dict[str, Any]:
+    """Pano okumasında bayat/kopuk feed → throttled REST poll.
+
+    Ingest süreci düşse bile müşteri panosunda boş HAS/ONS (—) kalmasın.
+    En fazla ~12 sn'de bir poll; kilit ile çakışmayı önler.
+    """
+    from django.core.cache import cache
+
+    age = feed_age_banner()
+    stale_s = int(getattr(settings, "PIYASA_FEED_STALE_SECONDS", 30))
+    # Hide/fail veya stale eşiğinin %70'i → proaktif yenile
+    age_s = age.get("age")
+    needs = bool(
+        force
+        or age.get("hide")
+        or age.get("health") in ("FEED_FAIL", "FEED_STALE_LKG")
+        or age_s is None
+        or (isinstance(age_s, (int, float)) and age_s >= max(8.0, stale_s * 0.7))
+    )
+    if not needs:
+        return {"skipped": True, "reason": "fresh", **age}
+
+    if not force and cache.get(_LAZY_POLL_THROTTLE_KEY):
+        return {"skipped": True, "reason": "throttled", **age}
+
+    if not cache.add(_LAZY_POLL_LOCK_KEY, "1", timeout=45):
+        return {"skipped": True, "reason": "busy", **age}
+
+    try:
+        result = run_rest_poll_once(kaynak="api")
+        cache.set(_LAZY_POLL_THROTTLE_KEY, "1", timeout=12)
+        out: dict[str, Any] = {
+            "skipped": False,
+            "ok": result.ok,
+            "ticks": len(result.ticks),
+            "persisted": list(result.persisted or []),
+            "rejected": len(result.rejected),
+            "errors": list(result.errors[:3]),
+        }
+        out.update(feed_age_banner())
+        if not result.ok and not result.persisted:
+            logger.warning(
+                "lazy_feed_poll zayıf: errors=%s rejected=%s",
+                result.errors[:2],
+                result.rejected[:2],
+            )
+        return out
+    except Exception as exc:  # noqa: BLE001 — pano kırılmasın
+        logger.exception("lazy_feed_poll hata")
+        return {"skipped": False, "ok": False, "errors": [str(exc)], **age}
+    finally:
+        cache.delete(_LAZY_POLL_LOCK_KEY)

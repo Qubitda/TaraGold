@@ -1,6 +1,7 @@
 """Ürün uygulamasının servis katmanı."""
 
 from .katalog_yazma_servisi import (
+    ops_urun_olustur_atomic,
     taslak_urun_guncelle,
     taslak_urun_olustur,
     taslak_urun_sil,
@@ -43,6 +44,7 @@ __all__ = [
     "onaya_gonder",
     "onayla",
     "ops_fiyat_onizleme",
+    "ops_urun_olustur_atomic",
     "pasife_al",
     "present_gorsel",
     "reddet",

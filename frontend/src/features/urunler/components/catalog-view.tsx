@@ -51,6 +51,8 @@ import {
   type OpsWorkspaceTab,
 } from "./ops-product-workspace";
 import { MonturTasComposePanel } from "./montur-tas-compose-panel";
+import { MonturTasCatalogGrid } from "./montur-tas-catalog-grid";
+import { OpsProductCreateWizard } from "./ops-product-create-wizard";
 import {
   Table,
   TableHeader,
@@ -86,7 +88,7 @@ import {
 
 type ViewMode = "table" | "cards";
 type Scope = "buyer" | "monturler" | "taslar" | "ops" | "imalat";
-type DetailTab = OpsWorkspaceTab | "tech";
+type DetailTab = OpsWorkspaceTab;
 
 const PAGE_SIZE = 20;
 
@@ -134,7 +136,14 @@ export function CatalogView() {
   const { user } = useAuth();
   const actionToast = useActionToast();
   const queryClient = useQueryClient();
-  const canOps = Boolean(user?.capabilities?.can_view_ops && user?.firma?.platform_mu);
+  const isPlatform = Boolean(user?.firma?.platform_mu);
+  /** Liste/görüntüleme: platform ops veya yazma yetkili tedarikçi */
+  const canOps = Boolean(
+    (user?.capabilities?.can_view_ops && isPlatform) ||
+      (user?.capabilities?.can_submit_urun && user?.firma?.tedarikci_mi)
+  );
+  /** Sihirbaz / create — submit_urun gerekir */
+  const canOpsWrite = Boolean(user?.capabilities?.can_submit_urun);
   const canCatalog = Boolean(user?.capabilities?.can_view_catalog || canOps);
   const canQuote = Boolean(
     user?.capabilities?.can_lock_quote || user?.capabilities?.can_view_cart
@@ -165,6 +174,7 @@ export function CatalogView() {
                 : "buyer";
 
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [createWizardOpen, setCreateWizardOpen] = useState(false);
 
   useEffect(() => {
     setViewMode(scope === "ops" ? "table" : "cards");
@@ -634,10 +644,9 @@ export function CatalogView() {
     }
   };
 
-  /** Yeni ürün = aynı workspace modal (ayrı create formu yok). */
+  /** Yeni ürün = görsel sihirbaz (ADR-0044 tip → rol → alanlar → özet). */
   const openCreateProduct = async () => {
     try {
-      // Refs/kategori yoksa önce yükle
       let refs = refsQ.data;
       if (!refs) {
         refs = await urunlerService.getCatalogRefs();
@@ -661,40 +670,7 @@ export function CatalogView() {
         );
         return;
       }
-      const defaultMetalId = metaller[0]?.id;
-      const defaultAyar =
-        ayarlar.find((a) => a.metal_id === defaultMetalId) ?? ayarlar[0];
-      if (!defaultAyar || cats[0] == null) {
-        actionToast.error(
-          "Varsayılan kategori/ayar bulunamadı",
-          "Tanımlar ekranını kontrol edin."
-        );
-        return;
-      }
-      const created = await createOpsMutation.mutateAsync({
-        ad: "Yeni ürün",
-        kategori_id: cats[0].id,
-        ayar_id: defaultAyar.id,
-        fiyat_tipi: "gram",
-        temin_tipi: "hazir",
-        aciklama: "",
-        ...(selectedKanalId ? { satis_kanali_id: selectedKanalId } : {}),
-      });
-      // Ölçüsüz/renksiz taslakta varsayılan kırılım — Fiyat önizleme/Stok boş kalmasın
-      try {
-        await urunlerService.addOpsVariant(created.id, {
-          gram: "3.200",
-          renk_id: null,
-          beden_id: null,
-        });
-      } catch {
-        // Kullanıcı Varyantlar’dan ekleyebilir; oluşturmayı engelleme
-      }
-      actionToast.success("Taslak oluşturuldu — düzenlemeye devam edin");
-      setWorkspaceDirty(false);
-      setDetailTab("variants");
-      await openOpsDetail(created.id, { mode: "edit" });
-      await queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
+      setCreateWizardOpen(true);
     } catch (err) {
       actionToast.error("Yeni ürün açılamadı", err);
     }
@@ -777,6 +753,7 @@ export function CatalogView() {
           action: "addVariant",
           id: opsDetail.id,
           variant: {
+            tip: "HAM_ALTIN",
             gram: variantForm.gram.trim() || undefined,
             renk_id: variantForm.renk_id ? Number(variantForm.renk_id) : undefined,
             beden_id: variantForm.beden_id ? Number(variantForm.beden_id) : undefined,
@@ -927,6 +904,34 @@ export function CatalogView() {
 
   return (
     <div className="flex flex-col gap-5">
+      {canOpsWrite ? (
+        <OpsProductCreateWizard
+          open={createWizardOpen}
+          onOpenChange={setCreateWizardOpen}
+          categories={opsCatsQ.data?.results ?? []}
+          refs={refsQ.data}
+          satisKanaliId={selectedKanalId}
+          isPlatform={isPlatform}
+          lockedFirma={
+            user?.firma && !isPlatform
+              ? { id: user.firma.id, ad: user.firma.ad || "" }
+              : null
+          }
+          onCreated={(id, meta) => {
+            const pct = meta?.hazirlikYuzde;
+            actionToast.success(
+              pct != null
+                ? `Ürün kaydedildi · Hazırlık %${pct}`
+                : "Ürün kaydedildi — düzenlemeye devam edin"
+            );
+            setWorkspaceDirty(false);
+            setDetailTab("variants");
+            void openOpsDetail(id, { mode: "edit" });
+            void queryClient.invalidateQueries({ queryKey: urunlerKeys.ops() });
+          }}
+          onError={(title, err) => actionToast.error(title, err)}
+        />
+      ) : null}
       {/* Sekme geçiş çubuğu */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap rounded-[6px] border border-border bg-muted/40 p-1">
@@ -994,21 +999,24 @@ export function CatalogView() {
           }
           description={
             scope === "ops"
-              ? "Yeni Ürün ile taslak açın; tüm sekmeler (genel, varyant, medya, kanal…) aynı pencerede."
+              ? "Yeni Ürün sihirbazı: tip (ürün/montür/taş) → görsel alanlar → özet → kaydet. Detay sonra workspace’te."
               : scope === "monturler"
                 ? "Yayındaki montür ürünleri. Eşleştirme için İmalat sekmesini kullanın."
                 : scope === "taslar"
                   ? "Her türlü taş (değerli olmak zorunda değil). Montür ile birleştirmek için İmalat’ı kullanın."
                   : "Onaylı ve yayındaki ürünleri inceleyin; Sipariş Ver ile miktarlı siparişinizi oluşturun."
           }
-          createLabel={scope === "ops" && canOps ? "Yeni Ürün" : undefined}
+          createLabel={scope === "ops" && canOpsWrite ? "Yeni Ürün" : undefined}
           onCreate={
-            scope === "ops" && canOps
+            scope === "ops" && canOpsWrite
               ? () => void openCreateProduct()
               : undefined
           }
           contentClassName={
-            scope === "buyer" && viewMode === "cards"
+            (scope === "buyer" ||
+              scope === "monturler" ||
+              scope === "taslar") &&
+            viewMode === "cards"
               ? "bg-transparent overflow-visible"
               : undefined
           }
@@ -1093,12 +1101,31 @@ export function CatalogView() {
                     />
                     Eksik varyant
                   </label>
-                  <a
-                    href={urunlerService.exportOpsProductsCsv(opsFilters)}
+                  <button
+                    type="button"
                     className="inline-flex h-9 items-center rounded-[6px] border border-border px-2 text-xs hover:bg-muted/50"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const blob = await urunlerService.downloadOpsProductsCsv(
+                            opsFilters
+                          );
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = "urunler.csv";
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
+                        } catch (err) {
+                          actionToast.error("CSV indirilemedi", err);
+                        }
+                      })();
+                    }}
                   >
                     CSV dışa aktar
-                  </a>
+                  </button>
                 </>
               ) : null}
               {scope === "buyer" ? (
@@ -1121,13 +1148,16 @@ export function CatalogView() {
                   )}
                 </select>
               ) : null}
-              {scope === "buyer" || scope === "ops" ? (
+              {scope === "buyer" ||
+              scope === "ops" ||
+              scope === "monturler" ||
+              scope === "taslar" ? (
                 <div className="flex rounded-[6px] border border-border p-0.5">
                   <button
                     type="button"
                     className={`rounded-[4px] p-1.5 ${viewMode === "table" ? "bg-secondary" : ""}`}
                     onClick={() => setViewMode("table")}
-                    aria-label="Tablo görünümü"
+                    aria-label="Liste / tablo görünümü"
                   >
                     <List className="h-3.5 w-3.5" />
                   </button>
@@ -1165,6 +1195,26 @@ export function CatalogView() {
           onPageChange={(p) => setMany({ page: p })}
         >
           {scope === "monturler" || scope === "taslar" ? (
+            viewMode === "cards" ? (
+              <div className="py-1">
+                <MonturTasCatalogGrid
+                  kind={scope === "monturler" ? "montur" : "tas"}
+                  items={scope === "monturler" ? monturItems : tasItems}
+                  onOpen={(id) => {
+                    if (canOps) openOpsView(id);
+                    else void openBuyerDetail(id);
+                  }}
+                  onCompose={() => {
+                    setMany({
+                      scope: "imalat",
+                      page: 1,
+                      ordering: "vitrin",
+                      yayin: undefined,
+                    });
+                  }}
+                />
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1208,30 +1258,49 @@ export function CatalogView() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {canOps ? (
-                        <RowActions
-                          itemLabel={m.ad}
-                          onView={() => openOpsView(m.id)}
-                          onEdit={() => {
-                            void urunlerService
-                              .getOpsProduct(m.id)
-                              .then((p) => startEditProduct(p))
-                              .catch((err) =>
-                                actionToast.error("Düzenleme açılamadı", err)
-                              );
-                          }}
-                        />
-                      ) : (
-                        <RowActions
-                          itemLabel={m.ad}
-                          onView={() => void openBuyerDetail(m.id)}
-                        />
-                      )}
+                      <div className="inline-flex items-center gap-1">
+                        {canOps ? (
+                          <RowActions
+                            itemLabel={m.ad}
+                            onView={() => openOpsView(m.id)}
+                            onEdit={() => {
+                              void urunlerService
+                                .getOpsProduct(m.id)
+                                .then((p) => startEditProduct(p))
+                                .catch((err) =>
+                                  actionToast.error("Düzenleme açılamadı", err)
+                                );
+                            }}
+                          />
+                        ) : (
+                          <RowActions
+                            itemLabel={m.ad}
+                            onView={() => void openBuyerDetail(m.id)}
+                          />
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px]"
+                          onClick={() =>
+                            setMany({
+                              scope: "imalat",
+                              page: 1,
+                              ordering: "vitrin",
+                              yayin: undefined,
+                            })
+                          }
+                        >
+                          İmalat
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            )
           ) : viewMode === "table" ? (
             <Table>
               <TableHeader>
@@ -1240,6 +1309,7 @@ export function CatalogView() {
                   <TableHead>Ürün Kodu</TableHead>
                   <TableHead>Ürün Adı</TableHead>
                   <TableHead>Kategori</TableHead>
+                  {scope === "ops" ? <TableHead>Firma</TableHead> : null}
                   <TableHead>Metal / Ayar</TableHead>
                   <TableHead className="text-right">Varyant</TableHead>
                   <TableHead>Durum</TableHead>
@@ -1309,6 +1379,11 @@ export function CatalogView() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {item.kategori || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="max-w-[10rem] truncate text-[10px]">
+                            {item.sahiplik_firma_ad || "—"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {[item.metal, item.ayar].filter(Boolean).join(" · ") || "—"}
@@ -1419,6 +1494,14 @@ export function CatalogView() {
                         "—"}
                     </div>
                     <div className="flex flex-wrap gap-1 pt-1">
+                      {ops.sahiplik_firma_ad ? (
+                        <Badge
+                          variant="outline"
+                          className="max-w-full truncate text-[10px]"
+                        >
+                          {ops.sahiplik_firma_ad}
+                        </Badge>
+                      ) : null}
                       <Badge
                         variant={ops.yayin_durumu === "aktif" ? "success" : "outline"}
                         className="text-[10px]"
@@ -1507,8 +1590,9 @@ export function CatalogView() {
                 onRequestEdit={() => {
                   void startEditProduct(opsDetail);
                 }}
-                tab={(detailTab === "tech" ? "features" : detailTab) as OpsWorkspaceTab}
+                tab={detailTab}
                 onTabChange={(t) => setDetailTab(t)}
+                onOpenProduct={(id) => void openOpsDetail(id, { mode: "view" })}
                 dirty={workspaceDirty}
                 onDirtyChange={setWorkspaceDirty}
                 onRefresh={async () => {

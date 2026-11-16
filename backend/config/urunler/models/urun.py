@@ -168,6 +168,15 @@ class Urun(models.Model):
     olusturma_zamani = models.DateTimeField(auto_now_add=True)
     guncelleme_zamani = models.DateTimeField(auto_now=True)
 
+    # ADR-0044 / FAZ 2 — HEAD+BAND iki Urun aynı grup UUID'sini paylaşır
+    montur_grup_id = models.UUIDField(
+        "Montür grup",
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="HEAD+BAND eşleşmesi; aynı UUID iki ürünü bağlar.",
+    )
+
     class Meta:
         verbose_name = "Ürün"
         verbose_name_plural = "Ürünler"

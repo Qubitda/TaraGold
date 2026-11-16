@@ -84,6 +84,8 @@ class OpsProductMetalStoneTests(PriceQuoteFixtureMixin, APITestCase):
                 "kategori_id": self.urun.kategori_id,
                 "ayar_id": self.ayar.pk,
                 "aciklama": "metal-stone",
+                "sahiplik_firma_id": self.ted.pk,
+                "varyantlar": [{"gram": "1.500"}],
             },
             format="json",
             HTTP_IDEMPOTENCY_KEY="metal-stone-create-1",

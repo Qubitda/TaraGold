@@ -14,6 +14,7 @@ export type ProblemDetail = S["ProblemDetail"];
 export type Capabilities = S["Capabilities"] & {
   can_manage_smtp?: boolean;
   can_manage_piyasa?: boolean;
+  can_submit_urun?: boolean;
 };
 export type FirmaMasked = S["FirmaMasked"];
 export interface ActAsState {

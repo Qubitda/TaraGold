@@ -61,16 +61,20 @@ export function ProductP0Panel({ product, refs, onChanged }: Props) {
       const renkSet = renkIds.length ? renkIds : [null];
       const bedenSet = bedenIds.length ? bedenIds : [null];
       const satirlar: Array<{
+        tip: "HAM_ALTIN";
         gram: string;
         renk_id: number | null;
         beden_id: number | null;
+        ayar_id?: number;
       }> = [];
       for (const r of renkSet) {
         for (const b of bedenSet) {
           satirlar.push({
+            tip: "HAM_ALTIN",
             gram: defaultGram,
             renk_id: r,
             beden_id: b,
+            ayar_id: product.ayar_id > 0 ? product.ayar_id : undefined,
           });
         }
       }

@@ -14,10 +14,18 @@ from urunler.models import TasTipi, Urun, UrunTasi
 
 
 def _require_ops(actor, *, action: str, urun: Urun) -> None:
-    if not is_platform_firm_user(actor) or not has_perm(actor, P["submit_urun"]):
-        raise PermissionDenied("Ürün taş yönetimi yalnız platform ops.")
-    if urun.olusturan_firma_id != actor.firma_id:
-        raise PermissionDenied("Başka firmaya ait ürün taşları yönetilemez.")
+    if not has_perm(actor, P["submit_urun"]):
+        raise PermissionDenied("Ürün taş yönetimi yetkiniz yok.")
+    firma = getattr(actor, "firma", None)
+    if firma is None:
+        raise PermissionDenied("Firma bağınız yok.")
+    if getattr(firma, "platform_mu", False) or is_platform_firm_user(actor):
+        return
+    if getattr(firma, "tedarikci_mi", False):
+        if urun.olusturan_firma_id != actor.firma_id:
+            raise PermissionDenied("Başka firmaya ait ürün taşları yönetilemez.")
+        return
+    raise PermissionDenied("Ürün taş yönetimi yalnız platform veya tedarikçi.")
     del action
 
 

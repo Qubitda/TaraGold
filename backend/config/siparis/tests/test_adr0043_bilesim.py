@@ -25,6 +25,7 @@ def _quote(*, tip, vid, ted_id, alici_id=1, sku="X", urun_ad="U"):
     if tip == "MONTUR":
         extra = dict(
             aktif=True,
+            parca_rolu="FULL",
             yuva_adedi=2,
             izinli_kesimler=["ROUND"],
             karat_min=Decimal("0.5"),
@@ -123,4 +124,39 @@ class Adr0043BilesimUnitTests(SimpleTestCase):
                     (t2, Decimal("1")),
                     (t3, Decimal("1")),
                 ],
+            )
+
+    def test_head_plus_band(self):
+        hq = _quote(tip="MONTUR", vid=1, ted_id=11, sku="H1", urun_ad="Head")
+        hq.varyant.parca_rolu = "HEAD"
+        bq = _quote(tip="MONTUR", vid=5, ted_id=15, sku="B1", urun_ad="Band")
+        bq.varyant.parca_rolu = "BAND"
+        bq.varyant.yuva_adedi = None
+        bq.varyant.izinli_kesimler = []
+        bq.varyant.karat_min = None
+        bq.varyant.karat_max = None
+        tq = _quote(tip="TAS", vid=2, ted_id=22, sku="T1")
+        bil = build_bilesim_from_quotes(
+            montur_quote=hq,
+            band_quote=bq,
+            tas_quotes_miktar=[(tq, Decimal("1"))],
+        )
+        self.assertEqual(bil["montur"]["parca_rolu"], "HEAD")
+        self.assertEqual(bil["band"]["parca_rolu"], "BAND")
+        parts = composition_stock_parts(bil)
+        self.assertEqual(len(parts), 3)
+        view = buyer_bilesim_view(bil)
+        self.assertIn("band", view)
+        self.assertNotIn("tedarikci_id", view["band"])
+
+    def test_full_rejects_band(self):
+        mq = _quote(tip="MONTUR", vid=1, ted_id=11)
+        bq = _quote(tip="MONTUR", vid=5, ted_id=15)
+        bq.varyant.parca_rolu = "BAND"
+        tq = _quote(tip="TAS", vid=2, ted_id=22)
+        with self.assertRaises(ValidationError):
+            build_bilesim_from_quotes(
+                montur_quote=mq,
+                band_quote=bq,
+                tas_quotes_miktar=[(tq, Decimal("1"))],
             )

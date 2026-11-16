@@ -53,6 +53,9 @@ def capabilities_for(user) -> dict[str, bool]:
         "can_view_supplier_stock": supplier or ops,
         "can_view_ops": ops,
         "can_view_ops_finance": ops,
+        # Tedarikçi katalog yazma (sihirbaz / ops products); platform zaten can_view_ops
+        "can_submit_urun": has_perm(user, P["submit_urun"])
+        and (ops or supplier),
         "can_manage_piyasa": has_perm(user, P["manage_piyasa"]) or ops,
         "can_manage_qc": has_perm(user, P["manage_qc"]),
         "can_manage_shipment": has_perm(user, P["manage_shipment"]),

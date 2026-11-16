@@ -37,12 +37,24 @@ def present_ops_variant(v) -> dict:
         "sabit_fiyat": str(v.sabit_fiyat) if v.sabit_fiyat is not None else None,
         "renk_id": v.renk_id,
         "renk": getattr(getattr(v, "renk", None), "ad", "") or "",
+        "metal_rengi": getattr(getattr(v, "renk", None), "ad", "") or "",
         "beden_id": v.beden_id,
         "beden": getattr(getattr(v, "beden", None), "deger", "") or "",
+        "ayar_id": v.ayar_id,
+        "ayar": getattr(getattr(v, "ayar", None), "ayar_kodu", "") or "",
+        "metal_id": getattr(getattr(v, "ayar", None), "metal_id", None),
+        "metal": getattr(
+            getattr(getattr(v, "ayar", None), "metal", None), "ad", ""
+        )
+        or "",
         "ek_bedel": str(v.ek_bedel) if v.ek_bedel is not None else "0",
         "benzersiz_parca": bool(v.benzersiz_parca),
         "aktif": bool(v.aktif),
         # ADR-0044
+        "parca_rolu": (getattr(v, "parca_rolu", None) or "")
+        or ("FULL" if tip == "MONTUR" else ""),
+        "bas_stil": getattr(v, "bas_stil", None) or "",
+        "govde_stil": getattr(v, "govde_stil", None) or "",
         "yuva_adedi": getattr(v, "yuva_adedi", None),
         "izinli_kesimler": list(getattr(v, "izinli_kesimler", None) or []),
         "karat_min": str(v.karat_min)
@@ -55,6 +67,23 @@ def present_ops_variant(v) -> dict:
         "kesim_kod": getattr(v, "kesim_kod", None) or "",
         "imalata_acik": montur_imalata_acik(v) if tip == "MONTUR" else False,
     }
+    # FAZ 5 — etkin fiyat (VF öncelikli); yalnız prefetch cache (N+1 yok)
+    from fiyatlama.services.etkin_fiyat import etkin_fiyat_modeli
+
+    vf = getattr(v, "_aktif_vf", None)
+    cache = getattr(v, "_prefetched_objects_cache", None) or {}
+    if vf is None and "fiyatlar" in cache:
+        aktifler = [f for f in cache["fiyatlar"] if getattr(f, "durum", None) == "AKTIF"]
+        if aktifler:
+            vf = max(aktifler, key=lambda f: (f.versiyon, f.pk))
+    eff = etkin_fiyat_modeli(v.urun, vf=vf)
+    data["etkin_fiyat_modeli"] = eff.get("model")
+    data["etkin_fiyat_kaynak"] = eff.get("kaynak")
+    data["etkin_fiyat_conflict"] = bool(eff.get("conflict"))
+    data["varyant_fiyat_id"] = getattr(vf, "pk", None) if vf is not None else None
+    data["varyant_fiyat_modeli"] = (
+        getattr(vf, "fiyat_modeli", None) if vf is not None else None
+    )
     assert_masked(data)
     return data
 
@@ -67,6 +96,7 @@ def present_ops_product(
     include_variants: bool = False,
     include_media: bool = False,
     include_hazirlik: bool = False,
+    peer_id: int | None = None,
 ) -> dict:
     varyant_count = getattr(urun, "varyant_count", None)
     if varyant_count is None:
@@ -75,6 +105,23 @@ def present_ops_product(
     teknikler = list(urun.teknikler.all().values("id", "ad"))
     stiller = list(urun.stiller.all().values("id", "ad"))
     ozel_gunler = list(urun.ozel_gunler.all().values("id", "ad"))
+    resolved_peer = peer_id
+    if resolved_peer is None:
+        resolved_peer = getattr(urun, "peer_id", None)
+    if (
+        resolved_peer is None
+        and getattr(urun, "montur_grup_id", None)
+        and include_variants
+    ):
+        # Detail: tek ek sorgu (liste annotate ile N+1 yok)
+        from urunler.models import Urun as UrunModel
+
+        resolved_peer = (
+            UrunModel.objects.filter(montur_grup_id=urun.montur_grup_id)
+            .exclude(pk=urun.pk)
+            .values_list("pk", flat=True)
+            .first()
+        )
     data = {
         "id": urun.pk,
         "ad": urun.ad,
@@ -118,6 +165,14 @@ def present_ops_product(
         "yayin_durumu": urun.yayin_durumu,
         "red_nedeni": urun.red_nedeni or "",
         "olusturan_firma_id": urun.olusturan_firma_id,
+        "sahiplik_firma_id": urun.olusturan_firma_id,
+        "sahiplik_firma_ad": (
+            getattr(getattr(urun, "olusturan_firma", None), "ad", "") or ""
+        ),
+        "montur_grup_id": str(urun.montur_grup_id)
+        if getattr(urun, "montur_grup_id", None)
+        else None,
+        "peer_id": resolved_peer,
         "varyant_count": int(varyant_count),
         "allowed_actions": _allowed_actions(urun, user),
         "slug": urun.slug or "",
@@ -167,7 +222,12 @@ def present_ops_product(
     if include_variants:
         data["varyantlar"] = [
             present_ops_variant(v)
-            for v in urun.varyantlar.select_related("renk", "beden").all().order_by("pk")
+            for v in urun.varyantlar.select_related(
+                "renk", "beden", "ayar", "ayar__metal"
+            )
+            .prefetch_related("fiyatlar")
+            .all()
+            .order_by("pk")
         ]
         data["kanallar"] = [
             {

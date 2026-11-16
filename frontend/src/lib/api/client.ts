@@ -301,6 +301,31 @@ export function fetchMeDashboard(): Promise<MeDashboard> {
 }
 
 /**
+ * Same-origin binary GET (session cookie) → Blob.
+ * apiFetch JSON bekler; CSV/dosya için bunu kullan.
+ */
+export async function apiFetchBlob(
+  path: string,
+  accept = "*/*"
+): Promise<Blob> {
+  const headers: Record<string, string> = { Accept: accept };
+  const token = readCookie("csrftoken");
+  if (token) headers["X-CSRFToken"] = token;
+
+  const res = await fetch(`${API_PREFIX}${path}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+    headers,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await parseProblem(res));
+  }
+  return res.blob();
+}
+
+/**
  * Same-origin binary/download helper (session cookie).
  */
 export async function apiDownload(

@@ -5,8 +5,13 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { urunlerService } from "../services";
-import type { CatalogRefsResponse, OpsProduct } from "../types";
+import { parseBulkVariantErrors, urunlerService } from "../services";
+import type {
+  BulkVariantError,
+  CatalogRefsResponse,
+  OpsProduct,
+  OpsProductVariantCreateRequest,
+} from "../types";
 
 type Props = {
   product: OpsProduct;
@@ -21,6 +26,8 @@ type Props = {
   };
 };
 
+type PreviewRow = OpsProductVariantCreateRequest & { _key: string };
+
 /** Renk × ölçü matrisi → POST …/variants/bulk/ */
 export function VariantMatrixBlock({
   product,
@@ -34,6 +41,7 @@ export function VariantMatrixBlock({
   const [bedenIds, setBedenIds] = useState<number[]>([]);
   const [defaultGram, setDefaultGram] = useState("3.200");
   const [busy, setBusy] = useState(false);
+  const [rowErrors, setRowErrors] = useState<BulkVariantError[]>([]);
 
   const renkler = refs?.renkler ?? [];
   const olculer = useMemo(() => {
@@ -45,9 +53,39 @@ export function VariantMatrixBlock({
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   };
 
+  const previewRows: PreviewRow[] = useMemo(() => {
+    const renkSet: Array<number | null> = renkIds.length ? renkIds : [null];
+    const bedenSet: Array<number | null> = bedenIds.length ? bedenIds : [null];
+    const rows: PreviewRow[] = [];
+    for (const r of renkSet) {
+      for (const b of bedenSet) {
+        rows.push({
+          _key: `${r ?? "x"}-${b ?? "x"}`,
+          tip: "HAM_ALTIN",
+          gram:
+            (product.fiyat_tipi || "gram") === "gram" ? defaultGram : undefined,
+          renk_id: r,
+          beden_id: b,
+          ayar_id: product.ayar_id > 0 ? product.ayar_id : undefined,
+        });
+      }
+    }
+    return rows;
+  }, [renkIds, bedenIds, defaultGram, product.fiyat_tipi, product.ayar_id]);
+
   const comboCount =
     (renkIds.length || (product.renk_ekseni ? 0 : 1)) *
     (bedenIds.length || (product.olcu_tipi ? 0 : 1));
+
+  const errorByIndex = useMemo(() => {
+    const m = new Map<number, BulkVariantError[]>();
+    for (const e of rowErrors) {
+      const list = m.get(e.satir_index) ?? [];
+      list.push(e);
+      m.set(e.satir_index, list);
+    }
+    return m;
+  }, [rowErrors]);
 
   const generate = async () => {
     if (product.renk_ekseni && !renkIds.length) {
@@ -63,39 +101,28 @@ export function VariantMatrixBlock({
       return;
     }
     setBusy(true);
+    setRowErrors([]);
     try {
       if (onBeforeGenerate) {
         const ok = await onBeforeGenerate();
         if (!ok) return;
       }
-      const renkSet: Array<number | null> = renkIds.length
-        ? renkIds
-        : [null];
-      const bedenSet: Array<number | null> = bedenIds.length
-        ? bedenIds
-        : [null];
-      const satirlar: Array<{
-        gram?: string;
-        renk_id: number | null;
-        beden_id: number | null;
-      }> = [];
-      for (const r of renkSet) {
-        for (const b of bedenSet) {
-          satirlar.push({
-            gram:
-              (product.fiyat_tipi || "gram") === "gram"
-                ? defaultGram
-                : undefined,
-            renk_id: r,
-            beden_id: b,
-          });
-        }
-      }
+      const satirlar: OpsProductVariantCreateRequest[] = previewRows.map(
+        ({ _key: _k, ...row }) => row
+      );
       const res = await urunlerService.bulkAddOpsVariants(product.id, satirlar);
       onToast.success(`${res.count} varyant oluşturuldu`);
       await onDone();
     } catch (err) {
-      onToast.error("Matris oluşturulamadı", err);
+      const parsed = parseBulkVariantErrors(err);
+      setRowErrors(parsed);
+      const first = parsed[0];
+      onToast.error(
+        first
+          ? `Matris hatası (satır ${first.satir_index + 1}: ${first.detail})`
+          : "Matris oluşturulamadı",
+        err
+      );
     } finally {
       setBusy(false);
     }
@@ -124,16 +151,19 @@ export function VariantMatrixBlock({
       return;
     }
     setBusy(true);
+    setRowErrors([]);
     try {
       if (onBeforeGenerate) {
         const ok = await onBeforeGenerate();
         if (!ok) return;
       }
       await urunlerService.addOpsVariant(product.id, {
+        tip: "HAM_ALTIN",
         gram: fiyatTipi === "gram" ? defaultGram : undefined,
         sabit_fiyat: fiyatTipi === "sabit" ? defaultGram : undefined,
         renk_id: null,
         beden_id: null,
+        ayar_id: product.ayar_id > 0 ? product.ayar_id : undefined,
       });
       onToast.success("Tek varyant eklendi");
       await onDone();
@@ -142,6 +172,16 @@ export function VariantMatrixBlock({
     } finally {
       setBusy(false);
     }
+  };
+
+  const renkLabel = (id: number | null | undefined) =>
+    id == null
+      ? "—"
+      : renkler.find((r) => r.id === id)?.ad || `#${id}`;
+  const bedenLabel = (id: number | null | undefined) => {
+    if (id == null) return "—";
+    const o = olculer.find((x) => x.id === id);
+    return o?.deger || o?.ad || `#${id}`;
   };
 
   return (
@@ -253,6 +293,42 @@ export function VariantMatrixBlock({
           </div>
         </div>
       ) : null}
+
+      {comboCount > 0 && previewRows.length > 0 ? (
+        <div className="space-y-1">
+          <Label className="text-[11px]">Önizleme ({previewRows.length})</Label>
+          <ul className="max-h-36 overflow-y-auto rounded border border-border divide-y divide-border text-[11px]">
+            {previewRows.map((row, idx) => {
+              const errs = errorByIndex.get(idx);
+              return (
+                <li
+                  key={row._key}
+                  className={`flex flex-wrap items-center gap-2 px-2 py-1.5 ${
+                    errs?.length ? "bg-destructive/10 text-destructive" : ""
+                  }`}
+                >
+                  <span className="text-muted-foreground w-6">#{idx + 1}</span>
+                  <span>{renkLabel(row.renk_id as number | null)}</span>
+                  <span>·</span>
+                  <span>{bedenLabel(row.beden_id as number | null)}</span>
+                  {row.gram ? (
+                    <>
+                      <span>·</span>
+                      <span>{row.gram} g</span>
+                    </>
+                  ) : null}
+                  {errs?.map((e, i) => (
+                    <span key={`${e.alan}-${i}`} className="w-full text-[10px]">
+                      {e.alan}: {e.detail}
+                    </span>
+                  ))}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       <Button
         size="sm"
         className="h-8 text-xs"

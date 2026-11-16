@@ -16,6 +16,7 @@ def _montur(**kwargs):
     base = dict(
         tip="MONTUR",
         aktif=True,
+        parca_rolu="FULL",
         yuva_adedi=1,
         izinli_kesimler=["ROUND"],
         karat_min=Decimal("0.5"),
@@ -81,3 +82,14 @@ class UyumlulukSikiTests(SimpleTestCase):
                 check_karat_range=False,
             )
         )
+
+    def test_band_imalata_kapali(self):
+        self.assertFalse(montur_imalata_acik(_montur(parca_rolu="BAND")))
+
+    def test_head_dolu_imalata_acik(self):
+        self.assertTrue(montur_imalata_acik(_montur(parca_rolu="HEAD")))
+        self.assertEqual(present_uyumluluk(_montur(parca_rolu="HEAD"))["parca_rolu"], "HEAD")
+
+    def test_bos_parca_rolu_full_sayilir(self):
+        self.assertTrue(montur_imalata_acik(_montur(parca_rolu="")))
+        self.assertEqual(present_uyumluluk(_montur(parca_rolu=""))["parca_rolu"], "FULL")

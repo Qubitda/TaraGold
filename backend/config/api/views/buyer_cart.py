@@ -87,6 +87,16 @@ class CartLineCreateView(IdempotencyMixin, APIView):
                 raise ValidationError(detail={"miktar": "Geçersiz miktar."}) from exc
             try:
                 montur_q = get_quote_for_actor(request.user, montur_qid)
+                band_q = None
+                band_raw = request.data.get("band_quote_id")
+                if band_raw not in (None, ""):
+                    try:
+                        band_qid = int(band_raw)
+                    except (TypeError, ValueError) as exc:
+                        raise ValidationError(
+                            detail={"band_quote_id": "Geçersiz."}
+                        ) from exc
+                    band_q = get_quote_for_actor(request.user, band_qid)
                 tas_items = []
                 for i, row in enumerate(taslar_raw):
                     if not isinstance(row, dict):
@@ -112,6 +122,7 @@ class CartLineCreateView(IdempotencyMixin, APIView):
                     montur_quote=montur_q,
                     tas_items=tas_items,
                     miktar=line_miktar,
+                    band_quote=band_q,
                 )
             except BuyerQuoteNotFound as exc:
                 raise NotFound(detail="Quote bulunamadı.") from exc

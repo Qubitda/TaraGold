@@ -112,6 +112,15 @@ def present_buyer_pano(
     if firma is not None and not getattr(firma, "platform_mu", False):
         tercih = tercih_srv.get_or_default(firma)
 
+    # Ingest süreci yoksa / bayatsa: okuma anında throttled REST poll (müşteri — görmesin)
+    try:
+        from tanimlar.services.ingest.pipeline import ensure_fresh_feed_for_read
+
+        ensure_fresh_feed_for_read()
+        now = timezone.now()
+    except Exception:  # noqa: BLE001 — pano yine de LKG/döviz ile dönsün
+        pass
+
     rows = piyasa_fiyat_servisi.pano_ozeti(only_aktif=True, now=now)
     satirlar: list[dict[str, Any]] = []
     healths: list[str] = []
@@ -197,23 +206,37 @@ def present_buyer_pano(
 
     # Sağlık özeti — elle FAIL sayılmaz.
     # Tek kalem FAIL tüm panoyu KOPUK yapmasın: en az bir FEED_OK varsa CANLI.
+    # Altın yokken yalnız döviz varsa "son bilinen gösteriliyor" deme → FAIL.
     live_healths = [h for h in healths if h != FeedHealth.FEED_LOCKED_MANUEL]
     has_ok = any(h == FeedHealth.FEED_OK for h in live_healths)
     has_stale = any(h == FeedHealth.FEED_STALE_LKG for h in live_healths)
     has_fail = any(h == FeedHealth.FEED_FAIL for h in live_healths)
-    if has_ok:
+    metal_satir_var = any(
+        (s.get("bolum") or "") != PiyasaUrun.Bolum.DOVIZ
+        and (s.get("alis") is not None or s.get("satis") is not None)
+        for s in satirlar
+    )
+    if has_ok and metal_satir_var:
         kaynak = "LKG" if has_stale else "CANLI"
-    elif has_stale:
+    elif has_stale and metal_satir_var:
         kaynak = "LKG"
+    elif has_fail and not metal_satir_var:
+        kaynak = "FAIL"
     elif has_fail and not satirlar:
         kaynak = "FAIL"
     elif has_fail:
-        # Bazı satırlar (örn. döviz) hâlâ var — gecikmeli say, panoyu tamamen KOPUK yapma
         kaynak = "LKG"
-    elif satirlar:
+    elif satirlar and metal_satir_var:
         kaynak = "CANLI"
+    elif satirlar:
+        kaynak = "FAIL"
     else:
         kaynak = "FAIL"
+
+    if kaynak == "FAIL" and not banners:
+        banners.append(
+            "Altın fiyatı güncellenemedi. Fiyat vererek işlem yapmayın."
+        )
 
     platform_baslik = ""
     try:

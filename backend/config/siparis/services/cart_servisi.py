@@ -161,9 +161,10 @@ def satir_ekle_bilesim(
     montur_quote: PriceQuote,
     tas_items: list[tuple[PriceQuote, Decimal]],
     miktar: Decimal = Decimal("1"),
+    band_quote: PriceQuote | None = None,
     now=None,
 ) -> CartLine:
-    """ADR-0043: 1 montür + ≥1 taş → tek sepet satırı (bileşim snapshot)."""
+    """ADR-0043/0044A: FULL|HEAD[+BAND] + ≥1 taş → tek sepet satırı."""
     from siparis.services.bilesim_secim import (
         bilesim_anahtar,
         build_bilesim_from_quotes,
@@ -177,17 +178,25 @@ def satir_ekle_bilesim(
     _assert_buyer_actor(actor, alici_firma)
     now = now or timezone.now()
     _assert_quote_usable(montur_quote, alici_firma=alici_firma, now=now)
+    if band_quote is not None:
+        _assert_quote_usable(band_quote, alici_firma=alici_firma, now=now)
     for tq, tm in tas_items:
         _assert_quote_usable(tq, alici_firma=alici_firma, now=now)
         if Decimal(tm) <= 0:
             raise ValidationError("Taş miktarı pozitif olmalı.")
 
     bilesim = build_bilesim_from_quotes(
-        montur_quote=montur_quote, tas_quotes_miktar=tas_items
+        montur_quote=montur_quote,
+        tas_quotes_miktar=tas_items,
+        band_quote=band_quote,
     )
+    band_vid = None
+    if bilesim.get("band"):
+        band_vid = int(bilesim["band"]["varyant_id"])
     anahtar = bilesim_anahtar(
         montur_varyant_id=montur_quote.varyant_id,
         taslar=bilesim["taslar"],
+        band_varyant_id=band_vid,
     )
     birim = birim_from_fiyat_modeli(montur_quote.varyant_fiyat.fiyat_modeli)
 

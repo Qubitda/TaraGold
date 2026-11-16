@@ -5,11 +5,25 @@ from __future__ import annotations
 from decimal import Decimal
 
 
+def _montur_parca_rolu(montur) -> str:
+    """FULL|HEAD|BAND — boş → FULL (geriye uyum)."""
+    rol = (getattr(montur, "parca_rolu", None) or "").strip().upper()
+    if rol in ("FULL", "HEAD", "BAND"):
+        return rol
+    return "FULL"
+
+
 def montur_imalata_acik(montur) -> bool:
-    """Montür imalat listesine girer mi? Sıkı kural."""
+    """Montür imalat listesine girer mi? Sıkı kural.
+
+    BAND taş yuvası taşımaz → imalata kapalı (tek başına stok/satış OK).
+    FULL/HEAD: yuva + izinli kesim + karat aralığı zorunlu.
+    """
     if montur is None or getattr(montur, "tip", None) != "MONTUR":
         return False
     if not getattr(montur, "aktif", True):
+        return False
+    if _montur_parca_rolu(montur) == "BAND":
         return False
     kesimler = getattr(montur, "izinli_kesimler", None) or []
     if not isinstance(kesimler, list) or len(kesimler) == 0:
@@ -71,6 +85,9 @@ def tas_monture_uygun(
 def present_uyumluluk(montur) -> dict:
     return {
         "imalata_acik": montur_imalata_acik(montur),
+        "parca_rolu": _montur_parca_rolu(montur),
+        "bas_stil": getattr(montur, "bas_stil", None) or "",
+        "govde_stil": getattr(montur, "govde_stil", None) or "",
         "yuva_adedi": getattr(montur, "yuva_adedi", None),
         "izinli_kesimler": list(getattr(montur, "izinli_kesimler", None) or []),
         "karat_min": str(montur.karat_min)

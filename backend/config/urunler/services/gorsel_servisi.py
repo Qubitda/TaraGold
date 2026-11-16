@@ -11,13 +11,29 @@ from firmalar.services.yetki_servisi import require_perm
 from urunler.models import Urun, UrunGorsel, Varyant
 
 
-def _require_platform_submit(actor, *, action, urun=None):
+def _require_katalog_gorsel_yazma(actor, *, action, urun=None):
     require_perm(actor, P["submit_urun"], message="Ürün görsel yetkiniz yok.")
     firma = getattr(actor, "firma", None)
-    if not (getattr(actor, "firma_id", None) and firma and firma.platform_mu):
-        raise PermissionDenied("Bu işlem yalnızca platform firması kullanıcılarınındır.")
-    if urun is not None and urun.olusturan_firma_id != actor.firma_id:
+    if not getattr(actor, "firma_id", None) or firma is None:
+        raise PermissionDenied("Firma bağınız yok.")
+    if not (
+        getattr(firma, "platform_mu", False) or getattr(firma, "tedarikci_mi", False)
+    ):
+        raise PermissionDenied(
+            "Ürün görsel yazma yalnız platform veya tedarikçi firması kullanıcılarınındır."
+        )
+    if urun is None:
+        return
+    if getattr(firma, "platform_mu", False):
+        return
+    if urun.olusturan_firma_id != actor.firma_id:
         raise PermissionDenied("Başka firmaya ait ürün görseli düzenlenemez.")
+    del action
+
+
+def _require_platform_submit(actor, *, action, urun=None):
+    """Geriye uyum — katalog görsel yazma."""
+    _require_katalog_gorsel_yazma(actor, action=action, urun=urun)
 
 
 def gorsel_ekle(

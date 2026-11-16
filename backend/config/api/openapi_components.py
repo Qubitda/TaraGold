@@ -85,6 +85,7 @@ CAPABILITIES = {
             "can_view_supplier_stock",
             "can_view_ops",
             "can_view_ops_finance",
+            "can_submit_urun",
             "can_manage_qc",
             "can_manage_shipment",
             "can_manage_return",
