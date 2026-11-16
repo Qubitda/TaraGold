@@ -652,7 +652,11 @@ export function OpsProductWorkspace({
         tip: tipV,
         gram:
           tipV !== "TAS" && fiyatTipi === "gram" ? gram || undefined : undefined,
-        sabit_fiyat: fiyatTipi === "sabit" ? sabit || undefined : undefined,
+        // Taş: ürün gram tipinde olsa da sabit fiyat alanı gönderilir (önce düşüyordu)
+        sabit_fiyat:
+          fiyatTipi === "sabit" || tipV === "TAS"
+            ? sabit || undefined
+            : undefined,
         renk_id: renkEkseni && renkId ? Number(renkId) : null,
         beden_id:
           tipV !== "TAS" && olcuTipi && bedenId ? Number(bedenId) : null,

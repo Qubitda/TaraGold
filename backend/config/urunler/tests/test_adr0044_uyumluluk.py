@@ -67,3 +67,17 @@ class UyumlulukSikiTests(SimpleTestCase):
         self.assertFalse(
             tas_monture_uygun(montur=_montur(yuva_adedi=1), tas=_tas(), adet=2)
         )
+
+    def test_check_karat_range_atlanabilir(self):
+        # Tek başına 2.0 ct max 1.5 dışında; check_karat_range=False ile kesim geçer
+        self.assertFalse(
+            tas_monture_uygun(montur=_montur(), tas=_tas(karat=Decimal("2.0")), adet=1)
+        )
+        self.assertTrue(
+            tas_monture_uygun(
+                montur=_montur(yuva_adedi=2),
+                tas=_tas(karat=Decimal("2.0")),
+                adet=1,
+                check_karat_range=False,
+            )
+        )

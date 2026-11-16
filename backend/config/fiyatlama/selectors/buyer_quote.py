@@ -47,6 +47,7 @@ def get_quote_for_actor(user, quote_id: int) -> PriceQuote:
             "varyant",
             "varyant__urun",
             "varyant__urun__ayar",
+            "varyant_fiyat",
             "satis_kanali",
             "alici_firma",
         ).prefetch_related("satirlar"),

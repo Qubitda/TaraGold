@@ -28,7 +28,14 @@ def montur_imalata_acik(montur) -> bool:
     return True
 
 
-def tas_monture_uygun(*, montur, tas, adet: int = 1) -> bool:
+def tas_monture_uygun(
+    *, montur, tas, adet: int = 1, check_karat_range: bool = True
+) -> bool:
+    """Tek taş satırı uyumu.
+
+    `check_karat_range=False`: çoklu taşta karat toplamı çağıran tarafta
+    doğrulanır (ADR-0044 toplam ct).
+    """
     if not montur_imalata_acik(montur):
         return False
     if tas is None or getattr(tas, "tip", None) != "TAS":
@@ -46,15 +53,18 @@ def tas_monture_uygun(*, montur, tas, adet: int = 1) -> bool:
     karat = getattr(tas, "karat", None)
     if karat is None:
         return False
-    try:
-        k = Decimal(str(karat)) * Decimal(adet)
-        if k < Decimal(str(montur.karat_min)) or k > Decimal(str(montur.karat_max)):
-            return False
-    except Exception:  # noqa: BLE001
-        return False
     yuva = int(montur.yuva_adedi or 0)
     if adet < 1 or adet > yuva:
         return False
+    if check_karat_range:
+        try:
+            k = Decimal(str(karat)) * Decimal(adet)
+            if k < Decimal(str(montur.karat_min)) or k > Decimal(
+                str(montur.karat_max)
+            ):
+                return False
+        except Exception:  # noqa: BLE001
+            return False
     return True
 
 

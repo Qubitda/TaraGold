@@ -145,7 +145,7 @@ class BuyerCatalogMonturListView(APIView):
                     "tip": v.tip,
                     "gram": str(v.gram) if v.gram is not None else None,
                     "renk": getattr(getattr(v, "renk", None), "ad", "") or "",
-                    "beden": getattr(getattr(v, "beden", None), "ad", "") or "",
+                    "beden": getattr(getattr(v, "beden", None), "deger", "") or "",
                     **present_uyumluluk(v),
                 }
                 for v in u.varyantlar.all()
@@ -259,7 +259,7 @@ class BuyerCatalogTasListView(APIView):
                     "tip": v.tip,
                     "gram": str(v.gram) if v.gram is not None else None,
                     "renk": getattr(getattr(v, "renk", None), "ad", "") or "",
-                    "beden": getattr(getattr(v, "beden", None), "ad", "") or "",
+                    "beden": getattr(getattr(v, "beden", None), "deger", "") or "",
                     "karat": str(v.karat) if v.karat is not None else None,
                     "kesim_kod": (v.kesim_kod or "").strip().upper(),
                 }

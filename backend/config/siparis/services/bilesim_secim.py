@@ -82,6 +82,7 @@ def build_bilesim_from_quotes(*, montur_quote, tas_quotes_miktar: list[tuple]) -
     if not tas_quotes_miktar:
         raise ValidationError("En az bir taş seçilmeli.")
     toplam_adet = 0
+    toplam_karat = Decimal("0")
     for tq, miktar in tas_quotes_miktar:
         miktar = Decimal(miktar)
         if miktar <= 0:
@@ -92,7 +93,10 @@ def build_bilesim_from_quotes(*, montur_quote, tas_quotes_miktar: list[tuple]) -
         tv = tq.varyant
         if getattr(tv, "tip", None) != Varyant.Tip.TAS:
             raise ValidationError("Taş quote TAS tipinde olmalı.")
-        if not tas_monture_uygun(montur=mv, tas=tv, adet=adet):
+        # Tek taş satırı: kesim/yuva/adet; karat aralığı toplamda (ADR-0044 toplam ct)
+        if not tas_monture_uygun(
+            montur=mv, tas=tv, adet=adet, check_karat_range=False
+        ):
             raise ValidationError(
                 "Seçilen taş bu montüre uyumlu değil (kesim/karat/yuva)."
             )
@@ -105,6 +109,10 @@ def build_bilesim_from_quotes(*, montur_quote, tas_quotes_miktar: list[tuple]) -
             raise ValidationError("Montür ve taş quote aynı alıcıya ait olmalı.")
         urun = getattr(tv, "urun", None)
         toplam_adet += adet
+        try:
+            toplam_karat += Decimal(str(tv.karat)) * Decimal(adet)
+        except Exception as exc:  # noqa: BLE001
+            raise ValidationError("Taş karat değeri geçersiz.") from exc
         taslar.append(
             {
                 "quote_id": tq.pk,
@@ -120,6 +128,16 @@ def build_bilesim_from_quotes(*, montur_quote, tas_quotes_miktar: list[tuple]) -
     if toplam_adet > yuva:
         raise ValidationError(
             f"Toplam taş adedi ({toplam_adet}) yuva adedini ({yuva}) aşamaz."
+        )
+    try:
+        kmin = Decimal(str(mv.karat_min))
+        kmax = Decimal(str(mv.karat_max))
+    except Exception as exc:  # noqa: BLE001
+        raise ValidationError("Montür karat aralığı geçersiz.") from exc
+    if toplam_karat < kmin or toplam_karat > kmax:
+        raise ValidationError(
+            f"Toplam karat ({toplam_karat}) montür aralığı dışında "
+            f"({kmin}–{kmax})."
         )
 
     murun = getattr(mv, "urun", None)

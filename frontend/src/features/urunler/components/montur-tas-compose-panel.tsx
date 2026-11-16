@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -161,6 +161,20 @@ export function MonturTasComposePanel({
     () => tasRows.find((r) => r.varyantId === tasVid) ?? null,
     [tasRows, tasVid]
   );
+
+  // Filtre/adet değişince uyumsuz kalan seçimi temizle (stale submit önlemi)
+  useEffect(() => {
+    if (monturVid !== "" && !monturRows.some((r) => r.varyantId === monturVid)) {
+      setMonturVid("");
+      setTasVid("");
+    }
+  }, [monturRows, monturVid]);
+
+  useEffect(() => {
+    if (tasVid !== "" && !tasRows.some((r) => r.varyantId === tasVid)) {
+      setTasVid("");
+    }
+  }, [tasRows, tasVid]);
 
   const selectMontur = (vid: number) => {
     setMonturVid(vid);

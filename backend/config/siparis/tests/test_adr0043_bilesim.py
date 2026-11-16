@@ -101,3 +101,26 @@ class Adr0043BilesimUnitTests(SimpleTestCase):
             build_bilesim_from_quotes(
                 montur_quote=mq, tas_quotes_miktar=[(tq, Decimal("1"))]
             )
+
+    def test_rejects_toplam_karat_asimi_coklu_tas(self):
+        """Her taş tek başına aralıkta olsa da toplam karat aşımı reddedilir."""
+        mq = _quote(tip="MONTUR", vid=1, ted_id=11)
+        mq.varyant.yuva_adedi = 3
+        mq.varyant.karat_min = Decimal("0.5")
+        mq.varyant.karat_max = Decimal("2.5")
+        t1 = _quote(tip="TAS", vid=2, ted_id=22, sku="T1")
+        t1.varyant.karat = Decimal("1.0")
+        t2 = _quote(tip="TAS", vid=3, ted_id=23, sku="T2")
+        t2.varyant.karat = Decimal("1.0")
+        t3 = _quote(tip="TAS", vid=4, ted_id=24, sku="T3")
+        t3.varyant.karat = Decimal("1.0")
+        # 3×1.0 = 3.0 > 2.5
+        with self.assertRaises(ValidationError):
+            build_bilesim_from_quotes(
+                montur_quote=mq,
+                tas_quotes_miktar=[
+                    (t1, Decimal("1")),
+                    (t2, Decimal("1")),
+                    (t3, Decimal("1")),
+                ],
+            )
