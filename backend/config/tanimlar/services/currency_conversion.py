@@ -26,7 +26,7 @@ from tanimlar.models import DovizKuru, KurTaraf
 from tanimlar.services import kur_servisi
 
 TRY = "TRY"
-DESTEKLENEN_PB = frozenset({"TRY", "USD", "EUR", "GBP"})
+DESTEKLENEN_PB = frozenset({"TRY", "USD", "EUR", "GBP", "CHF"})
 HASSASIYET = Decimal("0.01")
 ROUNDING = ROUND_HALF_UP
 

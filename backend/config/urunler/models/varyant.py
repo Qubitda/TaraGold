@@ -85,6 +85,49 @@ class Varyant(models.Model):
         "Benzersiz parça", default=False,
         help_text="Tek adet, tekrar üretilmeyen parça (ör. sertifikalı tek taş).",
     )
+    # ADR-0044 — montür uyumluluk (sıkı: boşsa imalata alınmaz)
+    yuva_adedi = models.PositiveSmallIntegerField(
+        "Yuva adedi",
+        null=True,
+        blank=True,
+        help_text="MONTUR: kaç taş yuvası.",
+    )
+    izinli_kesimler = models.JSONField(
+        "İzinli taş kesimleri",
+        default=list,
+        blank=True,
+        help_text="MONTUR: TasKesimi.kod listesi; boşsa imalata kapalı.",
+    )
+    karat_min = models.DecimalField(
+        "Min karat (toplam)",
+        max_digits=7,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    karat_max = models.DecimalField(
+        "Max karat (toplam)",
+        max_digits=7,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    # ADR-0044 — taş varyant
+    karat = models.DecimalField(
+        "Karat / ölçü (ct)",
+        max_digits=7,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="TAS: ticari ölçü (ct); her türlü taş (değerli olmak zorunda değil).",
+    )
+    kesim_kod = models.CharField(
+        "Şekil / kesim kodu",
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="TAS: serbest şekil kodu (ROUND, CABOCHON, BEAD…); sözlük önerisi, zorunlu FK değil.",
+    )
     aktif = models.BooleanField("Aktif", default=True)
 
     class Meta:
@@ -161,19 +204,30 @@ class Varyant(models.Model):
             return
         errors = {}
 
-        # --- Fiyat tipi kuralları ---
-        if urun.fiyat_tipi == "gram":
-            if not self.gram:
-                errors["gram"] = "Gram bazlı üründe gram zorunludur."
-            if self.sabit_fiyat is not None:
-                errors["sabit_fiyat"] = "Gram bazlı üründe sabit fiyat girilmez."
-        elif urun.fiyat_tipi == "sabit":
-            if not self.sabit_fiyat:
-                errors["sabit_fiyat"] = "Sabit fiyatlı üründe sabit fiyat zorunludur."
+        # --- Fiyat tipi kuralları (TAS: gram şart değil) ---
+        if self.tip != self.Tip.TAS:
+            if urun.fiyat_tipi == "gram":
+                if not self.gram:
+                    errors["gram"] = "Gram bazlı üründe gram zorunludur."
+                if self.sabit_fiyat is not None:
+                    errors["sabit_fiyat"] = "Gram bazlı üründe sabit fiyat girilmez."
+            elif urun.fiyat_tipi == "sabit":
+                if not self.sabit_fiyat:
+                    errors["sabit_fiyat"] = "Sabit fiyatlı üründe sabit fiyat zorunludur."
+        elif urun.fiyat_tipi == "sabit" and not self.sabit_fiyat:
+            errors["sabit_fiyat"] = "Taş varyantında sabit fiyat önerilir/zorunlu."
 
         if self.gram is not None and self.tas_agirligi is not None:
             if Decimal(self.tas_agirligi) >= Decimal(self.gram):
                 errors["tas_agirligi"] = "taş_agirligi < gram olmalı (ADR-0001 B4)."
+
+        if self.tip == self.Tip.MONTUR:
+            if self.karat_min is not None and self.karat_max is not None:
+                if Decimal(self.karat_min) > Decimal(self.karat_max):
+                    errors["karat_max"] = "karat_max ≥ karat_min olmalı."
+        if self.tip == self.Tip.TAS:
+            if self.karat is not None and Decimal(self.karat) <= 0:
+                errors["karat"] = "Karat pozitif olmalı."
 
         # --- Eksen kuralları: renk ---
         if urun.renk_ekseni:

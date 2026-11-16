@@ -12,6 +12,7 @@ import {
   useCreateOpsProductMutation,
   useDeleteOpsProductMutation,
   useMonturlerQuery,
+  useTaslarQuery,
   useOpsCategoriesQuery,
   useOpsProductActionMutation,
   useOpsProductChannelsQuery,
@@ -49,6 +50,7 @@ import {
   OpsProductWorkspace,
   type OpsWorkspaceTab,
 } from "./ops-product-workspace";
+import { MonturTasComposePanel } from "./montur-tas-compose-panel";
 import {
   Table,
   TableHeader,
@@ -83,7 +85,7 @@ import {
 } from "lucide-react";
 
 type ViewMode = "table" | "cards";
-type Scope = "buyer" | "monturler" | "ops";
+type Scope = "buyer" | "monturler" | "taslar" | "ops" | "imalat";
 type DetailTab = OpsWorkspaceTab | "tech";
 
 const PAGE_SIZE = 20;
@@ -146,19 +148,21 @@ export function CatalogView() {
       ? "/tanimlar?grup=koleksiyon"
       : scopeParam === "kategoriler"
         ? "/tanimlar?grup=kategoriler"
-        : scopeParam === "taslar"
-          ? "/tanimlar?grup=tas-tipi"
-          : null;
+        : null;
   const scope: Scope =
     scopeParam === "ops" && canOps
       ? "ops"
       : scopeParam === "monturler"
         ? "monturler"
-        : scopeParam === "buyer"
-          ? "buyer"
-          : canOps
-            ? "ops"
-            : "buyer";
+        : scopeParam === "taslar"
+          ? "taslar"
+          : scopeParam === "imalat"
+            ? "imalat"
+            : scopeParam === "buyer"
+              ? "buyer"
+              : canOps
+                ? "ops"
+                : "buyer";
 
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
 
@@ -301,6 +305,10 @@ export function CatalogView() {
     catalogFilters,
     scope === "monturler" && (canCatalog || canOps)
   );
+  const taslarQuery = useTaslarQuery(
+    catalogFilters,
+    scope === "taslar" && (canCatalog || canOps)
+  );
   const opsQuery = useOpsProductsQuery(opsFilters, scope === "ops" && canOps);
 
   const buyerCatsQ = useCategoriesQuery({ page_size: "100" }, canCatalog || canOps);
@@ -312,7 +320,12 @@ export function CatalogView() {
     canOps && (scope === "ops" || variantModalOpen || detailOpen)
   );
   const channelsQ = useSalesChannelsQuery(
-    (scope === "buyer" && canCatalog) || (canOps && scope === "ops")
+    (canCatalog || canOps) &&
+      (scope === "buyer" ||
+        scope === "ops" ||
+        scope === "imalat" ||
+        scope === "monturler" ||
+        scope === "taslar")
   );
   const channelList = channelsQ.data?.results ?? [];
   const selectedKanalId = useMemo(() => {
@@ -341,6 +354,7 @@ export function CatalogView() {
     [buyerItems]
   );
   const monturItems = monturlerQuery.data?.results || [];
+  const tasItems = taslarQuery.data?.results || [];
   const opsItems = opsQuery.data?.results || [];
 
   const totalCount =
@@ -348,28 +362,36 @@ export function CatalogView() {
       ? opsQuery.data?.count ?? 0
       : scope === "monturler"
         ? monturlerQuery.data?.count ?? 0
-        : catalogQuery.data?.count ?? 0;
+        : scope === "taslar"
+          ? taslarQuery.data?.count ?? 0
+          : catalogQuery.data?.count ?? 0;
 
   const pageSize =
     (scope === "ops"
       ? opsQuery.data?.page_size
       : scope === "monturler"
         ? monturlerQuery.data?.page_size
-        : catalogQuery.data?.page_size) || PAGE_SIZE;
+        : scope === "taslar"
+          ? taslarQuery.data?.page_size
+          : catalogQuery.data?.page_size) || PAGE_SIZE;
 
   const loading =
     scope === "ops"
       ? opsQuery.isLoading || opsQuery.isFetching
       : scope === "monturler"
         ? monturlerQuery.isLoading || monturlerQuery.isFetching
-        : catalogQuery.isLoading || catalogQuery.isFetching;
+        : scope === "taslar"
+          ? taslarQuery.isLoading || taslarQuery.isFetching
+          : catalogQuery.isLoading || catalogQuery.isFetching;
 
   const listErrorObj =
     scope === "ops"
       ? opsQuery.error
       : scope === "monturler"
         ? monturlerQuery.error
-        : catalogQuery.error;
+        : scope === "taslar"
+          ? taslarQuery.error
+          : catalogQuery.error;
 
   const fetchList = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: urunlerKeys.all });
@@ -913,6 +935,8 @@ export function CatalogView() {
               canOps ? ["ops", "Ürün Yönetimi"] : null,
               ["buyer", "Satış Kataloğu"],
               ["monturler", "Montürler"],
+              ["taslar", "Taşlar"],
+              canCatalog || canOps ? ["imalat", "İmalat"] : null,
             ].filter(Boolean) as Array<[Scope, string]>
           ).map(([key, label]) => (
             <button
@@ -946,20 +970,36 @@ export function CatalogView() {
         </div>
       </div>
 
+      {scope === "imalat" ? (
+        <MonturTasComposePanel
+          enabled={canCatalog || canOps}
+          satisKanaliId={selectedKanalId}
+          channelList={channelList}
+          onKanalChange={(kanal) =>
+            setMany({ kanal, page: 1 })
+          }
+        />
+      ) : null}
+
+      {scope !== "imalat" ? (
       <ListPage
           title={
             scope === "ops"
               ? "Ürün Yönetimi"
               : scope === "monturler"
                 ? "Montür Kataloğu"
-                : "Satış Kataloğu"
+                : scope === "taslar"
+                  ? "Taş Kataloğu"
+                  : "Satış Kataloğu"
           }
           description={
             scope === "ops"
               ? "Yeni Ürün ile taslak açın; tüm sekmeler (genel, varyant, medya, kanal…) aynı pencerede."
               : scope === "monturler"
-                ? "Yayındaki montür ürünleri (alıcı vitrini). Ürün oluşturmak için Ürün Yönetimi sekmesini kullanın."
-                : "Onaylı ve yayındaki ürünleri inceleyin; Sipariş Ver ile miktarlı siparişinizi oluşturun."
+                ? "Yayındaki montür ürünleri. Eşleştirme için İmalat sekmesini kullanın."
+                : scope === "taslar"
+                  ? "Her türlü taş (değerli olmak zorunda değil). Montür ile birleştirmek için İmalat’ı kullanın."
+                  : "Onaylı ve yayındaki ürünleri inceleyin; Sipariş Ver ile miktarlı siparişinizi oluşturun."
           }
           createLabel={scope === "ops" && canOps ? "Yeni Ürün" : undefined}
           onCreate={
@@ -1108,7 +1148,9 @@ export function CatalogView() {
               ? buyerItems
               : scope === "monturler"
                 ? monturItems
-                : opsItems
+                : scope === "taslar"
+                  ? tasItems
+                  : opsItems
             ).length === 0
           }
           emptyTitle="Kayıt bulunamadı"
@@ -1122,12 +1164,14 @@ export function CatalogView() {
           totalCount={totalCount}
           onPageChange={(p) => setMany({ page: p })}
         >
-          {scope === "monturler" ? (
+          {scope === "monturler" || scope === "taslar" ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Ürün Kodu</TableHead>
-                  <TableHead>Montür</TableHead>
+                  <TableHead>
+                    {scope === "monturler" ? "Montür" : "Taş"}
+                  </TableHead>
                   <TableHead>Kategori</TableHead>
                   <TableHead>Ayar</TableHead>
                   <TableHead>Seçenekler</TableHead>
@@ -1135,19 +1179,30 @@ export function CatalogView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {monturItems.map((m) => (
+                {(scope === "monturler" ? monturItems : tasItems).map((m) => (
                   <TableRow key={m.id}>
-                    <TableCell className="font-mono text-xs">{m.platform_kodu || "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {"platform_kodu" in m ? m.platform_kodu || "—" : "—"}
+                    </TableCell>
                     <TableCell className="font-medium">{m.ad}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {m.kategori || "—"}
+                      {"kategori" in m ? m.kategori || "—" : "—"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{m.ayar || "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {"ayar" in m ? m.ayar || "—" : "—"}
+                    </TableCell>
                     <TableCell className="text-xs">
                       <div className="flex flex-wrap gap-1">
                         {(m.varyantlar || []).slice(0, 4).map((v) => (
-                          <Badge key={v.id} variant="outline" className="font-mono text-[10px]">
-                            {v.sku} {v.gram ? `(${v.gram}g)` : ""}
+                          <Badge
+                            key={v.id}
+                            variant="outline"
+                            className="font-mono text-[10px]"
+                          >
+                            {v.sku}
+                            {v.gram ? ` (${v.gram}g)` : ""}
+                            {v.kesim_kod ? ` · ${v.kesim_kod}` : ""}
+                            {v.karat ? ` · ${v.karat}ct` : ""}
                           </Badge>
                         ))}
                       </div>
@@ -1377,6 +1432,7 @@ export function CatalogView() {
             </div>
           )}
         </ListPage>
+      ) : null}
 
       {/* Ürün Detay Dialog */}
       <Dialog

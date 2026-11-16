@@ -18,10 +18,11 @@ class PiyasaUrun(models.Model):
         DOVIZ = "DOVIZ", "Döviz kurları"
 
     class Grup(models.TextChoices):
-        HAS = "HAS", "Has altın & ons"
+        HAS = "HAS", "Has / referans"
+        AYAR_GRAM = "AYAR_GRAM", "Ayar / gram"
+        ISCILIK = "ISCILIK", "İmalat / işçilik"
         GUMUS = "GUMUS", "Gümüş"
         SARRAFIYE = "SARRAFIYE", "Sarrafiye"
-        AYAR_GRAM = "AYAR_GRAM", "Ayar / gram"
         DIGER = "DIGER", "Diğer"
 
     class VaryantEtiket(models.TextChoices):
@@ -46,6 +47,10 @@ class PiyasaUrun(models.Model):
         TRY = "TRY", "TRY"
         USD = "USD", "USD"
 
+    class FiyatModu(models.TextChoices):
+        CANLI = "CANLI", "Canlı (feed + marj)"
+        ELLE = "ELLE", "Elle sabit alış/satış"
+
     kod = models.SlugField("Kod", max_length=24, unique=True)
     ad = models.CharField("Ad", max_length=80)
     bolum = models.CharField(
@@ -62,7 +67,7 @@ class PiyasaUrun(models.Model):
         choices=Grup.choices,
         default=Grup.AYAR_GRAM,
         db_index=True,
-        help_text="Geriye uyum; yeni UI bolum kullanır.",
+        help_text="Pano kategori: HAS | AYAR_GRAM | ISCILIK | GUMUS | SARRAFIYE.",
     )
     varyant_etiket = models.CharField(
         "Varyant",
@@ -110,12 +115,36 @@ class PiyasaUrun(models.Model):
         validators=[MinValueValidator(Decimal("0.0001"))],
         help_text="1 = birim ölçek (1 gr / 1 oz / 1 kg); çeyrek vb. için sabit gram.",
     )
+    fiyat_modu = models.CharField(
+        "Fiyat modu",
+        max_length=8,
+        choices=FiyatModu.choices,
+        default=FiyatModu.CANLI,
+        db_index=True,
+        help_text="CANLI = feed+marj; ELLE = sabit alış/satış (ADR-0040).",
+    )
+    sabit_alis = models.DecimalField(
+        "Elle alış",
+        max_digits=16,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="ELLE modunda nihai alış (TL). CANLI’da yok sayılır.",
+    )
+    sabit_satis = models.DecimalField(
+        "Elle satış",
+        max_digits=16,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="ELLE modunda nihai satış (TL). CANLI’da yok sayılır.",
+    )
     marj_tipi = models.CharField(
         "Marj tipi",
         max_length=8,
         choices=MarjTipi.choices,
         default=MarjTipi.YUZDE,
-        help_text="Kalem bazında TL veya % (ADR-0039).",
+        help_text="Kalem bazında TL veya % (ADR-0039). Yalnız CANLI.",
     )
     alis_marj = models.DecimalField(
         "Alış marjı",
@@ -197,7 +226,25 @@ class PiyasaUrun(models.Model):
             not self.metal_id or self.metal_id != self.ayar.metal_id
         ):
             self.metal_id = self.ayar.metal_id
-        # Önizleme: eşit ham ile makas kapısı (kayıt anı).
+
+        modu = (self.fiyat_modu or self.FiyatModu.CANLI).upper()
+        if modu == self.FiyatModu.ELLE:
+            errs = {}
+            if self.sabit_alis is None or self.sabit_alis <= 0:
+                errs["sabit_alis"] = "Elle modunda alış fiyatı zorunlu (> 0)."
+            if self.sabit_satis is None or self.sabit_satis <= 0:
+                errs["sabit_satis"] = "Elle modunda satış fiyatı zorunlu (> 0)."
+            if (
+                self.sabit_alis is not None
+                and self.sabit_satis is not None
+                and self.sabit_satis < self.sabit_alis
+            ):
+                errs["sabit_satis"] = "Satış, alıştan küçük olamaz."
+            if errs:
+                raise ValidationError(errs)
+            return
+
+        # CANLI: eşit ham ile makas kapısı (kayıt anı).
         # Lazy import — model ↔ services döngüsünü kırar.
         from piyasa.services import hesap
 
@@ -212,7 +259,18 @@ class PiyasaUrun(models.Model):
                 yuvarlama_yontemi=hesap.YAKIN,
             )
         except ValueError as exc:
-            raise ValidationError({"__all__": str(exc)}) from exc
+            msg = str(exc)
+            # Kullanıcıya alan bazlı net mesaj
+            if "satış" in msg.lower() and "alış" in msg.lower():
+                raise ValidationError(
+                    {
+                        "satis_marj": (
+                            "Satış marjı, alış marjından küçük olamaz "
+                            "(ör. alış -10, satış +10)."
+                        )
+                    }
+                ) from exc
+            raise ValidationError({"__all__": msg}) from exc
 
     def save(self, *args, **kwargs):
         if self.ayar_id and self.ayar.metal_id:

@@ -53,6 +53,7 @@ def capabilities_for(user) -> dict[str, bool]:
         "can_view_supplier_stock": supplier or ops,
         "can_view_ops": ops,
         "can_view_ops_finance": ops,
+        "can_manage_piyasa": has_perm(user, P["manage_piyasa"]) or ops,
         "can_manage_qc": has_perm(user, P["manage_qc"]),
         "can_manage_shipment": has_perm(user, P["manage_shipment"]),
         "can_manage_return": has_perm(user, P["manage_return"]),

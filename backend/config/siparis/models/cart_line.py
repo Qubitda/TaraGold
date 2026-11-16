@@ -31,6 +31,9 @@ class CartLine(models.Model):
     )
     miktar = models.DecimalField(max_digits=18, decimal_places=6)
     birim = models.CharField(max_length=8, choices=SepetBirimi.CHOICES)
+    # ADR-0043: alıcı montür+taş seçimi (tedarikçi id yalnız sunucu içi)
+    bilesim = models.JSONField(null=True, blank=True, default=None)
+    bilesim_anahtar = models.CharField(max_length=64, blank=True, default="")
     olusturma_tarihi = models.DateTimeField(auto_now_add=True)
     guncelleme_tarihi = models.DateTimeField(auto_now=True)
 
@@ -48,8 +51,8 @@ class CartLine(models.Model):
                 name="cartline_birim_gecerli",
             ),
             models.UniqueConstraint(
-                fields=["cart", "varyant"],
-                name="cartline_cart_varyant_uniq",
+                fields=["cart", "varyant", "bilesim_anahtar"],
+                name="cartline_cart_varyant_bilesim_uniq",
             ),
         ]
         indexes = [

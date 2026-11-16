@@ -57,18 +57,74 @@ def bilesen_borclar(*, varyant, miktar: Decimal) -> dict:
 def reserve_bilesen_stocks(*, actor, locked, line, now) -> list:
     """Her bileşeni kendi tedarikçi deposundan rezerve+tüket. Boşsa []."""
     from siparis.services.checkout_servisi import _resolve_warehouse_for_fiyat
+    from siparis.services.bilesim_secim import composition_stock_parts
     from stok.services.reservation_servisi import (
         olustur_rezervasyon,
         tuket_rezervasyon,
     )
     from fiyatlama.models import VaryantFiyat
+    from urunler.models import Varyant
+
+    miktar_line = Decimal(line.miktar)
+    created = []
+
+    # ADR-0043 alıcı seçimi
+    parts = composition_stock_parts(getattr(line, "bilesim", None))
+    if parts:
+        for i, p in enumerate(parts):
+            vf = (
+                VaryantFiyat.objects.filter(
+                    varyant_id=p["varyant_id"],
+                    tedarikci_id=p["tedarikci_id"],
+                    durum=VaryantFiyat.Durum.AKTIF,
+                )
+                .order_by("-versiyon", "-pk")
+                .first()
+            )
+            if vf is None:
+                raise ValidationError(
+                    {
+                        "stok": (
+                            f"Satır #{line.pk} bileşen {p['rol']}: "
+                            f"aktif VaryantFiyat yok (varyant={p['varyant_id']})."
+                        )
+                    }
+                )
+            warehouse = _resolve_warehouse_for_fiyat(vf)
+            v = Varyant.objects.filter(pk=p["varyant_id"]).first()
+            adet = q4(Decimal(p["miktar"]) * miktar_line)
+            try:
+                res = olustur_rezervasyon(
+                    actor=actor,
+                    warehouse=warehouse,
+                    varyant=v,
+                    fiyat_modeli=vf.fiyat_modeli,
+                    tedarikci_id=p["tedarikci_id"],
+                    miktar=adet,
+                    alici_firma=locked.alici_firma,
+                    now=now,
+                    idempotency_key=(
+                        f"order-onay:{locked.pk}:line:{line.pk}:comp:{i}:{p['rol']}"
+                    ),
+                )
+                tuket_rezervasyon(res, actor=actor, now=now)
+                created.append(res)
+            except ValidationError as exc:
+                msg = "; ".join(getattr(exc, "messages", None) or [str(exc)])
+                raise ValidationError(
+                    {
+                        "stok": (
+                            f"Satır #{line.pk} bileşen {p['rol']}: "
+                            f"stok yetersiz — {msg}"
+                        )
+                    }
+                ) from exc
+        return created
 
     bilesenler = list_bilesenler(line.varyant)
     if not bilesenler:
         return []
 
-    miktar_line = Decimal(line.miktar)
-    created = []
     for b in bilesenler:
         vf = (
             VaryantFiyat.objects.filter(

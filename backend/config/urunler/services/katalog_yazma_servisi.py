@@ -387,6 +387,13 @@ def varyant_ekle(
     sabit_fiyat: Decimal | str | None = None,
     tedarikci_sku: str = "",
     benzersiz_parca: bool = False,
+    tip: str | None = None,
+    yuva_adedi: int | None = None,
+    izinli_kesimler: list | None = None,
+    karat_min: Decimal | str | None = None,
+    karat_max: Decimal | str | None = None,
+    karat: Decimal | str | None = None,
+    kesim_kod: str | None = None,
 ) -> Varyant:
     """Taslak/reddedildi ürüne aktif varyant ekle (onaya_gonder önkoşulu)."""
     _require_platform_submit(actor, action="urun.varyant_ekle", urun=urun)
@@ -445,10 +452,38 @@ def varyant_ekle(
         if beden is None:
             raise ValidationError({"beden_id": "Ölçü/beden değeri bulunamadı."})
 
+    tip_v = (tip or "").strip().upper() or Varyant.Tip.HAM_ALTIN
+    allowed_tips = {c.value for c in Varyant.Tip}
+    if tip_v not in allowed_tips:
+        raise ValidationError(
+            {"tip": f"Geçersiz tip. İzin verilen: {', '.join(sorted(allowed_tips))}"}
+        )
+
+    def _dec_opt(raw, field: str):
+        if raw in (None, ""):
+            return None
+        try:
+            return Decimal(str(raw))
+        except (InvalidOperation, TypeError) as exc:
+            raise ValidationError({field: "Geçersiz."}) from exc
+
+    yuva_v = None
+    if yuva_adedi not in (None, ""):
+        try:
+            yuva_v = int(yuva_adedi)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"yuva_adedi": "Geçersiz."}) from exc
+    kesimler_v = list(izinli_kesimler) if isinstance(izinli_kesimler, list) else []
+    karat_min_v = _dec_opt(karat_min, "karat_min")
+    karat_max_v = _dec_opt(karat_max, "karat_max")
+    karat_v = _dec_opt(karat, "karat")
+    kesim_kod_v = (kesim_kod or "").strip().upper()[:32]
+
     try:
         with transaction.atomic():
             v = Varyant(
                 urun=urun,
+                tip=tip_v,
                 gram=gram_v,
                 renk=renk,
                 beden=beden,
@@ -456,6 +491,12 @@ def varyant_ekle(
                 ek_bedel=ek,
                 tedarikci_sku=(tedarikci_sku or "").strip()[:50],
                 benzersiz_parca=bool(benzersiz_parca),
+                yuva_adedi=yuva_v,
+                izinli_kesimler=kesimler_v,
+                karat_min=karat_min_v,
+                karat_max=karat_max_v,
+                karat=karat_v,
+                kesim_kod=kesim_kod_v,
                 aktif=True,
             )
             v.full_clean()
@@ -466,7 +507,7 @@ def varyant_ekle(
                 entity_type="Varyant",
                 entity_id=v.pk,
                 success=True,
-                detail={"urun_id": urun.pk},
+                detail={"urun_id": urun.pk, "tip": tip_v},
             )
             return v
     except ValidationError as exc:
@@ -494,6 +535,13 @@ def varyant_guncelle(
     tedarikci_sku: str | None = None,
     benzersiz_parca: bool | None = None,
     aktif: bool | None = None,
+    tip: str | None = None,
+    yuva_adedi=None,
+    izinli_kesimler=None,
+    karat_min=None,
+    karat_max=None,
+    karat=None,
+    kesim_kod=None,
 ) -> Varyant:
     urun = varyant.urun
     _require_platform_submit(actor, action="urun.varyant_guncelle", urun=urun)
@@ -516,6 +564,35 @@ def varyant_guncelle(
         varyant.benzersiz_parca = bool(benzersiz_parca)
     if aktif is not None:
         varyant.aktif = bool(aktif)
+    if tip is not None:
+        tip_v = str(tip).strip().upper()
+        allowed_tips = {c.value for c in Varyant.Tip}
+        if tip_v not in allowed_tips:
+            raise ValidationError(
+                {"tip": f"Geçersiz tip. İzin verilen: {', '.join(sorted(allowed_tips))}"}
+            )
+        varyant.tip = tip_v
+    if yuva_adedi is not None:
+        if yuva_adedi in ("",):
+            varyant.yuva_adedi = None
+        else:
+            varyant.yuva_adedi = int(yuva_adedi)
+    if izinli_kesimler is not None:
+        varyant.izinli_kesimler = (
+            list(izinli_kesimler) if isinstance(izinli_kesimler, list) else []
+        )
+    if karat_min is not None:
+        varyant.karat_min = (
+            Decimal(str(karat_min)) if str(karat_min).strip() else None
+        )
+    if karat_max is not None:
+        varyant.karat_max = (
+            Decimal(str(karat_max)) if str(karat_max).strip() else None
+        )
+    if karat is not None:
+        varyant.karat = Decimal(str(karat)) if str(karat).strip() else None
+    if kesim_kod is not None:
+        varyant.kesim_kod = str(kesim_kod or "").strip().upper()[:32]
 
     with transaction.atomic():
         varyant.full_clean()

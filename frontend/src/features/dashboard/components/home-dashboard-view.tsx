@@ -118,7 +118,10 @@ export function HomeDashboardView() {
       ? snapQ.error instanceof Error
         ? snapQ.error.message
         : "Dashboard yüklenemedi."
-      : !snap.meDashboard && snap.errors.meDashboard
+      : // Ops/platform: alıcı /me/dashboard/ çağrılmaz; bu 403'ü kırmızı alarm sayma
+        !caps?.can_view_ops &&
+          !snap.meDashboard &&
+          snap.errors.meDashboard
         ? snap.errors.meDashboard
         : null;
 

@@ -16,7 +16,12 @@ class DovizKuru(models.Model):
         ("api", "API"),
         ("tcmb", "TCMB EOD"),
     ]
-    PARA_BIRIMI = [("USD", "USD"), ("EUR", "EUR"), ("GBP", "GBP")]
+    PARA_BIRIMI = [
+        ("USD", "USD"),
+        ("EUR", "EUR"),
+        ("GBP", "GBP"),
+        ("CHF", "CHF"),
+    ]
 
     para_birimi = models.CharField("Para birimi", max_length=10, choices=PARA_BIRIMI)
     saglayici = models.ForeignKey(

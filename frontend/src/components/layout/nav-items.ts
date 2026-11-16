@@ -42,16 +42,16 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Genel",
     items: [
       {
-        id: "piyasa",
-        href: "/piyasa",
-        label: "Canlı Piyasa",
-        icon: LineChart,
-      },
-      {
         id: "overview",
         href: "/",
         label: "Genel Bakış",
         icon: LayoutGrid,
+      },
+      {
+        id: "piyasa",
+        href: "/piyasa",
+        label: "Canlı Piyasa",
+        icon: LineChart,
       },
     ],
   },
@@ -151,6 +151,13 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Tanımlar & Kanallar",
         icon: Sliders,
         requiredCapability: "can_view_ops",
+      },
+      {
+        id: "piyasa-ayar",
+        href: "/ayarlar/piyasa",
+        label: "Canlı Piyasa Ayarları",
+        icon: LineChart,
+        requiredAnyOf: ["can_manage_piyasa", "can_view_ops"],
       },
       {
         id: "smtp",

@@ -183,9 +183,13 @@ export interface BuyerCatalogPage {
   results: BuyerCatalogItem[];
 }
 
+/** ADR-0043 — varyant katalog tipi */
+export type OpsVariantTip = "HAM_ALTIN" | "MONTUR" | "TAS" | "TASLI";
+
 export interface OpsProductVariant {
   id: number;
   sku: string;
+  tip?: OpsVariantTip | string;
   aktif: boolean;
   gram?: string | null;
   renk_id?: number | null;
@@ -196,6 +200,15 @@ export interface OpsProductVariant {
   sabit_fiyat?: string | null;
   tedarikci_sku?: string;
   benzersiz_parca?: boolean;
+  /** ADR-0044 — montür uyumluluk */
+  yuva_adedi?: number | null;
+  izinli_kesimler?: string[];
+  karat_min?: string | null;
+  karat_max?: string | null;
+  /** ADR-0044 — taş */
+  karat?: string | null;
+  kesim_kod?: string;
+  imalata_acik?: boolean;
 }
 
 export interface OpsProductChannelItem {
@@ -338,6 +351,7 @@ export interface OpsProductUpdateRequest {
 }
 
 export interface OpsProductVariantCreateRequest {
+  tip?: OpsVariantTip | string;
   gram?: string;
   renk_id?: number | null;
   beden_id?: number | null;
@@ -345,6 +359,12 @@ export interface OpsProductVariantCreateRequest {
   sabit_fiyat?: string;
   tedarikci_sku?: string;
   benzersiz_parca?: boolean;
+  yuva_adedi?: number | null;
+  izinli_kesimler?: string[];
+  karat_min?: string | null;
+  karat_max?: string | null;
+  karat?: string | null;
+  kesim_kod?: string;
 }
 
 export interface OpsProductVariantUpdateRequest extends OpsProductVariantCreateRequest {
@@ -470,9 +490,17 @@ export interface CatalogRefsResponse {
 export interface MonturCatalogVariant {
   id: number;
   sku: string;
+  tip?: string;
   gram: string | null;
   renk: string;
   beden: string;
+  imalata_acik?: boolean;
+  yuva_adedi?: number | null;
+  izinli_kesimler?: string[];
+  karat_min?: string | null;
+  karat_max?: string | null;
+  karat?: string | null;
+  kesim_kod?: string;
 }
 
 export interface MonturCatalogItem extends BuyerCatalogItem {
@@ -488,12 +516,18 @@ export interface MonturlerPage {
   results: MonturCatalogItem[];
 }
 
+/** `?mode=referans` — TasTipi sözlüğü; varyant modunda katalog ürünü */
 export interface TasCatalogItem {
   id: number;
-  kod: string;
+  kod?: string;
   ad: string;
-  degerli: boolean;
-  sira: number;
+  degerli?: boolean;
+  sira?: number;
+  /** ADR-0043 satınalınabilir taş ürünü */
+  platform_kodu?: string;
+  kategori?: string;
+  ayar?: string;
+  varyantlar?: MonturCatalogVariant[];
 }
 
 export interface TasRefItem {
@@ -508,6 +542,7 @@ export interface TaslarPage {
   page_size?: number;
   next?: string | null;
   previous?: string | null;
+  mode?: "varyant" | "referans" | string;
   results: TasCatalogItem[];
   referanslar?: {
     kesimler?: TasRefItem[];

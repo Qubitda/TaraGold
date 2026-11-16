@@ -29,7 +29,9 @@ import BelgelerPage from "@/app/(portal)/belgeler/page";
 import ProfilPage from "@/app/(portal)/profil/page";
 import RaporlarPage from "@/app/(portal)/raporlar/page";
 import EpostaAyarlariPage from "@/app/(portal)/ayarlar/eposta/page";
+import PiyasaAyarlariPage from "@/app/(portal)/ayarlar/piyasa/page";
 import PiyasaPage from "@/app/(portal)/piyasa/page";
+import PiyasaTvPage from "@/app/piyasa/tv/page";
 
 const queryClient = createAppQueryClient();
 
@@ -92,6 +94,7 @@ export default function App() {
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/reset-password" element={<ResetPasswordPage />} />
                     <Route path="/invite" element={<AcceptInvitePage />} />
+                    <Route path="/piyasa/tv" element={<PiyasaTvPage />} />
 
                     <Route element={<PortalLayout />}>
                       <Route index element={<HomePage />} />
@@ -186,6 +189,18 @@ export default function App() {
                         <Route
                           path="ayarlar/eposta"
                           element={<EpostaAyarlariPage />}
+                        />
+                      </Route>
+                      <Route
+                        element={
+                          <RequireCapability
+                            anyOf={["can_manage_piyasa", "can_view_ops"]}
+                          />
+                        }
+                      >
+                        <Route
+                          path="ayarlar/piyasa"
+                          element={<PiyasaAyarlariPage />}
                         />
                       </Route>
 

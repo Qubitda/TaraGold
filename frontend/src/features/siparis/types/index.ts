@@ -3,6 +3,24 @@
  * Fiyat ve miktar hesaplamaları daima backend otoritesindedir.
  */
 
+export interface BuyerCartLineBilesim {
+  schema: string;
+  montur: {
+    quote_id?: number;
+    varyant_id?: number;
+    varyant_sku?: string;
+    urun_ad?: string;
+  };
+  taslar: Array<{
+    quote_id?: number;
+    varyant_id?: number;
+    varyant_sku?: string;
+    urun_ad?: string;
+    miktar?: string;
+    birim?: string;
+  }>;
+}
+
 export interface BuyerCartLine {
   id: number;
   varyant_id: number;
@@ -17,6 +35,8 @@ export interface BuyerCartLine {
   gram?: string | null;
   fiyat_tipi?: string;
   satis_kanali_id?: number;
+  /** ADR-0043 alıcı montür+taş seçimi */
+  bilesim?: BuyerCartLineBilesim | null;
 }
 
 export interface BuyerCart {

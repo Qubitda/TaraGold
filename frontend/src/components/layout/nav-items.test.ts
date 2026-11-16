@@ -26,7 +26,7 @@ describe("nav-items IA", () => {
   it("capability yokken yalnızca herkese açık öğeleri bırakır", () => {
     const groups = filterVisibleNavGroups(caps({}));
     const ids = groups.flatMap((g) => g.items.map((i) => i.id));
-    expect(ids).toEqual(["piyasa", "overview"]);
+    expect(ids).toEqual(["overview", "piyasa"]);
     expect(groups.map((g) => g.id)).toEqual(["genel"]);
   });
 
@@ -43,7 +43,7 @@ describe("nav-items IA", () => {
     );
     expect(byGroup.operasyon).toContain("orders");
     expect(byGroup.sistem).toEqual(
-      expect.arrayContaining(["definitions", "smtp"])
+      expect.arrayContaining(["definitions", "piyasa-ayar", "smtp"])
     );
     expect(byGroup.analiz).toEqual(["reports"]);
   });

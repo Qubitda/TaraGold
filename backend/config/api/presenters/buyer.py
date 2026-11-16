@@ -42,6 +42,7 @@ def BuyerCartLinePresenter(line) -> dict:
         "para_birimi": raw["para_birimi"],
         "birim_fiyat_vergisiz": _dec(raw["birim_fiyat_vergisiz"]),
         "gecerlilik_sonu": _dt(raw["gecerlilik_sonu"]),
+        "bilesim": raw.get("bilesim"),
     }
     assert_masked(data)
     return data

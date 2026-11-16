@@ -35,13 +35,14 @@ nihai\_satis &= ham\_satis + satis\_marj && \text{(TL)} \\
 ## 3. Karar — veri kaynağı
 
 - `KurSaglayici` arayüzü korunur; **Binance** ilk concrete provider. İkinci sağlayıcı eklenebilir.
+- **Binance.TR (2026-11-16):** spot REST/WS varsayılan `api.binance.me` / `stream.binance.me`. `BINANCE_TR_API_KEY` yalnız `.env` (`X-MBX-APIKEY`; asla commit/log). Market data public; SIGNED için ayrıca `BINANCE_TR_API_SECRET`. XAU/XAG futures global `fapi.binance.com` (TR’de XAU çifti yok). TR’de `PAXG_TRY` / `XAUT_TRY` / `USDT_TRY` var; gram yolu hâlâ `XAUUSDT×USDTTRY` (yedek: `PAXGUSDT`/`XAUTUSDT`).
 - Sembol tablosu/config (kod gömme yok). **Dilim 1 canlı doğrulama (2026-11-16, bu ortam):**
 
 | İhtiyaç | Sonuç | Not |
 |---------|--------|-----|
 | Ons AU | **DOĞRULANDI** `XAUUSDT` fapi bookTicker | Yedek: spot `PAXGUSDT`, `XAUTUSDT` (ikisi de canlı) |
 | Ons AG | **DOĞRULANDI** `XAGUSDT` fapi | |
-| USD/TRY | **DOĞRULANDI** spot `USDTTRY` | |
+| USD/TRY | **DOĞRULANDI** spot `USDTTRY` (`api.binance.me`) | |
 | EUR/TRY | **DOĞRULANDI** zincir `EURUSDT × USDTTRY` | Spot `EURTRY` **yok** (−1121) |
 | GBP/TRY | **DOĞRULANAMADI** canlı book | Spot’ta TRADING `GBP*` yok; `GBPUSDT` book 0/0; fapi `GBPUSDT` −1121. Sterlin kalemi: config’te zincir + **sıfır book → STALE/manuel**; ikinci sağlayıcı veya ops MANUEL. |
 

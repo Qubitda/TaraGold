@@ -34,12 +34,16 @@ class PiyasaPanoStreamView(APIView):
             "yes",
         }
 
+        firma = getattr(request.user, "firma", None)
+
         def event_stream():
             last_payload = None
             last_beat = time.monotonic()
             # İlk snapshot
             try:
-                body = present_buyer_pano(olcek=olcek, ticker_only=ticker_only)
+                body = present_buyer_pano(
+                    olcek=olcek, ticker_only=ticker_only, firma=firma
+                )
                 assert_masked(body, context="buyer")
             except DjangoValidationError as exc:
                 yield _sse_pack(
@@ -54,7 +58,9 @@ class PiyasaPanoStreamView(APIView):
             while True:
                 time.sleep(2)
                 try:
-                    body = present_buyer_pano(olcek=olcek, ticker_only=ticker_only)
+                    body = present_buyer_pano(
+                        olcek=olcek, ticker_only=ticker_only, firma=firma
+                    )
                     assert_masked(body, context="buyer")
                 except DjangoValidationError as exc:
                     yield _sse_pack("error", {"detail": str(exc)})

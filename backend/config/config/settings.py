@@ -410,7 +410,8 @@ PAYMENT_WEBHOOK_IP_ALLOWLIST = env.list(
     "PAYMENT_WEBHOOK_IP_ALLOWLIST", default=[]
 )
 
-# --- ADR-0039 piyasa feed (Binance bookTicker; anahtarsız public) ------------
+# --- ADR-0039 piyasa feed (Binance.TR spot + global futures) ----------------
+# Market data public; API key yalnız .env (asla commit/log). SIGNED için secret.
 # Bayatlık: stale → LKG+banner; hide → fiyat yok / ödeme snapshot red.
 PIYASA_FEED_STALE_SECONDS = env.int("PIYASA_FEED_STALE_SECONDS", default=30)
 PIYASA_FEED_HIDE_SECONDS = env.int("PIYASA_FEED_HIDE_SECONDS", default=300)
@@ -419,7 +420,9 @@ PIYASA_FEED_THROTTLE_SECONDS = env.int("PIYASA_FEED_THROTTLE_SECONDS", default=5
 PIYASA_FEED_THROTTLE_PCT = Decimal(env("PIYASA_FEED_THROTTLE_PCT", default="0.05"))
 PIYASA_METAL_KOD = env("PIYASA_METAL_KOD", default="ALTIN")
 PIYASA_GUMUS_KOD = env("PIYASA_GUMUS_KOD", default="GUMUS")
+PIYASA_ONS_OZET_CACHE_SECONDS = env.int("PIYASA_ONS_OZET_CACHE_SECONDS", default=300)
 # Sembol haritası ayardan; kod gömme yok (ADR-0039 §3).
+# Spot varsayılan: Binance.TR (api.binance.me). XAU/XAG futures global fapi.
 PIYASA_BINANCE = {
     "futures_rest_book": env(
         "BINANCE_FUTURES_BOOK_URL",
@@ -427,7 +430,7 @@ PIYASA_BINANCE = {
     ),
     "spot_rest_book": env(
         "BINANCE_SPOT_BOOK_URL",
-        default="https://api.binance.com/api/v3/ticker/bookTicker",
+        default="https://api.binance.me/api/v3/ticker/bookTicker",
     ),
     "futures_ws": env(
         "BINANCE_FUTURES_WS",
@@ -435,16 +438,35 @@ PIYASA_BINANCE = {
     ),
     "spot_ws": env(
         "BINANCE_SPOT_WS",
-        default="wss://stream.binance.com:9443/stream",
+        default="wss://stream.binance.me:9443/stream",
     ),
+    "api_key": env("BINANCE_TR_API_KEY", default=""),
+    "api_secret": env("BINANCE_TR_API_SECRET", default=""),
     "symbols": {
         "XAUUSDT": {"market": "futures", "role": "ons_au"},
         "XAGUSDT": {"market": "futures", "role": "ons_ag"},
         "USDTTRY": {"market": "spot", "role": "usdtry"},
         "EURUSDT": {"market": "spot", "role": "eurusdt"},
+        "GBPUSDT": {"market": "spot", "role": "gbpusdt"},
+        "CHFUSDT": {"market": "spot", "role": "chfusdt"},
+        # Spot yedek (USDT cinsinden ons; USDTRY ile çaprazlanır)
         "PAXGUSDT": {"market": "spot", "role": "ons_au_backup"},
         "XAUTUSDT": {"market": "spot", "role": "ons_au_backup2"},
     },
+}
+
+# --- ADR-0042 Frankfurter yedek (FX + XAU/XAG referans) ---------------------
+# Binance book 0/yok veya metal poll kesikken; mid ± spread_bps. Anahtar yok.
+PIYASA_FRANKFURTER = {
+    "enabled": env.bool("PIYASA_FRANKFURTER_ENABLED", default=True),
+    "base_url": env("PIYASA_FRANKFURTER_URL", default="https://api.frankfurter.dev"),
+    "cache_seconds": env.int("PIYASA_FRANKFURTER_CACHE_SECONDS", default=900),
+    "throttle_seconds": env.int("PIYASA_FRANKFURTER_THROTTLE_SECONDS", default=60),
+    "spread_bps": Decimal(env("PIYASA_FRANKFURTER_SPREAD_BPS", default="10")),
+    "bases": ["USD", "EUR", "GBP", "CHF", "XAU", "XAG"],
+    # Döviz: Binance yazamadıysa doldur. Metal: Binance/PAXG yazamadıysa.
+    "fx_fallback": ["GBP", "CHF", "EUR", "USD"],
+    "metal_fallback": True,
 }
 
 # --- F8-003 Sentry (DSN boş → no-op) ----------------------------------------

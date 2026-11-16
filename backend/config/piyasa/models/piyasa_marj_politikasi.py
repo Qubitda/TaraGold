@@ -32,6 +32,13 @@ class PiyasaMarjPolitikasi(models.Model):
         default=True,
         help_text="GAP-F3-02: küresel marj politikası aktif mi.",
     )
+    pano_baslik = models.CharField(
+        "Pano başlığı",
+        max_length=80,
+        blank=True,
+        default="",
+        help_text="Canlı Piyasa / TV ekranında görünen unvan (ör. Aydemir Platform). Boşsa firma adı.",
+    )
     guncelleme = models.DateTimeField(auto_now=True)
 
     class Meta:

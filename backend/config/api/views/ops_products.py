@@ -318,6 +318,13 @@ class OpsProductVariantCreateView(IdempotencyMixin, APIView):
                 sabit_fiyat=body.get("sabit_fiyat"),
                 tedarikci_sku=str(body.get("tedarikci_sku") or ""),
                 benzersiz_parca=bool(body.get("benzersiz_parca", False)),
+                tip=str(body.get("tip") or "").strip() or None,
+                yuva_adedi=body.get("yuva_adedi"),
+                izinli_kesimler=body.get("izinli_kesimler"),
+                karat_min=body.get("karat_min"),
+                karat_max=body.get("karat_max"),
+                karat=body.get("karat"),
+                kesim_kod=body.get("kesim_kod"),
             )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc
@@ -350,6 +357,15 @@ class OpsProductVariantDetailView(APIView):
                 tedarikci_sku=body.get("tedarikci_sku") if "tedarikci_sku" in body else None,
                 benzersiz_parca=body.get("benzersiz_parca") if "benzersiz_parca" in body else None,
                 aktif=body.get("aktif") if "aktif" in body else None,
+                tip=body.get("tip") if "tip" in body else None,
+                yuva_adedi=body.get("yuva_adedi") if "yuva_adedi" in body else None,
+                izinli_kesimler=body.get("izinli_kesimler")
+                if "izinli_kesimler" in body
+                else None,
+                karat_min=body.get("karat_min") if "karat_min" in body else None,
+                karat_max=body.get("karat_max") if "karat_max" in body else None,
+                karat=body.get("karat") if "karat" in body else None,
+                kesim_kod=body.get("kesim_kod") if "kesim_kod" in body else None,
             )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc

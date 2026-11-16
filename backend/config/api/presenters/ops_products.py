@@ -25,9 +25,13 @@ def _allowed_actions(urun, user) -> list[str]:
 
 
 def present_ops_variant(v) -> dict:
+    from urunler.services.uyumluluk_servisi import montur_imalata_acik
+
+    tip = getattr(v, "tip", None) or "HAM_ALTIN"
     data = {
         "id": v.pk,
         "sku": v.sku or "",
+        "tip": tip,
         "tedarikci_sku": v.tedarikci_sku or "",
         "gram": str(v.gram) if v.gram is not None else None,
         "sabit_fiyat": str(v.sabit_fiyat) if v.sabit_fiyat is not None else None,
@@ -38,6 +42,18 @@ def present_ops_variant(v) -> dict:
         "ek_bedel": str(v.ek_bedel) if v.ek_bedel is not None else "0",
         "benzersiz_parca": bool(v.benzersiz_parca),
         "aktif": bool(v.aktif),
+        # ADR-0044
+        "yuva_adedi": getattr(v, "yuva_adedi", None),
+        "izinli_kesimler": list(getattr(v, "izinli_kesimler", None) or []),
+        "karat_min": str(v.karat_min)
+        if getattr(v, "karat_min", None) is not None
+        else None,
+        "karat_max": str(v.karat_max)
+        if getattr(v, "karat_max", None) is not None
+        else None,
+        "karat": str(v.karat) if getattr(v, "karat", None) is not None else None,
+        "kesim_kod": getattr(v, "kesim_kod", None) or "",
+        "imalata_acik": montur_imalata_acik(v) if tip == "MONTUR" else False,
     }
     assert_masked(data)
     return data

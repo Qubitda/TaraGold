@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { piyasaService } from "../services";
 import type {
+  FirmaPanoTercihPatch,
   MarjKuraliWriteRequest,
   OpsMarjPolitikasiPatchRequest,
   PiyasaOlcek,
@@ -12,8 +13,10 @@ export const piyasaKeys = {
   all: ["piyasa"] as const,
   pano: (olcek?: PiyasaOlcek) =>
     [...piyasaKeys.all, "pano", olcek ?? "ALL"] as const,
+  tercih: () => [...piyasaKeys.all, "tercih"] as const,
   marjPolitikasi: () => [...piyasaKeys.all, "ops-marj-politikasi"] as const,
   canli: () => [...piyasaKeys.all, "ops-canli"] as const,
+  panoDetay: () => [...piyasaKeys.all, "ops-pano-detay"] as const,
   marjKurallari: (params?: Record<string, string | undefined>) =>
     [...piyasaKeys.all, "ops-marj-kurallari", params ?? {}] as const,
 };
@@ -25,6 +28,46 @@ export function usePiyasaPano(olcek?: PiyasaOlcek) {
     queryFn: () => piyasaService.getPano(olcek),
     refetchInterval: 30_000,
     staleTime: 15_000,
+  });
+}
+
+/**
+ * Şerit + pano aynı canlılık durumu.
+ * Geçici refetch hatası (elde eski veri varken) KOPUK sayılmaz.
+ */
+export function useLivePanoStatus(olcek?: PiyasaOlcek) {
+  const q = usePiyasaPano(olcek);
+  const hasData = Boolean(q.data);
+  const kaynak = q.data?.kaynak;
+  const hardError = Boolean(q.isError && !hasData);
+  const isDown = hardError || kaynak === "FAIL";
+  return {
+    q,
+    kaynak,
+    gecikmeli: Boolean(q.data?.gecikmeli) || kaynak === "LKG",
+    isDown,
+    hidePrices: isDown,
+    isLoading: q.isLoading && !hasData,
+    isError: hardError,
+  };
+}
+
+export function useFirmaPanoTercihQuery(enabled = true) {
+  return useQuery({
+    queryKey: piyasaKeys.tercih(),
+    queryFn: () => piyasaService.getTercih(),
+    enabled,
+  });
+}
+
+export function useUpdateFirmaPanoTercihMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: FirmaPanoTercihPatch) =>
+      piyasaService.updateTercih(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
   });
 }
 
@@ -54,6 +97,72 @@ export function useOpsCanliPiyasaQuery(enabled = true) {
     refetchInterval: 30_000,
     staleTime: 15_000,
     enabled,
+  });
+}
+
+export function useOpsPanoDetayQuery(enabled = true) {
+  return useQuery({
+    queryKey: piyasaKeys.panoDetay(),
+    queryFn: () => piyasaService.getOpsPanoDetay(),
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+    enabled,
+  });
+}
+
+export function useCreateOpsUrunMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: import("../types").OpsPiyasaUrunCreate) =>
+      piyasaService.createOpsUrun(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
+  });
+}
+
+export function usePatchOpsUrunMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: number | string;
+      data: import("../types").OpsPiyasaUrunPatch;
+    }) => piyasaService.patchOpsUrun(vars.id, vars.data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
+  });
+}
+
+export function useDeleteOpsUrunMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number | string) => piyasaService.deleteOpsUrun(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
+  });
+}
+
+export function useTickerTopluMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ticker_da_goster: boolean) =>
+      piyasaService.setTickerToplu(ticker_da_goster),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
+  });
+}
+
+export function usePanoGosterTopluMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (aliciya_goster: boolean) =>
+      piyasaService.setPanoGosterToplu(aliciya_goster),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: piyasaKeys.all });
+    },
   });
 }
 

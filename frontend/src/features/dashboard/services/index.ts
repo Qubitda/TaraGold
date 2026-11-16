@@ -74,13 +74,18 @@ export const dashboardService = {
 
     const tasks: Array<Promise<void>> = [];
 
-    tasks.push(
-      (async () => {
-        const r = await Promise.allSettled([dashboardService.getMeDashboard()]);
-        settleError(snap.errors, "meDashboard", r[0]);
-        if (r[0].status === "fulfilled") snap.meDashboard = r[0].value;
-      })()
-    );
+    // /me/dashboard/ yalnız alıcı firması — platform/ops (can_view_ops) bilerek 403 verir.
+    if (!c.can_view_ops) {
+      tasks.push(
+        (async () => {
+          const r = await Promise.allSettled([
+            dashboardService.getMeDashboard(),
+          ]);
+          settleError(snap.errors, "meDashboard", r[0]);
+          if (r[0].status === "fulfilled") snap.meDashboard = r[0].value;
+        })()
+      );
+    }
 
     if (c.can_view_orders || c.can_view_cart || c.can_checkout) {
       tasks.push(

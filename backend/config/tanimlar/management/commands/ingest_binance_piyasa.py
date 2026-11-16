@@ -72,6 +72,7 @@ class Command(BaseCommand):
 
     def _rest_loop(self, *, interval: float):
         self.stdout.write(f"REST poll loop interval={interval}s (Ctrl+C durdur)")
+        self.stdout.flush()
         while True:
             try:
                 result = run_rest_poll_once(kaynak="api")
@@ -79,8 +80,10 @@ class Command(BaseCommand):
                     f"ok={result.ok} ticks={len(result.ticks)} "
                     f"persisted={result.persisted} rejected={len(result.rejected)}"
                 )
+                self.stdout.flush()
             except Exception as exc:  # noqa: BLE001
                 self.stderr.write(self.style.ERROR(str(exc)))
+                self.stderr.flush()
             time.sleep(max(0.5, interval))
 
     async def _ws_loop(self, *, interval: float):

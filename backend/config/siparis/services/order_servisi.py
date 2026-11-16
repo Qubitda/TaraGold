@@ -189,6 +189,7 @@ def olustur_from_checkout(
                     snapshot_birim_fiyat_vergisiz=None,
                     snapshot_satir_tutari_vergisiz=None,
                     para_birimi=quote.para_birimi,
+                    bilesim=row.get("bilesim"),
                 )
                 line.save()
 

@@ -95,25 +95,28 @@ class BuyerCatalogDetailView(APIView):
 
 
 class BuyerCatalogMonturListView(APIView):
-    """GAP-F3-05 — GET /api/v1/catalog/monturler/ (özel üretim montür kataloğu)."""
+    """ADR-0043 — GET /api/v1/catalog/monturler/ (Varyant.tip=MONTUR)."""
 
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [BuyerRateThrottle]
 
     def get(self, request):
         _assert_buyer_or_ops(request.user)
+        from urunler.models import Varyant
+
         qs = (
             Urun.objects.filter(yayin_durumu="aktif", onay_durumu="onayli")
             .filter(
-                Q(kategori__kod__icontains="montur")
-                | Q(kategori__ad__icontains="mont")
-                | Q(ad__icontains="mont")
+                varyantlar__aktif=True,
+                varyantlar__tip=Varyant.Tip.MONTUR,
             )
+            .distinct()
             .select_related("kategori", "ayar")
             .prefetch_related("varyantlar__renk", "varyantlar__beden")
             .annotate(
                 varyant_count=Count(
-                    "varyantlar", filter=Q(varyantlar__aktif=True)
+                    "varyantlar",
+                    filter=Q(varyantlar__aktif=True, varyantlar__tip=Varyant.Tip.MONTUR),
                 )
             )
         )
@@ -127,17 +130,26 @@ class BuyerCatalogMonturListView(APIView):
         )
 
         def _present_montur(u: Urun) -> dict:
+            from urunler.models import Varyant as V
+            from urunler.services.uyumluluk_servisi import (
+                montur_imalata_acik,
+                present_uyumluluk,
+            )
+
             item = BuyerCatalogItemPresenter(u)
+            # ADR-0044 sıkı: uyumluluk boşsa imalat listesine girmez
             item["varyantlar"] = [
                 {
                     "id": v.pk,
                     "sku": v.sku,
+                    "tip": v.tip,
                     "gram": str(v.gram) if v.gram is not None else None,
                     "renk": getattr(getattr(v, "renk", None), "ad", "") or "",
                     "beden": getattr(getattr(v, "beden", None), "ad", "") or "",
+                    **present_uyumluluk(v),
                 }
                 for v in u.varyantlar.all()
-                if v.aktif
+                if v.aktif and v.tip == V.Tip.MONTUR and montur_imalata_acik(v)
             ]
             assert_masked(item, context="buyer")
             return item
@@ -146,40 +158,117 @@ class BuyerCatalogMonturListView(APIView):
 
 
 class BuyerCatalogTasListView(APIView):
-    """GAP-F3-05 — GET /api/v1/catalog/taslar/ (taş tipleri + 4C referans katalog)."""
+    """ADR-0043 — GET /api/v1/catalog/taslar/
+
+    Varsayılan: satınalınabilir TAS varyantlı ürünler.
+    `?mode=referans` → eski TasTipi + 4C sözlükleri.
+    """
 
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [BuyerRateThrottle]
 
     def get(self, request):
         _assert_buyer_or_ops(request.user)
-        qs = TasTipi.objects.filter(aktif=True).order_by("sira", "ad")
+        mode = (request.query_params.get("mode") or "").strip().lower()
+        if mode == "referans":
+            qs = TasTipi.objects.filter(aktif=True).order_by("sira", "ad")
+            term = (request.query_params.get("q") or "").strip()
+            if term:
+                qs = qs.filter(Q(ad__icontains=term) | Q(kod__icontains=term))
+
+            def _present_ref(t: TasTipi) -> dict:
+                item = {
+                    "id": t.pk,
+                    "kod": t.kod,
+                    "ad": t.ad,
+                    "degerli": bool(t.degerli),
+                    "sira": t.sira,
+                }
+                assert_masked(item, context="buyer")
+                return item
+
+            referanslar = {
+                "kesimler": list(
+                    TasKesimi.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+                "berrakliklar": list(
+                    Berraklik.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+                "renk_dereceleri": list(
+                    RenkDerecesi.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+                "kesim_kaliteleri": list(
+                    KesimKalitesi.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+                "sertifika_kurumlari": list(
+                    SertifikaKurumu.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+                "menseiler": list(
+                    TasMensei.objects.filter(aktif=True)
+                    .order_by("sira", "ad")
+                    .values("id", "kod", "ad")
+                ),
+            }
+            return paginate_queryset(
+                request,
+                qs,
+                present=_present_ref,
+                extra={"referanslar": referanslar, "mode": "referans"},
+            )
+
+        from urunler.models import Varyant
+
+        qs = (
+            Urun.objects.filter(yayin_durumu="aktif", onay_durumu="onayli")
+            .filter(varyantlar__aktif=True, varyantlar__tip=Varyant.Tip.TAS)
+            .distinct()
+            .select_related("kategori", "ayar")
+            .prefetch_related("varyantlar__renk", "varyantlar__beden")
+            .annotate(
+                varyant_count=Count(
+                    "varyantlar",
+                    filter=Q(varyantlar__aktif=True, varyantlar__tip=Varyant.Tip.TAS),
+                )
+            )
+        )
+        if not can_view_all_tenants(request.user):
+            qs = filter_buyer_catalog_queryset(qs, actor=request.user)
         term = (request.query_params.get("q") or "").strip()
         if term:
-            qs = qs.filter(Q(ad__icontains=term) | Q(kod__icontains=term))
+            qs = qs.filter(Q(ad__icontains=term) | Q(platform_kodu__icontains=term))
+        qs = apply_ordering(
+            qs, request, whitelist=("pk", "ad", "platform_kodu"), default="pk"
+        )
 
-        def _present_tas(t: TasTipi) -> dict:
-            item = {
-                "id": t.pk,
-                "kod": t.kod,
-                "ad": t.ad,
-                "degerli": bool(t.degerli),
-                "sira": t.sira,
-            }
+        def _present_tas_urun(u: Urun) -> dict:
+            item = BuyerCatalogItemPresenter(u)
+            item["varyantlar"] = [
+                {
+                    "id": v.pk,
+                    "sku": v.sku,
+                    "tip": v.tip,
+                    "gram": str(v.gram) if v.gram is not None else None,
+                    "renk": getattr(getattr(v, "renk", None), "ad", "") or "",
+                    "beden": getattr(getattr(v, "beden", None), "ad", "") or "",
+                    "karat": str(v.karat) if v.karat is not None else None,
+                    "kesim_kod": (v.kesim_kod or "").strip().upper(),
+                }
+                for v in u.varyantlar.all()
+                if v.aktif and v.tip == Varyant.Tip.TAS
+            ]
             assert_masked(item, context="buyer")
             return item
 
-        referanslar = {
-            "kesimler": list(TasKesimi.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-            "berrakliklar": list(Berraklik.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-            "renk_dereceleri": list(RenkDerecesi.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-            "kesim_kaliteleri": list(KesimKalitesi.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-            "sertifika_kurumlari": list(SertifikaKurumu.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-            "menseiler": list(TasMensei.objects.filter(aktif=True).order_by("sira", "ad").values("id", "kod", "ad")),
-        }
         return paginate_queryset(
-            request,
-            qs,
-            present=_present_tas,
-            extra={"referanslar": referanslar},
+            request, qs, present=_present_tas_urun, extra={"mode": "varyant"}
         )

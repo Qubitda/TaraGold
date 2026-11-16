@@ -54,6 +54,44 @@ class ParseBookTickerTests(SimpleTestCase):
 
 
 @override_settings(
+    PIYASA_BINANCE={
+        "futures_rest_book": "https://fapi.example/book",
+        "spot_rest_book": "https://api.binance.me/api/v3/ticker/bookTicker",
+        "api_key": "TEST_KEY_DO_NOT_LEAK_123456",
+        "api_secret": "",
+        "symbols": {
+            "USDTTRY": {"market": "spot", "role": "usdtry"},
+        },
+    }
+)
+class BinanceApiKeyHeaderTests(SimpleTestCase):
+    def test_spot_sends_api_key_header_not_in_url(self):
+        seen: dict = {}
+
+        def fake_fetch(url: str, headers=None):
+            seen["url"] = url
+            seen["headers"] = headers or {}
+            return {"bidPrice": "50", "askPrice": "50.1", "time": 1}
+
+        provider = BinanceBookTickerProvider(fetcher=fake_fetch)
+        t = provider.fetch_book_ticker("USDTTRY", market="spot")
+        self.assertEqual(t.bid, Decimal("50"))
+        self.assertNotIn("TEST_KEY", seen["url"])
+        self.assertEqual(seen["headers"].get("X-MBX-APIKEY"), "TEST_KEY_DO_NOT_LEAK_123456")
+
+    def test_error_redacts_api_key(self):
+        from urllib.error import URLError
+
+        def boom(url: str, headers=None):
+            raise URLError("fail TEST_KEY_DO_NOT_LEAK_123456 in message")
+
+        provider = BinanceBookTickerProvider(fetcher=boom)
+        with self.assertRaises(Exception) as ctx:
+            provider.fetch_book_ticker("USDTTRY", market="spot")
+        self.assertNotIn("TEST_KEY_DO_NOT_LEAK_123456", str(ctx.exception))
+
+
+@override_settings(
     PIYASA_FEED_STALE_SECONDS=30,
     PIYASA_FEED_HIDE_SECONDS=300,
     PIYASA_FEED_THROTTLE_SECONDS=0,

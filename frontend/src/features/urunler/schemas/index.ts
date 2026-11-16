@@ -30,6 +30,7 @@ export const opsProductCreateSchema = z.object({
 });
 
 export const opsVariantCreateSchema = z.object({
+  tip: z.string().trim().optional(),
   gram: z.string().trim().optional(),
   renk_id: z.coerce.number().int().positive().optional().or(z.literal(0)),
   beden_id: z.coerce.number().int().positive().optional().or(z.literal(0)),
@@ -38,6 +39,12 @@ export const opsVariantCreateSchema = z.object({
   tedarikci_sku: z.string().trim().optional(),
   benzersiz_parca: z.boolean().optional(),
   aktif: z.boolean().optional(),
+  yuva_adedi: z.coerce.number().int().positive().optional().or(z.literal(0)),
+  izinli_kesimler: z.array(z.string()).optional(),
+  karat_min: z.string().trim().optional(),
+  karat_max: z.string().trim().optional(),
+  karat: z.string().trim().optional(),
+  kesim_kod: z.string().trim().optional(),
 });
 
 export const categorySchema = z.object({

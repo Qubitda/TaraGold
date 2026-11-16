@@ -170,11 +170,12 @@ def _persist_doviz(
     zaman,
     kaynak: str = "api",
 ) -> None:
+    q = Decimal("0.0001")
     kur_servisi.feed_doviz_kuru_kaydet(
         saglayici=kur_servisi.aktif_saglayici(),
         para_birimi=para_birimi,
-        kur_alis=alis,
-        kur_satis=satis,
+        kur_alis=Decimal(str(alis)).quantize(q),
+        kur_satis=Decimal(str(satis)).quantize(q),
         zaman=zaman,
         alinma_zamani=zaman,
         kaynak="api",
@@ -187,6 +188,8 @@ def persist_derived(*, kaynak: str = "api") -> list[str]:
     au = tick_store.get_tick(roles.get("ons_au", "XAUUSDT"))
     usdtry = tick_store.get_tick(roles.get("usdtry", "USDTTRY"))
     eurusdt = tick_store.get_tick(roles.get("eurusdt", "EURUSDT"))
+    gbpusdt = tick_store.get_tick(roles.get("gbpusdt", "GBPUSDT"))
+    chfusdt = tick_store.get_tick(roles.get("chfusdt", "CHFUSDT"))
     ag = tick_store.get_tick(roles.get("ons_ag", "XAGUSDT"))
     written: list[str] = []
     now = timezone.now()
@@ -240,6 +243,34 @@ def persist_derived(*, kaynak: str = "api") -> list[str]:
             _mark_persisted("EURTRY_DERIVED", eur_alis, eur_satis)
             written.append("doviz:EUR")
 
+    if gbpusdt and usdtry:
+        gbp_alis = gbpusdt["bid"] * usdtry["bid"]
+        gbp_satis = gbpusdt["ask"] * usdtry["ask"]
+        if _should_persist("GBPTRY_DERIVED", gbp_alis, gbp_satis):
+            _persist_doviz(
+                para_birimi="GBP",
+                alis=gbp_alis.quantize(Decimal("0.0001")),
+                satis=gbp_satis.quantize(Decimal("0.0001")),
+                zaman=now,
+                kaynak=kaynak,
+            )
+            _mark_persisted("GBPTRY_DERIVED", gbp_alis, gbp_satis)
+            written.append("doviz:GBP")
+
+    if chfusdt and usdtry:
+        chf_alis = chfusdt["bid"] * usdtry["bid"]
+        chf_satis = chfusdt["ask"] * usdtry["ask"]
+        if _should_persist("CHFTRY_DERIVED", chf_alis, chf_satis):
+            _persist_doviz(
+                para_birimi="CHF",
+                alis=chf_alis.quantize(Decimal("0.0001")),
+                satis=chf_satis.quantize(Decimal("0.0001")),
+                zaman=now,
+                kaynak=kaynak,
+            )
+            _mark_persisted("CHFTRY_DERIVED", chf_alis, chf_satis)
+            written.append("doviz:CHF")
+
     if ag and usdtry:
         gumus_kod = getattr(settings, "PIYASA_GUMUS_KOD", "GUMUS")
         metal_ag = KiymetliMetal.objects.filter(kod=gumus_kod).first()
@@ -260,9 +291,148 @@ def persist_derived(*, kaynak: str = "api") -> list[str]:
             _mark_persisted(ag["symbol"], ag["bid"], ag["ask"])
             written.append(f"metal:{gumus_kod}")
 
+    # Frankfurter yedek: Binance book 0/yok (GBP/CHF) veya metal kesik
+    written.extend(
+        persist_frankfurter_fallback(
+            already=set(written),
+            now=now,
+            kaynak="api",
+        )
+    )
+
     if written:
         kur_servisi.set_feed_health(health="FEED_OK", banner="")
     return written
+
+
+def persist_frankfurter_fallback(
+    *,
+    already: set[str] | None = None,
+    now=None,
+    kaynak: str = "api",
+    fetcher=None,
+) -> list[str]:
+    """Frankfurter mid → DovizKuru / MetalKuru (yalnız eksik kalemler)."""
+    from tanimlar.fiyat_kaynagi import TROY_OZ_GRAM
+    from tanimlar.services.providers import frankfurter as ff
+
+    if not ff.enabled():
+        return []
+    already = already or set()
+    now = now or timezone.now()
+    cfg = getattr(settings, "PIYASA_FRANKFURTER", {}) or {}
+    throttle_s = int(cfg.get("throttle_seconds") or 60)
+    written: list[str] = []
+
+    need_fx = [
+        pb
+        for pb in (cfg.get("fx_fallback") or ["GBP", "CHF"])
+        if f"doviz:{pb}" not in already
+    ]
+    metal_on = bool(cfg.get("metal_fallback", True))
+    if not need_fx and not metal_on:
+        return []
+
+    try:
+        rates = ff.cached_bundle(fetcher=fetcher)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Frankfurter bundle alınamadı: %s", exc)
+        return []
+    if not rates:
+        return []
+
+    spread = Decimal(str(cfg.get("spread_bps") or "10"))
+    for pb in need_fx:
+        mid = rates.get(pb)
+        if mid is None:
+            continue
+        try:
+            alis, satis = ff.mid_to_bid_ask(mid, spread_bps=spread)
+        except ValueError:
+            continue
+        sym = f"FRANKFURTER_{pb}TRY"
+        if not _should_persist_seconds(sym, alis, satis, throttle_s=throttle_s):
+            continue
+        try:
+            _persist_doviz(
+                para_birimi=pb,
+                alis=alis,
+                satis=satis,
+                zaman=now,
+                kaynak=kaynak,
+            )
+            _mark_persisted(sym, alis, satis)
+            written.append(f"doviz:{pb}")
+            logger.info("Frankfurter yedek döviz yazıldı: %s mid=%s", pb, mid)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Frankfurter döviz %s yazılamadı: %s", pb, exc)
+
+    if metal_on:
+        oz = Decimal(TROY_OZ_GRAM)
+        for asset, metal_setting, default_kod in (
+            ("XAU", "PIYASA_METAL_KOD", "ALTIN"),
+            ("XAG", "PIYASA_GUMUS_KOD", "GUMUS"),
+        ):
+            metal_kod = getattr(settings, metal_setting, default_kod)
+            tag = f"metal:{metal_kod}"
+            if tag in already or tag in written:
+                continue
+            mid_oz = rates.get(asset)
+            if mid_oz is None or mid_oz <= 0:
+                continue
+            metal = KiymetliMetal.objects.filter(kod=metal_kod).first()
+            if metal is None:
+                continue
+            try:
+                alis_oz, satis_oz = ff.mid_to_bid_ask(mid_oz, spread_bps=spread)
+                gram_alis = (alis_oz / oz).quantize(Decimal("0.0001"))
+                gram_satis = (satis_oz / oz).quantize(Decimal("0.0001"))
+            except (ValueError, ArithmeticError):
+                continue
+            sym = f"FRANKFURTER_{asset}TRY"
+            if not _should_persist_seconds(
+                sym, gram_alis, gram_satis, throttle_s=throttle_s
+            ):
+                continue
+            try:
+                _persist_metal_grams(
+                    metal=metal,
+                    gram_alis=gram_alis,
+                    gram_satis=gram_satis,
+                    zaman=now,
+                    kaynak=kaynak,
+                )
+                _mark_persisted(sym, gram_alis, gram_satis)
+                written.append(tag)
+                logger.info(
+                    "Frankfurter yedek metal yazıldı: %s gram≈%s", metal_kod, gram_alis
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Frankfurter metal %s yazılamadı: %s", metal_kod, exc)
+
+    return written
+
+
+def _should_persist_seconds(
+    symbol: str, bid: Decimal, ask: Decimal, *, throttle_s: int
+) -> bool:
+    """Frankfurter için ayrı throttle (Binance 5s’ten uzun)."""
+    import json
+
+    from django.core.cache import cache
+    from django.utils.dateparse import parse_datetime
+
+    key = f"{_LAST_PERSIST_KEY}{symbol.upper()}"
+    raw = cache.get(key)
+    if raw and throttle_s > 0:
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            dt = parse_datetime(data.get("at") or "")
+            if dt and (timezone.now() - dt).total_seconds() < throttle_s:
+                return False
+        except Exception:  # noqa: BLE001
+            return True
+    return True
 
 
 def run_rest_poll_once(
@@ -277,6 +447,13 @@ def run_rest_poll_once(
     except Exception as exc:  # noqa: BLE001
         result.ok = False
         result.errors.append(str(exc))
+        try:
+            kur_servisi.set_feed_health(
+                health="FEED_FAIL",
+                banner=f"Canlı veri kopuk: {exc}",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("FEED_FAIL yazılamadı")
         return result
 
     for sym, tick in ticks.items():
@@ -331,6 +508,14 @@ def run_rest_poll_once(
         result.errors.append(str(exc))
     if result.rejected and not result.ticks:
         result.ok = False
+    if not result.ok and not result.ticks:
+        try:
+            kur_servisi.set_feed_health(
+                health="FEED_FAIL",
+                banner="Canlı veri yok; fiyat kullanmayın.",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("FEED_FAIL yazılamadı")
     return result
 
 

@@ -155,6 +155,104 @@ def satir_ekle(
         return line
 
 
+def satir_ekle_bilesim(
+    *,
+    actor,
+    montur_quote: PriceQuote,
+    tas_items: list[tuple[PriceQuote, Decimal]],
+    miktar: Decimal = Decimal("1"),
+    now=None,
+) -> CartLine:
+    """ADR-0043: 1 montür + ≥1 taş → tek sepet satırı (bileşim snapshot)."""
+    from siparis.services.bilesim_secim import (
+        bilesim_anahtar,
+        build_bilesim_from_quotes,
+    )
+
+    miktar = Decimal(miktar)
+    if miktar <= 0:
+        raise ValidationError("Miktar pozitif olmalı.")
+
+    alici_firma = getattr(actor, "firma", None)
+    _assert_buyer_actor(actor, alici_firma)
+    now = now or timezone.now()
+    _assert_quote_usable(montur_quote, alici_firma=alici_firma, now=now)
+    for tq, tm in tas_items:
+        _assert_quote_usable(tq, alici_firma=alici_firma, now=now)
+        if Decimal(tm) <= 0:
+            raise ValidationError("Taş miktarı pozitif olmalı.")
+
+    bilesim = build_bilesim_from_quotes(
+        montur_quote=montur_quote, tas_quotes_miktar=tas_items
+    )
+    anahtar = bilesim_anahtar(
+        montur_varyant_id=montur_quote.varyant_id,
+        taslar=bilesim["taslar"],
+    )
+    birim = birim_from_fiyat_modeli(montur_quote.varyant_fiyat.fiyat_modeli)
+
+    with domain_atomic():
+        cart, created = _get_or_create_cart_locked(
+            actor=actor, alici_firma=alici_firma
+        )
+        if created:
+            record_audit(
+                actor=actor,
+                action="cart.create",
+                entity_type="Cart",
+                entity_id=str(cart.pk),
+                success=True,
+                detail={"alici_firma_id": alici_firma.pk},
+            )
+
+        existing = (
+            CartLine.objects.select_for_update()
+            .filter(
+                cart=cart,
+                varyant_id=montur_quote.varyant_id,
+                bilesim_anahtar=anahtar,
+            )
+            .first()
+        )
+        if existing is not None:
+            existing.price_quote = montur_quote
+            existing.miktar = miktar
+            existing.birim = birim
+            existing.bilesim = bilesim
+            existing.save()
+            line = existing
+            action = "cart.line.bilesim.update"
+        else:
+            line = CartLine(
+                cart=cart,
+                price_quote=montur_quote,
+                varyant_id=montur_quote.varyant_id,
+                miktar=miktar,
+                birim=birim,
+                bilesim=bilesim,
+                bilesim_anahtar=anahtar,
+            )
+            line.save()
+            action = "cart.line.bilesim.add"
+
+        cart.save(update_fields=["guncelleme_tarihi"])
+        record_audit(
+            actor=actor,
+            action=action,
+            entity_type="CartLine",
+            entity_id=str(line.pk),
+            success=True,
+            detail={
+                "cart_id": cart.pk,
+                "montur_quote_id": montur_quote.pk,
+                "tas_count": len(bilesim.get("taslar") or []),
+                "bilesim_anahtar": anahtar,
+                "adr": "0043",
+            },
+        )
+        return line
+
+
 def satir_guncelle_miktar(*, actor, line: CartLine, miktar: Decimal) -> CartLine:
     miktar = Decimal(miktar)
     if miktar <= 0:
@@ -200,6 +298,8 @@ def satir_sil(*, actor, line: CartLine) -> None:
 
 def present_cart_line(line: CartLine) -> dict:
     """Alıcı yüzeyi — tedarikçi/maliyet/teklif yok (B-02)."""
+    from siparis.services.bilesim_secim import buyer_bilesim_view
+
     q = line.price_quote
     varyant = getattr(line, "varyant", None) or getattr(q, "varyant", None)
     urun = getattr(varyant, "urun", None) if varyant else None
@@ -219,6 +319,7 @@ def present_cart_line(line: CartLine) -> dict:
         "birim_fiyat_vergisiz": q.toplam_vergisiz,
         "gecerlilik_sonu": q.gecerlilik_sonu,
         "satis_kanali_id": q.satis_kanali_id,
+        "bilesim": buyer_bilesim_view(getattr(line, "bilesim", None)),
     }
 
 

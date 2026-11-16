@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -52,6 +53,38 @@ def _parse_bool(val, default: bool = True) -> bool:
     return bool(val)
 
 
+def _parse_decimal(val, *, field: str) -> Decimal:
+    """TR/EN sayı: '50', '50,5', '1.234,56', '₺50' → Decimal."""
+    if isinstance(val, Decimal):
+        return val
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return Decimal(str(val))
+    s = str(val or "").strip()
+    if not s:
+        raise ValidationError({field: "Sayı girin."})
+    s = (
+        s.replace("₺", "")
+        .replace("TL", "")
+        .replace("TRY", "")
+        .replace("USD", "")
+        .replace("EUR", "")
+        .replace("%", "")
+        .replace(" ", "")
+        .replace("\u00a0", "")
+    )
+    if "," in s and "." in s:
+        # 1.234,56 → 1234.56
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    if not re.fullmatch(r"-?\d+(\.\d+)?", s):
+        raise ValidationError({field: f"Geçersiz sayı: {val!r}."})
+    try:
+        return Decimal(s)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValidationError({field: "Geçersiz sayı."}) from exc
+
+
 def _parse_int_or_none(val, *, field: str) -> int | None:
     if val in (None, "", 0, "0"):
         return None
@@ -61,6 +94,186 @@ def _parse_int_or_none(val, *, field: str) -> int | None:
         raise ValidationError({field: "Geçersiz seçim."}) from exc
 
 
+def _unique_urun_kod(ad: str) -> str:
+    """slugify(ad) + kısa sonek; max_length=24."""
+    import secrets
+
+    from django.utils.text import slugify
+
+    from piyasa.models import PiyasaUrun
+
+    base = (slugify(ad, allow_unicode=False) or "kalem").replace("-", "_")[:16]
+    for _ in range(32):
+        kod = f"{base}_{secrets.token_hex(2)}"[:24]
+        if not PiyasaUrun.objects.filter(kod=kod).exists():
+            return kod
+    raise ValidationError({"kod": "Benzersiz kod üretilemedi."})
+
+
+def _urun_snapshot(urun) -> dict:
+    return {
+        "ad": urun.ad,
+        "bolum": urun.bolum,
+        "grup": urun.grup,
+        "varyant_etiket": urun.varyant_etiket,
+        "fiyat_modu": urun.fiyat_modu,
+        "sabit_alis": str(urun.sabit_alis) if urun.sabit_alis is not None else None,
+        "sabit_satis": str(urun.sabit_satis) if urun.sabit_satis is not None else None,
+        "marj_tipi": urun.marj_tipi,
+        "alis_marj": str(urun.alis_marj),
+        "satis_marj": str(urun.satis_marj),
+        "alis_goster": urun.alis_goster,
+        "satis_goster": urun.satis_goster,
+        "aliciya_alis_goster": urun.aliciya_alis_goster,
+        "aliciya_goster": urun.aliciya_goster,
+        "ticker_da_goster": urun.ticker_da_goster,
+        "sira": urun.sira,
+        "aktif": urun.aktif,
+        "yuvarlama_adimi": str(urun.yuvarlama_adimi),
+        "gram": str(urun.gram),
+        "olcek": urun.olcek,
+        "metal_id": urun.metal_id,
+        "ayar_id": urun.ayar_id,
+    }
+
+
+def _apply_urun_body(urun, body: dict, *, creating: bool = False) -> None:
+    """PATCH/POST ortak alan uygula (PiyasaUrun instance üzerinde)."""
+    from piyasa.models import PiyasaUrun
+    from tanimlar.models import AyarMilyem, KiymetliMetal
+
+    allowed = {
+        "fiyat_modu",
+        "sabit_alis",
+        "sabit_satis",
+        "marj_tipi",
+        "alis_marj",
+        "satis_marj",
+        "alis_goster",
+        "satis_goster",
+        "aliciya_alis_goster",
+        "aliciya_goster",
+        "ticker_da_goster",
+        "sira",
+        "aktif",
+        "yuvarlama_adimi",
+        "yuvarlama_yontemi",
+        "ondalik",
+        "bolum",
+        "grup",
+        "varyant_etiket",
+        "ad",
+        "gram",
+        "olcek",
+        "metal_id",
+        "ayar_id",
+    }
+    for key, val in body.items():
+        if key not in allowed:
+            continue
+        if key in {"alis_marj", "satis_marj", "yuvarlama_adimi", "sabit_alis", "sabit_satis", "gram"}:
+            if key in {"sabit_alis", "sabit_satis"} and (
+                val is None or val == "" or str(val).strip() == ""
+            ):
+                setattr(urun, key, None)
+                continue
+            setattr(urun, key, _parse_decimal(val, field=key))
+        elif key == "fiyat_modu":
+            modu = str(val or "").upper()
+            if modu not in {
+                PiyasaUrun.FiyatModu.CANLI,
+                PiyasaUrun.FiyatModu.ELLE,
+            }:
+                raise ValidationError({"fiyat_modu": "CANLI veya ELLE olmalı."})
+            setattr(urun, key, modu)
+        elif key == "marj_tipi":
+            tip = str(val or "").upper()
+            if tip not in {
+                PiyasaUrun.MarjTipi.TL,
+                PiyasaUrun.MarjTipi.YUZDE,
+            }:
+                raise ValidationError({"marj_tipi": "TL veya YUZDE olmalı."})
+            setattr(urun, key, tip)
+        elif key in {
+            "alis_goster",
+            "satis_goster",
+            "aliciya_alis_goster",
+            "aliciya_goster",
+            "ticker_da_goster",
+            "aktif",
+        }:
+            setattr(urun, key, _parse_bool(val, default=True))
+        elif key == "sira":
+            setattr(urun, key, int(val))
+        elif key == "ondalik":
+            setattr(urun, key, int(val))
+        elif key == "grup":
+            g = str(val or "").upper()
+            valid = {c.value for c in PiyasaUrun.Grup}
+            if g not in valid:
+                raise ValidationError({"grup": f"Geçersiz grup: {g!r}."})
+            setattr(urun, key, g)
+        elif key == "bolum":
+            b = str(val or "").upper()
+            valid = {c.value for c in PiyasaUrun.Bolum}
+            if b not in valid:
+                raise ValidationError({"bolum": f"Geçersiz bölüm: {b!r}."})
+            setattr(urun, key, b)
+        elif key == "varyant_etiket":
+            v = str(val or "").upper()
+            if v and v not in {
+                PiyasaUrun.VaryantEtiket.YENI,
+                PiyasaUrun.VaryantEtiket.ESKI,
+            }:
+                raise ValidationError(
+                    {"varyant_etiket": "YENI, ESKI veya boş olmalı."}
+                )
+            setattr(urun, key, v)
+        elif key == "olcek":
+            o = str(val or "").upper()
+            valid = {c.value for c in PiyasaUrun.Olcek}
+            if o not in valid:
+                raise ValidationError({"olcek": f"Geçersiz ölçek: {o!r}."})
+            setattr(urun, key, o)
+        elif key == "metal_id":
+            mid = _parse_int_or_none(val, field="metal_id")
+            if mid is None:
+                if creating:
+                    raise ValidationError({"metal_id": "Metal zorunlu."})
+                continue
+            if not KiymetliMetal.objects.filter(pk=mid).exists():
+                raise ValidationError({"metal_id": "Metal bulunamadı."})
+            urun.metal_id = mid
+        elif key == "ayar_id":
+            if val in (None, "", "null"):
+                urun.ayar_id = None
+                continue
+            aid = _parse_int_or_none(val, field="ayar_id")
+            if aid is None:
+                urun.ayar_id = None
+                continue
+            ayar = AyarMilyem.objects.filter(pk=aid).first()
+            if ayar is None:
+                raise ValidationError({"ayar_id": "Ayar bulunamadı."})
+            urun.ayar_id = aid
+            if urun.metal_id and ayar.metal_id != urun.metal_id:
+                raise ValidationError(
+                    {"ayar_id": "Ayar seçilen metale ait olmalı."}
+                )
+            if not urun.metal_id:
+                urun.metal_id = ayar.metal_id
+        else:
+            setattr(urun, key, val)
+
+
+def _urun_response(urun) -> Response:
+    from piyasa.selectors.pano import present_ops_pano_detay
+
+    detay = present_ops_pano_detay()
+    row = next((s for s in detay["satirlar"] if s["kod"] == urun.kod), None)
+    return Response({"urun_id": urun.pk, "kod": urun.kod, "satir": row})
+
+
 def _present_politika(pol: PiyasaMarjPolitikasi) -> dict:
     return {
         "id": pol.pk,
@@ -68,6 +281,7 @@ def _present_politika(pol: PiyasaMarjPolitikasi) -> dict:
         "marj_modu": pol.marj_modu,
         "marj_orani": str(pol.marj_orani),
         "aktif": bool(pol.aktif),
+        "pano_baslik": (getattr(pol, "pano_baslik", None) or "")[:80],
         "guncelleme": pol.guncelleme.isoformat() if pol.guncelleme else None,
         "server_now": timezone.now().isoformat(),
     }
@@ -163,6 +377,11 @@ class OpsPiyasaMarjPolitikasiView(APIView):
         if "aktif" in body and body.get("aktif") is not None:
             pol.aktif = _parse_bool(body.get("aktif"), default=pol.aktif)
             changed["aktif"] = pol.aktif
+
+        if "pano_baslik" in body:
+            baslik = str(body.get("pano_baslik") or "").strip()[:80]
+            pol.pano_baslik = baslik
+            changed["pano_baslik"] = baslik
 
         with domain_atomic():
             pol.save()
@@ -527,8 +746,69 @@ class OpsPiyasaPanoDetayView(APIView):
         return Response(present_ops_pano_detay())
 
 
+class OpsPiyasaUrunListCreateView(APIView):
+    """POST /api/v1/ops/piyasa/urunler/ — kalem oluştur (ADR-0042)."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def post(self, request):
+        from piyasa.models import PiyasaUrun
+
+        _require_piyasa_write(request.user)
+        enforce_csrf(request)
+        body = request.data if isinstance(request.data, dict) else {}
+        ad = str(body.get("ad") or "").strip()
+        if not ad:
+            raise ValidationError({"ad": "Ad zorunlu."})
+        if "metal_id" not in body and "ayar_id" not in body:
+            raise ValidationError({"metal_id": "Metal veya ayar zorunlu."})
+
+        urun = PiyasaUrun(
+            kod=_unique_urun_kod(ad),
+            ad=ad,
+            bolum=PiyasaUrun.Bolum.ALTIN,
+            grup=PiyasaUrun.Grup.AYAR_GRAM,
+            olcek=PiyasaUrun.Olcek.GRAM,
+            gram=Decimal("1"),
+            marj_tipi=PiyasaUrun.MarjTipi.TL,
+            alis_marj=Decimal("0"),
+            satis_marj=Decimal("0"),
+            aktif=True,
+            aliciya_goster=_parse_bool(body.get("aliciya_goster"), default=True),
+            ticker_da_goster=_parse_bool(body.get("ticker_da_goster"), default=False),
+        )
+        _apply_urun_body(urun, body, creating=True)
+        if not urun.metal_id:
+            raise ValidationError({"metal_id": "Metal zorunlu."})
+        if "sira" not in body:
+            from django.db.models import Max
+
+            mx = PiyasaUrun.objects.aggregate(m=Max("sira")).get("m") or 0
+            urun.sira = int(mx) + 10
+
+        try:
+            with domain_atomic():
+                urun.full_clean()
+                urun.save()
+                record_audit(
+                    actor=request.user,
+                    action="piyasa.urun_olusturuldu",
+                    entity_type="PiyasaUrun",
+                    entity_id=str(urun.pk),
+                    success=True,
+                    detail=_urun_snapshot(urun),
+                )
+        except DjangoValidationError as exc:
+            raise _django_ve_to_drf(exc) from exc
+        except IntegrityError as exc:
+            raise ValidationError({"kod": "Kod çakışması; tekrar deneyin."}) from exc
+
+        return _urun_response(urun)
+
+
 class OpsPiyasaUrunPatchView(APIView):
-    """PATCH /api/v1/ops/piyasa/urunler/<id>/ — marj/görünürlük; audit."""
+    """PATCH/DELETE /api/v1/ops/piyasa/urunler/<id>/ — güncelle / soft sil."""
 
     permission_classes = [IsAuthenticatedWithFirma]
     throttle_classes = [OpsRateThrottle]
@@ -544,90 +824,111 @@ class OpsPiyasaUrunPatchView(APIView):
             raise NotFound(detail="Piyasa ürünü yok.") from exc
 
         body = request.data if isinstance(request.data, dict) else {}
-        eski = {
-            "marj_tipi": urun.marj_tipi,
-            "alis_marj": str(urun.alis_marj),
-            "satis_marj": str(urun.satis_marj),
-            "alis_goster": urun.alis_goster,
-            "satis_goster": urun.satis_goster,
-            "aliciya_alis_goster": urun.aliciya_alis_goster,
-            "aliciya_goster": urun.aliciya_goster,
-            "ticker_da_goster": urun.ticker_da_goster,
-            "sira": urun.sira,
-            "aktif": urun.aktif,
-            "yuvarlama_adimi": str(urun.yuvarlama_adimi),
-        }
-        allowed = {
-            "marj_tipi",
-            "alis_marj",
-            "satis_marj",
-            "alis_goster",
-            "satis_goster",
-            "aliciya_alis_goster",
-            "aliciya_goster",
-            "ticker_da_goster",
-            "sira",
-            "aktif",
-            "yuvarlama_adimi",
-            "yuvarlama_yontemi",
-            "ondalik",
-            "bolum",
-            "ad",
-        }
-        for key, val in body.items():
-            if key not in allowed:
-                continue
-            if key in {"alis_marj", "satis_marj", "yuvarlama_adimi"}:
-                try:
-                    setattr(urun, key, Decimal(str(val)))
-                except (InvalidOperation, TypeError, ValueError) as exc:
-                    raise ValidationError({key: "Geçersiz sayı."}) from exc
-            elif key in {
-                "alis_goster",
-                "satis_goster",
-                "aliciya_alis_goster",
-                "aliciya_goster",
-                "ticker_da_goster",
-                "aktif",
-            }:
-                setattr(urun, key, _parse_bool(val, default=True))
-            elif key == "sira":
-                setattr(urun, key, int(val))
-            elif key == "ondalik":
-                setattr(urun, key, int(val))
-            else:
-                setattr(urun, key, val)
+        eski = _urun_snapshot(urun)
+        _apply_urun_body(urun, body, creating=False)
 
         try:
             with domain_atomic():
                 urun.full_clean()
                 urun.save()
-                yeni = {
-                    "marj_tipi": urun.marj_tipi,
-                    "alis_marj": str(urun.alis_marj),
-                    "satis_marj": str(urun.satis_marj),
-                    "alis_goster": urun.alis_goster,
-                    "satis_goster": urun.satis_goster,
-                    "aliciya_alis_goster": urun.aliciya_alis_goster,
-                    "aliciya_goster": urun.aliciya_goster,
-                    "ticker_da_goster": urun.ticker_da_goster,
-                    "sira": urun.sira,
-                    "aktif": urun.aktif,
-                    "yuvarlama_adimi": str(urun.yuvarlama_adimi),
-                }
                 record_audit(
                     actor=request.user,
                     action="piyasa.urun_guncellendi",
                     entity_type="PiyasaUrun",
                     entity_id=str(urun.pk),
                     success=True,
-                    detail={"eski": eski, "yeni": yeni},
+                    detail={"eski": eski, "yeni": _urun_snapshot(urun)},
                 )
         except DjangoValidationError as exc:
             raise _django_ve_to_drf(exc) from exc
 
-        from piyasa.selectors.pano import present_ops_pano_detay
+        return _urun_response(urun)
 
-        detay = present_ops_pano_detay()
-        row = next((s for s in detay["satirlar"] if s["kod"] == urun.kod), None)
-        return Response({"urun_id": urun.pk, "kod": urun.kod, "satir": row})
+    def delete(self, request, pk: int):
+        from piyasa.models import PiyasaUrun
+
+        _require_piyasa_write(request.user)
+        enforce_csrf(request)
+        try:
+            urun = PiyasaUrun.objects.get(pk=pk)
+        except PiyasaUrun.DoesNotExist as exc:
+            raise NotFound(detail="Piyasa ürünü yok.") from exc
+
+        eski = _urun_snapshot(urun)
+        with domain_atomic():
+            urun.aktif = False
+            urun.aliciya_goster = False
+            urun.ticker_da_goster = False
+            urun.save(
+                update_fields=[
+                    "aktif",
+                    "aliciya_goster",
+                    "ticker_da_goster",
+                    "guncelleme",
+                ]
+            )
+            record_audit(
+                actor=request.user,
+                action="piyasa.urun_silindi",
+                entity_type="PiyasaUrun",
+                entity_id=str(urun.pk),
+                success=True,
+                detail={"eski": eski, "aktif": False},
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class OpsPiyasaTickerTopluView(APIView):
+    """POST /api/v1/ops/piyasa/ticker-toplu/ — tüm aktif kalemlerde ticker aç/kapa."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def post(self, request):
+        from piyasa.models import PiyasaUrun
+
+        _require_piyasa_write(request.user)
+        enforce_csrf(request)
+        body = request.data if isinstance(request.data, dict) else {}
+        if "ticker_da_goster" not in body:
+            raise ValidationError({"ticker_da_goster": "Zorunlu (true|false)."})
+        acik = _parse_bool(body.get("ticker_da_goster"), default=False)
+        with domain_atomic():
+            n = PiyasaUrun.objects.filter(aktif=True).update(ticker_da_goster=acik)
+            record_audit(
+                actor=request.user,
+                action="piyasa.ticker_toplu",
+                entity_type="PiyasaUrun",
+                entity_id="*",
+                success=True,
+                detail={"ticker_da_goster": acik, "adet": n},
+            )
+        return Response({"ticker_da_goster": acik, "adet": n})
+
+
+class OpsPiyasaPanoGosterTopluView(APIView):
+    """POST /api/v1/ops/piyasa/pano-goster-toplu/ — fiyat ekranında kalem göster/gizle."""
+
+    permission_classes = [IsAuthenticatedWithFirma]
+    throttle_classes = [OpsRateThrottle]
+
+    def post(self, request):
+        from piyasa.models import PiyasaUrun
+
+        _require_piyasa_write(request.user)
+        enforce_csrf(request)
+        body = request.data if isinstance(request.data, dict) else {}
+        if "aliciya_goster" not in body:
+            raise ValidationError({"aliciya_goster": "Zorunlu (true|false)."})
+        acik = _parse_bool(body.get("aliciya_goster"), default=False)
+        with domain_atomic():
+            n = PiyasaUrun.objects.filter(aktif=True).update(aliciya_goster=acik)
+            record_audit(
+                actor=request.user,
+                action="piyasa.pano_goster_toplu",
+                entity_type="PiyasaUrun",
+                entity_id="*",
+                success=True,
+                detail={"aliciya_goster": acik, "adet": n},
+            )
+        return Response({"aliciya_goster": acik, "adet": n})

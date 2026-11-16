@@ -57,7 +57,7 @@ class CartMineView(APIView):
 
 
 class CartLineCreateView(IdempotencyMixin, APIView):
-    """POST /api/v1/carts/me/lines/ — {quote_id, miktar}."""
+    """POST /api/v1/carts/me/lines/ — {quote_id, miktar} veya ADR-0043 bileşim."""
 
     permission_classes = [IsBuyerCommerceWrite]
     throttle_classes = [BuyerRateThrottle]
@@ -66,6 +66,66 @@ class CartLineCreateView(IdempotencyMixin, APIView):
         cached = self.idempotency_begin(request)
         if cached is not None:
             return cached
+
+        # ADR-0043: {montur_quote_id, taslar:[{quote_id, miktar}], miktar?}
+        montur_raw = request.data.get("montur_quote_id")
+        if montur_raw is not None:
+            try:
+                montur_qid = int(montur_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    detail={"montur_quote_id": "Geçersiz."}
+                ) from exc
+            taslar_raw = request.data.get("taslar")
+            if not isinstance(taslar_raw, list) or not taslar_raw:
+                raise ValidationError(
+                    detail={"taslar": "En az bir taş {quote_id, miktar} gerekli."}
+                )
+            try:
+                line_miktar = Decimal(str(request.data.get("miktar", "1")))
+            except (InvalidOperation, TypeError) as exc:
+                raise ValidationError(detail={"miktar": "Geçersiz miktar."}) from exc
+            try:
+                montur_q = get_quote_for_actor(request.user, montur_qid)
+                tas_items = []
+                for i, row in enumerate(taslar_raw):
+                    if not isinstance(row, dict):
+                        raise ValidationError(
+                            detail={"taslar": f"[{i}] nesne olmalı."}
+                        )
+                    try:
+                        tqid = int(row.get("quote_id"))
+                    except (TypeError, ValueError) as exc:
+                        raise ValidationError(
+                            detail={"taslar": f"[{i}].quote_id geçersiz."}
+                        ) from exc
+                    try:
+                        tm = Decimal(str(row.get("miktar", "1")))
+                    except (InvalidOperation, TypeError) as exc:
+                        raise ValidationError(
+                            detail={"taslar": f"[{i}].miktar geçersiz."}
+                        ) from exc
+                    tq = get_quote_for_actor(request.user, tqid)
+                    tas_items.append((tq, tm))
+                line = cart_servisi.satir_ekle_bilesim(
+                    actor=request.user,
+                    montur_quote=montur_q,
+                    tas_items=tas_items,
+                    miktar=line_miktar,
+                )
+            except BuyerQuoteNotFound as exc:
+                raise NotFound(detail="Quote bulunamadı.") from exc
+            except DjangoValidationError as exc:
+                raise_drf(exc)
+            cart = line.cart
+            body = {
+                "line": BuyerCartLinePresenter(line),
+                "cart": BuyerCartPresenter(cart),
+            }
+            return self.idempotency_commit(
+                request, Response(body, status=status.HTTP_201_CREATED)
+            )
+
         try:
             quote_id = int(request.data.get("quote_id"))
         except (TypeError, ValueError) as exc:

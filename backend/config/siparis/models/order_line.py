@@ -110,6 +110,8 @@ class OrderLine(models.Model):
         max_digits=18, decimal_places=2, null=True, blank=True
     )
     para_birimi = models.CharField(max_length=3)
+    # ADR-0043: sipariş anı montür+taş seçim snapshot
+    bilesim = models.JSONField(null=True, blank=True, default=None)
 
     class TeslimModeli(models.TextChoices):
         PLATFORM_QC = "PLATFORM_QC", "Platform üzerinden QC"

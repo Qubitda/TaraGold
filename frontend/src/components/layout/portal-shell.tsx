@@ -56,7 +56,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           {user ? (
-            <div className="sticky top-0 z-[60] shrink-0">
+            <div className="sticky top-0 z-30 shrink-0">
               <PiyasaPanoStrip />
             </div>
           ) : null}

@@ -65,6 +65,7 @@ def _ensure_hazirlama_emirleri(locked: Order) -> list[HazirlamaEmri]:
     """Bileşen/tedarikçi başına tip'li emir (MONTUR/TAS/HAM); CAKIM ayrı açılır."""
     from firmalar.models import Firma
     from siparis.services.bilesen_servisi import list_bilesenler
+    from siparis.services.bilesim_secim import composition_emir_specs
 
     wanted: list[tuple[int, str, int | None, int | None, str]] = []
     # (ted_id, tip, line_id, bilesen_id, teslim)
@@ -75,6 +76,12 @@ def _ensure_hazirlama_emirleri(locked: Order) -> list[HazirlamaEmri]:
         "price_lock__quote__varyant_fiyat",
     ):
         tm = getattr(line, "teslim_modeli", HazirlamaEmri.TeslimModeli.PLATFORM_QC)
+        # ADR-0043: alıcı seçimli bileşim
+        comp = composition_emir_specs(getattr(line, "bilesim", None))
+        if comp:
+            for ted_id, tip in comp:
+                wanted.append((ted_id, tip, line.pk, None, tm))
+            continue
         bilesenler = list_bilesenler(line.varyant)
         if bilesenler:
             for b in bilesenler:

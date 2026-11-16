@@ -11,7 +11,7 @@
 
 Satış **net altın gram × milyem = has gram**. TL ikincil. Ödeme: **HAS | HURDA | TL | USD**.
 
-Alıcı bitmiş ürünü tek satır alır. Montür/taş/çakım arka plan. Platform stok tutmaz. Usta kimliği alıcıya görünmez; platform istediği ustayla çalışır.
+Alıcı **montür + taşı ayrı seçer** (ADR-0043); çakım/usta arka plan. Platform stok tutmaz. Usta kimliği alıcıya görünmez; platform istediği ustayla çalışır.
 
 ## 2. Kilitli kararlar
 

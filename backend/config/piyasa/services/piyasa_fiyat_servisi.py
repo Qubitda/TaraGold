@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from firmalar.services.yetki_servisi import has_perm, require_perm
+from tanimlar.fiyat_kaynagi import FeedHealth
 from tanimlar.models import KurTaraf
 from tanimlar.services import kur_servisi
 
@@ -105,6 +106,7 @@ def _taraf_hesap(urun: PiyasaUrun, taraf: str, *, now, marj_modu: str) -> dict[s
 def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) -> dict[str, Any]:
     now = now or timezone.now()
     modu = marj_modu or _urun_marj_tipi(urun)
+    fiyat_modu = str(getattr(urun, "fiyat_modu", None) or PiyasaUrun.FiyatModu.CANLI).upper()
     out: dict[str, Any] = {
         "ok": True,
         "kod": urun.kod,
@@ -114,6 +116,9 @@ def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) ->
         "varyant_etiket": urun.varyant_etiket or "",
         "olcek": urun.olcek,
         "cikti_pb": urun.cikti_pb,
+        "fiyat_modu": fiyat_modu,
+        "sabit_alis": getattr(urun, "sabit_alis", None),
+        "sabit_satis": getattr(urun, "sabit_satis", None),
         "marj_modu": modu,
         "marj_tipi": modu,
         "alis_marj": urun.alis_marj,
@@ -124,6 +129,7 @@ def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) ->
         "aliciya_goster": getattr(urun, "aliciya_goster", True),
         "ticker_da_goster": getattr(urun, "ticker_da_goster", False),
         "ondalik": getattr(urun, "ondalik", 2),
+        "gram": urun.gram,
         "alis": None,
         "satis": None,
         "alis_detay": None,
@@ -133,6 +139,29 @@ def hesapla_urun(urun: PiyasaUrun, *, now=None, marj_modu: str | None = None) ->
         "banner": "",
         "hata": "",
     }
+
+    # ADR-0040: elle sabit — feed/marj yok; nihai = sabit.
+    if fiyat_modu == PiyasaUrun.FiyatModu.ELLE:
+        try:
+            alis = urun.sabit_alis
+            satis = urun.sabit_satis
+            if alis is None or satis is None or alis <= 0 or satis <= 0:
+                raise ValidationError("Elle fiyat eksik veya geçersiz.")
+            alis_q = Decimal(str(alis)).quantize(hesap.HASSASIYET)
+            satis_q = Decimal(str(satis)).quantize(hesap.HASSASIYET)
+            hesap.dogrula_nihai_cift(alis_q, satis_q)
+            out["alis"] = alis_q
+            out["satis"] = satis_q
+            out["alis_detay"] = {"ham": alis_q, "nihai": alis_q, "feed_health": FeedHealth.FEED_LOCKED_MANUEL}
+            out["satis_detay"] = {"ham": satis_q, "nihai": satis_q, "feed_health": FeedHealth.FEED_LOCKED_MANUEL}
+            out["feed_health"] = FeedHealth.FEED_LOCKED_MANUEL
+            out["banner"] = "Elle sabit fiyat"
+        except (ValidationError, ValueError, TypeError) as exc:
+            out["ok"] = False
+            out["hata"] = str(exc)
+            out["feed_health"] = FeedHealth.FEED_FAIL
+        return out
+
     try:
         banners = []
         healths = []

@@ -21,8 +21,9 @@ class PiyasaPanoView(APIView):
 
     def get(self, request):
         olcek = request.query_params.get("olcek")
+        firma = getattr(request.user, "firma", None)
         try:
-            body = present_buyer_pano(olcek=olcek)
+            body = present_buyer_pano(olcek=olcek, firma=firma)
         except DjangoValidationError as exc:
             raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages) from exc
         assert_masked(body, context="buyer")

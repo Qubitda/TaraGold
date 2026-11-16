@@ -259,6 +259,25 @@ class PiyasaFiyatTests(TestCase):
                 kaynak="MANUEL", taraf="SATIS"
             )
 
+    def test_elle_sabit_fiyat_feed_yok(self):
+        """ADR-0040: ELLE → sabit alış/satış; marj/feed yok."""
+        self.has.fiyat_modu = PiyasaUrun.FiyatModu.ELLE
+        self.has.sabit_alis = Decimal("6100")
+        self.has.sabit_satis = Decimal("6150")
+        self.has.save()
+        baz = piyasa_fiyat_servisi.baz_fiyat("has")
+        self.assertEqual(baz["alis"], Decimal("6100.00"))
+        self.assertEqual(baz["satis"], Decimal("6150.00"))
+        self.assertEqual(baz["feed_health"], "FEED_LOCKED_MANUEL")
+        self.assertIn("Elle", baz["banner"] or "")
+
+    def test_elle_eksik_fiyat_red(self):
+        self.has.fiyat_modu = PiyasaUrun.FiyatModu.ELLE
+        self.has.sabit_alis = None
+        self.has.sabit_satis = Decimal("6150")
+        with self.assertRaises(ValidationError):
+            self.has.full_clean()
+
     def test_kar_yardimcisi_pano(self):
         out = kar_yardimcisi.simule_pano_urun(
             urun_kod="has",

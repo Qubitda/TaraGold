@@ -223,6 +223,22 @@ def checkout(
                     raise ValidationError("Quote varyant fiyatı yok; checkout fail.")
                 # Depo var mı kontrolü (onayda kullanılacak); stok tutulmaz
                 _resolve_warehouse_for_fiyat(vf)
+                # ADR-0043: taş quote'ları için depo doğrula
+                bilesim = getattr(cl, "bilesim", None) or {}
+                if bilesim.get("schema") == "adr0043.v1":
+                    from fiyatlama.models import PriceQuote
+
+                    for t in bilesim.get("taslar") or []:
+                        tq = (
+                            PriceQuote.objects.select_related("varyant_fiyat")
+                            .filter(pk=int(t["quote_id"]))
+                            .first()
+                        )
+                        if tq is None:
+                            raise ValidationError("Bileşim taş quote bulunamadı.")
+                        if tq.alici_firma_id != alici_firma.pk:
+                            raise ValidationError("Taş quote tenant uyumsuz.")
+                        _resolve_warehouse_for_fiyat(tq.varyant_fiyat)
 
                 line_results.append(
                     CheckoutLineResult(
@@ -244,6 +260,7 @@ def checkout(
                 alan="fatura_adresi_id",
             )
             notu = (siparis_notu or "").strip()[:1000]
+            cl_by_id = {cl.pk: cl for cl in lines_qs}
             sonuc = {
                 "lines": [
                     {
@@ -251,6 +268,7 @@ def checkout(
                         "quote_id": r.quote_id,
                         "miktar": str(r.miktar),
                         "birim": r.birim,
+                        "bilesim": getattr(cl_by_id.get(r.cart_line_id), "bilesim", None),
                     }
                     for r in line_results
                 ],

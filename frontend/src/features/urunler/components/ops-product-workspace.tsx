@@ -270,12 +270,19 @@ export function OpsProductWorkspace({
   const [quickVariantSabit, setQuickVariantSabit] = useState("");
   const [quickVariantBusy, setQuickVariantBusy] = useState(false);
   const [variantForm, setVariantForm] = useState({
+    tip: "HAM_ALTIN",
     gram: "",
     renk_id: "",
     beden_id: "",
     ek_bedel: "0",
     sabit_fiyat: "",
     tedarikci_sku: "",
+    yuva_adedi: "",
+    izinli_kesimler: "" as string, // comma-separated kod
+    karat_min: "",
+    karat_max: "",
+    karat: "",
+    kesim_kod: "",
   });
   const [stoneForm, setStoneForm] = useState({
     tas_tipi_id: "",
@@ -312,7 +319,13 @@ export function OpsProductWorkspace({
         variantForm.sabit_fiyat.trim() ||
         variantForm.renk_id ||
         variantForm.beden_id ||
-        variantForm.tedarikci_sku.trim()
+        variantForm.tedarikci_sku.trim() ||
+        variantForm.yuva_adedi.trim() ||
+        variantForm.izinli_kesimler.trim() ||
+        variantForm.karat_min.trim() ||
+        variantForm.karat_max.trim() ||
+        variantForm.karat.trim() ||
+        variantForm.kesim_kod.trim()
     );
   const canClickSave = dirty || pendingVariantFields;
 
@@ -323,6 +336,8 @@ export function OpsProductWorkspace({
       return;
     }
     setForm(productToForm(product, refs));
+    const firstTip = product.varyantlar?.[0]?.tip || "HAM_ALTIN";
+    setVariantForm((f) => ({ ...f, tip: String(firstTip) }));
     onDirtyChange(false);
     setFieldErrors({});
     setSaveError(null);
@@ -557,6 +572,7 @@ export function OpsProductWorkspace({
 
   const addVariant = async (
     override?: {
+      tip?: string;
       gram?: string;
       sabit_fiyat?: string;
       renk_id?: string | null;
@@ -569,6 +585,7 @@ export function OpsProductWorkspace({
     const fiyatTipi = form.fiyat_tipi || product.fiyat_tipi || "gram";
     const renkEkseni = form.renk_ekseni || product.renk_ekseni;
     const olcuTipi = form.olcu_tipi || product.olcu_tipi || "";
+    const tipV = override?.tip ?? variantForm.tip ?? "HAM_ALTIN";
     const gram = (override?.gram ?? variantForm.gram).trim();
     const sabit = (override?.sabit_fiyat ?? variantForm.sabit_fiyat).trim();
     const renkId =
@@ -579,8 +596,12 @@ export function OpsProductWorkspace({
       override && "beden_id" in override
         ? override.beden_id
         : variantForm.beden_id;
+    const izinli = variantForm.izinli_kesimler
+      .split(/[,;\s]+/)
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
 
-    if (fiyatTipi === "gram" && !gram) {
+    if (tipV !== "TAS" && fiyatTipi === "gram" && !gram) {
       onToast.error("Gram bazlı üründe gram zorunlu");
       return null;
     }
@@ -588,13 +609,37 @@ export function OpsProductWorkspace({
       onToast.error("Sabit fiyatlı üründe sabit fiyat zorunlu");
       return null;
     }
+    if (tipV === "MONTUR") {
+      if (!variantForm.yuva_adedi.trim() || Number(variantForm.yuva_adedi) < 1) {
+        onToast.error("Montür için yuva adedi zorunlu (imalat)");
+        return null;
+      }
+      if (!izinli.length) {
+        onToast.error("Montür için en az bir izinli şekil kodu zorunlu (imalat)");
+        return null;
+      }
+      if (!variantForm.karat_min.trim() || !variantForm.karat_max.trim()) {
+        onToast.error("Montür için ölçü min/max (ct) zorunlu (imalat)");
+        return null;
+      }
+    }
+    if (tipV === "TAS") {
+      if (!variantForm.karat.trim()) {
+        onToast.error("Taş için ölçü (ct) zorunlu");
+        return null;
+      }
+      if (!variantForm.kesim_kod.trim()) {
+        onToast.error("Taş için şekil kodu zorunlu (serbest, örn. CABOCHON)");
+        return null;
+      }
+    }
     if (renkEkseni && !renkId) {
       onToast.error(
         "Renk ekseni açık — renk seçin (veya Özellikler’den kapatın)"
       );
       return null;
     }
-    if (olcuTipi && !bedenId) {
+    if (tipV !== "TAS" && olcuTipi && !bedenId) {
       onToast.error(`Ölçü tipi «${olcuTipiLabel}» — ölçü seçin`);
       return null;
     }
@@ -604,24 +649,44 @@ export function OpsProductWorkspace({
     }
     try {
       const created = await urunlerService.addOpsVariant(product.id, {
-        gram: fiyatTipi === "gram" ? gram || undefined : undefined,
+        tip: tipV,
+        gram:
+          tipV !== "TAS" && fiyatTipi === "gram" ? gram || undefined : undefined,
         sabit_fiyat: fiyatTipi === "sabit" ? sabit || undefined : undefined,
         renk_id: renkEkseni && renkId ? Number(renkId) : null,
-        beden_id: olcuTipi && bedenId ? Number(bedenId) : null,
+        beden_id:
+          tipV !== "TAS" && olcuTipi && bedenId ? Number(bedenId) : null,
         ek_bedel: override?.ek_bedel ?? variantForm.ek_bedel ?? "0",
         tedarikci_sku:
           override?.tedarikci_sku ?? variantForm.tedarikci_sku ?? "",
+        yuva_adedi:
+          tipV === "MONTUR" ? Number(variantForm.yuva_adedi) : undefined,
+        izinli_kesimler: tipV === "MONTUR" ? izinli : undefined,
+        karat_min: tipV === "MONTUR" ? variantForm.karat_min : undefined,
+        karat_max: tipV === "MONTUR" ? variantForm.karat_max : undefined,
+        karat: tipV === "TAS" ? variantForm.karat : undefined,
+        kesim_kod:
+          tipV === "TAS"
+            ? variantForm.kesim_kod.trim().toUpperCase()
+            : undefined,
       });
       onToast.success("Varyant eklendi");
       if (!override) {
-        setVariantForm({
+        setVariantForm((f) => ({
+          tip: f.tip || "HAM_ALTIN",
           gram: "",
           renk_id: "",
           beden_id: "",
           ek_bedel: "0",
           sabit_fiyat: "",
           tedarikci_sku: "",
-        });
+          yuva_adedi: "",
+          izinli_kesimler: "",
+          karat_min: "",
+          karat_max: "",
+          karat: "",
+          kesim_kod: "",
+        }));
       }
       setPriceVariantId(String(created.id));
       await onRefresh();
@@ -850,6 +915,28 @@ export function OpsProductWorkspace({
                 onChange={(e) => patchForm("aciklama", e.target.value)}
                 className="min-h-[80px] w-full min-w-0 rounded-[6px] border border-border bg-background px-3 py-2 text-sm"
               />
+            </div>
+            <div className="sm:col-span-2 flex flex-col gap-1.5 min-w-0 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <Label>Katalog tipi (montür / taş / ürün)</Label>
+              <select
+                value={variantForm.tip}
+                disabled={!editable || saving}
+                onChange={(e) => {
+                  onDirtyChange(true);
+                  setVariantForm((f) => ({ ...f, tip: e.target.value }));
+                }}
+                className="h-9 w-full min-w-0 rounded-[6px] border border-border bg-background px-2 text-xs"
+                aria-label="Katalog tipi"
+              >
+                <option value="HAM_ALTIN">Ürün — ham altın / bitmiş</option>
+                <option value="MONTUR">Montür (montürcü)</option>
+                <option value="TAS">Taş — her tür (taşçı)</option>
+                <option value="TASLI">Taşlı bitmiş (şablon)</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Yeni varyant bu tipte açılır. Taş = değerli/yarı/sentetik/cam/inci
+                vb. (mücevher şart değil). Asıl kayıt Varyantlar → «Varyant ekle».
+              </p>
             </div>
             <div className="flex flex-col gap-1.5 min-w-0">
               <Label>Fiyat tipi</Label>
@@ -1087,7 +1174,21 @@ export function OpsProductWorkspace({
             ) : null}
             {editable ? (
               <div className="rounded-[8px] border border-border p-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {(form.fiyat_tipi || product.fiyat_tipi) !== "sabit" ? (
+                <select
+                  value={variantForm.tip}
+                  onChange={(e) =>
+                    setVariantForm((f) => ({ ...f, tip: e.target.value }))
+                  }
+                  className="h-9 w-full rounded-[6px] border border-border bg-background px-2 text-xs"
+                  aria-label="Varyant tipi"
+                >
+                  <option value="HAM_ALTIN">Ürün</option>
+                  <option value="MONTUR">Montür</option>
+                  <option value="TAS">Taş (her tür)</option>
+                  <option value="TASLI">Taşlı bitmiş</option>
+                </select>
+                {variantForm.tip !== "TAS" &&
+                (form.fiyat_tipi || product.fiyat_tipi) !== "sabit" ? (
                   <Input
                     placeholder="Gram *"
                     value={variantForm.gram}
@@ -1095,9 +1196,16 @@ export function OpsProductWorkspace({
                       setVariantForm((f) => ({ ...f, gram: e.target.value }))
                     }
                   />
-                ) : (
+                ) : null}
+                {(form.fiyat_tipi || product.fiyat_tipi) === "sabit" ||
+                variantForm.tip === "TAS" ? (
                   <Input
-                    placeholder="Sabit fiyat *"
+                    placeholder={
+                      variantForm.tip === "TAS" &&
+                      (form.fiyat_tipi || product.fiyat_tipi) !== "sabit"
+                        ? "Sabit fiyat (taş)"
+                        : "Sabit fiyat *"
+                    }
                     value={variantForm.sabit_fiyat}
                     onChange={(e) =>
                       setVariantForm((f) => ({
@@ -1106,8 +1214,8 @@ export function OpsProductWorkspace({
                       }))
                     }
                   />
-                )}
-                {form.renk_ekseni ? (
+                ) : null}
+                {variantForm.tip !== "TAS" && form.renk_ekseni ? (
                   <RelationSelect
                     value={variantForm.renk_id}
                     onChange={(v) =>
@@ -1121,7 +1229,8 @@ export function OpsProductWorkspace({
                     clearable
                   />
                 ) : null}
-                {form.olcu_tipi || product.olcu_tipi ? (
+                {variantForm.tip !== "TAS" &&
+                (form.olcu_tipi || product.olcu_tipi) ? (
                   <RelationSelect
                     value={variantForm.beden_id}
                     onChange={(v) =>
@@ -1135,6 +1244,85 @@ export function OpsProductWorkspace({
                     clearable
                   />
                 ) : null}
+                {variantForm.tip === "MONTUR" ? (
+                  <>
+                    <Input
+                      placeholder="Yuva adedi *"
+                      value={variantForm.yuva_adedi}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          yuva_adedi: e.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      placeholder="İzinli şekiller * (ROUND,CABOCHON,BEAD)"
+                      value={variantForm.izinli_kesimler}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          izinli_kesimler: e.target.value,
+                        }))
+                      }
+                      list="ops-tas-kesim-list"
+                    />
+                    <Input
+                      placeholder="Ölçü min (ct) *"
+                      value={variantForm.karat_min}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          karat_min: e.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      placeholder="Ölçü max (ct) *"
+                      value={variantForm.karat_max}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          karat_max: e.target.value,
+                        }))
+                      }
+                    />
+                  </>
+                ) : null}
+                {variantForm.tip === "TAS" ? (
+                  <>
+                    <Input
+                      placeholder="Ölçü (ct) *"
+                      value={variantForm.karat}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          karat: e.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      placeholder="Şekil kodu * (ROUND / CABOCHON / …)"
+                      value={variantForm.kesim_kod}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          kesim_kod: e.target.value,
+                        }))
+                      }
+                      list="ops-tas-kesim-list"
+                    />
+                    <p className="col-span-full text-[11px] text-muted-foreground">
+                      Her türlü taş girilebilir; şekil kodu serbest (sözlük
+                      öneridir, mücevher kesimi şart değil).
+                    </p>
+                  </>
+                ) : null}
+                <datalist id="ops-tas-kesim-list">
+                  {(refs?.tas_kesimleri ?? []).map((k) => (
+                    <option key={k.id} value={k.kod || k.ad} />
+                  ))}
+                </datalist>
                 <Input
                   placeholder="Tedarikçi SKU"
                   value={variantForm.tedarikci_sku}
@@ -1184,6 +1372,7 @@ export function OpsProductWorkspace({
                 <TableHeader>
                   <TableRow>
                     <TableHead>SKU</TableHead>
+                    <TableHead>Tip</TableHead>
                     <TableHead>Renk</TableHead>
                     <TableHead>Ölçü</TableHead>
                     <TableHead className="text-right">Gram</TableHead>
@@ -1195,6 +1384,15 @@ export function OpsProductWorkspace({
                   {variants.map((v: OpsProductVariant) => (
                     <TableRow key={v.id}>
                       <TableCell className="font-mono text-xs">{v.sku}</TableCell>
+                      <TableCell className="text-xs">
+                        {v.tip === "MONTUR"
+                          ? "Montür"
+                          : v.tip === "TAS"
+                            ? "Taş"
+                            : v.tip === "TASLI"
+                              ? "Taşlı"
+                              : "Ürün"}
+                      </TableCell>
                       <TableCell className="text-xs">{v.renk || "—"}</TableCell>
                       <TableCell className="text-xs">{v.beden || "—"}</TableCell>
                       <TableCell className="text-right font-mono text-xs">
