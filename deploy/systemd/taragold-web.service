@@ -1,0 +1,21 @@
+[Unit]
+Description=TaraGold Gunicorn (Django API/admin)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+User=taragold
+Group=taragold
+WorkingDirectory=/opt/taragold/backend/config
+EnvironmentFile=/opt/taragold/backend/config/.env
+ExecStart=/opt/taragold/backend/.venv/bin/gunicorn \
+  config.wsgi:application \
+  --bind 127.0.0.1:8000 \
+  --workers 3 \
+  --timeout 60
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

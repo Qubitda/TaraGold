@@ -7,8 +7,9 @@ Django **6.1.2** modular monolith. Proje paketi: `config/` · `manage.py` bu diz
 | Bilgi | Dosya |
 |-------|--------|
 | Agent kuralları | [`../AGENTS.md`](../AGENTS.md) |
-| Kanonik ürün/teknik durum | [`../docs/MASTER.md`](../docs/MASTER.md) (§2, §12) |
+| Kurulum / işletim | [`../docs/RUNBOOK.md`](../docs/RUNBOOK.md) |
 | Repo özeti | [`../README.md`](../README.md) |
+| Agent kuralları | [`../AGENTS.md`](../AGENTS.md) |
 
 ## Gereksinimler
 
@@ -41,13 +42,17 @@ copy .env.example .env
 # .env zorunlu: SECRET_KEY, DB_NAME, DB_USER, DB_PASSWORD
 # isteğe bağlı: DB_HOST (localhost), DB_PORT (5432), DEBUG, ALLOWED_HOSTS
 python manage.py migrate
+python manage.py createcachetable
 python manage.py seed_role_permissions
 python manage.py bootstrap_platform
 python manage.py seed_tanimlar
 python manage.py createsuperuser
+python manage.py ingest_binance_piyasa --once
 python manage.py runserver
 ```
 
+Ayrı terminal (canlı fiyat): `python manage.py ingest_binance_piyasa --loop`  
+İlk kurulum sırası: [`../docs/RUNBOOK.md`](../docs/RUNBOOK.md).  
 Opsiyonel: `audit_user_assignments`, `seed_fiyat_gruplari`, `seed_urunler`.  
 Admin: http://127.0.0.1:8000/admin/ · API: http://127.0.0.1:8000/api/v1/health/
 

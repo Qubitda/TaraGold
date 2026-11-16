@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 
 let offsetMs = 0;
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 
 function subscribe(cb: () => void) {
   listeners.add(cb);

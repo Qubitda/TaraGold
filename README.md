@@ -7,11 +7,10 @@ Jewelry B2B commerce platform (Django modular monolith).
 | Bilgi | Dosya |
 |-------|--------|
 | AI agent çalışma kuralları | [`AGENTS.md`](AGENTS.md) |
-| Ürün / mimari / ADR / backlog / güncel durum | [`docs/MASTER.md`](docs/MASTER.md) |
-| Kurulum, migrate, test, runserver | [`backend/README.md`](backend/README.md) |
+| Kurulum / migrate / ingest / cache | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) |
+| Backend kurulum | [`backend/README.md`](backend/README.md) |
 | Vite SPA portal | [`frontend/README.md`](frontend/README.md) |
-
-Kanonik durum: `docs/MASTER.md` §2 + §12. Dağınık faz raporu / ikinci yol haritası yok.
+| OpenAPI snapshot | [`docs/api/openapi-v1.json`](docs/api/openapi-v1.json) |
 
 ## Hızlı başlangıç
 
@@ -25,12 +24,17 @@ copy .env.example .env
 # .env: SECRET_KEY, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 # Staging (DEBUG=False + fake provider): ALLOW_FAKE_PROVIDERS=1
 python manage.py migrate
+python manage.py createcachetable
 python manage.py seed_role_permissions
 python manage.py bootstrap_platform
 python manage.py seed_tanimlar
 python manage.py createsuperuser
+python manage.py ingest_binance_piyasa --once
 python manage.py runserver
 ```
+
+Canlı fiyat için ayrı süreç: `python manage.py ingest_binance_piyasa --loop`  
+Ayrıntı: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 Frontend (ayrı terminal; **mock yok** — Django proxy):
 

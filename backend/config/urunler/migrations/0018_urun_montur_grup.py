@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("urunler", "0017_varyant_ayar_metal"),
+        ("urunler", "0017_varyant_ayar_constraints"),
     ]
 
     operations = [

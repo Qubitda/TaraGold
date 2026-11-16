@@ -5,6 +5,7 @@ Gizli değerler (SECRET_KEY, DB şifresi vb.) koda yazılmaz, .env dosyasından
 veya ortam değişkenlerinden okunur.
 """
 
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -21,6 +22,14 @@ env = environ.Env(
 )
 # .env dosyası varsa oku (canlıda gerçek ortam değişkenleri de çalışır)
 environ.Env.read_env(BASE_DIR / ".env")
+
+
+def _running_tests() -> bool:
+    """LocMem yalnız test runner / pytest sürecinde."""
+    if any(a == "test" or a.startswith("test") for a in sys.argv):
+        return True
+    return "pytest" in sys.modules
+
 
 # --- Güvenlik ---------------------------------------------------------------
 # Varsayılan yok: tanımlı değilse proje bilerek hata verip açılmaz.
@@ -41,8 +50,9 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=3600)  # sorunsuzsa artır
     SECURE_HSTS_INCLUDE_SUBDOMAINS = False
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    # Reverse proxy (nginx vb.): env ile aç (varsayılan kapalı).
-    if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
+    # nginx/TLS sonlandırma: SSL redirect açıksa proxy header da varsayılan açık
+    # (aksi halde yönlendirme döngüsü). Bilinçli kapat: SECURE_PROXY_SSL_HEADER=0
+    if env.bool("SECURE_PROXY_SSL_HEADER", default=bool(SECURE_SSL_REDIRECT)):
         SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # ADR-0017 NX-1 — session cookie (Secure: prod bloğunda; SameSite Lax her ortam)
@@ -72,21 +82,20 @@ SESSION_IDLE_TIMEOUT = env.int("SESSION_IDLE_TIMEOUT", default=1800)
 # AUD-001b — X-Forwarded-For güvenilir proxy hop sayısı (0 = yalnız REMOTE_ADDR)
 TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
 
-# --- Cache (DRF throttle + HTML login throttle; çoklu worker için db/redis) ---
-# DEBUG: LocMem OK. Prod (!DEBUG): varsayılan DatabaseCache; LocMem yalnız
-# ALLOW_LOCMEM_CACHE=1 ile (system check Error).
-_CACHE_BACKEND = env(
-    "CACHE_BACKEND",
-    default=(
-        "django.core.cache.backends.locmem.LocMemCache"
-        if DEBUG
-        else "django.core.cache.backends.db.DatabaseCache"
-    ),
-)
-_CACHE_LOCATION = env(
-    "CACHE_LOCATION",
-    default="taragold-default" if DEBUG else "taragold_cache",
-)
+# --- Cache (DRF throttle + ingest tick + HTML login throttle) ---------------
+# DEBUG dahil tüm runtime: varsayılan DatabaseCache (süreçler arası paylaşımlı).
+# LocMem yalnız test runner'da. Manuel LocMem → ALLOW_LOCMEM_CACHE=1 (+ check).
+# İlk kurulum: python manage.py createcachetable
+_RUNNING_TESTS = _running_tests()
+if _RUNNING_TESTS:
+    _CACHE_BACKEND = "django.core.cache.backends.locmem.LocMemCache"
+    _CACHE_LOCATION = "taragold-test"
+else:
+    _CACHE_BACKEND = env(
+        "CACHE_BACKEND",
+        default="django.core.cache.backends.db.DatabaseCache",
+    )
+    _CACHE_LOCATION = env("CACHE_LOCATION", default="taragold_cache")
 CACHES = {
     "default": {
         "BACKEND": _CACHE_BACKEND,

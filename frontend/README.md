@@ -1,7 +1,8 @@
 # TaraGold frontend (Vite SPA)
 
-Vite + React + TypeScript portal. Normatif API: [`docs/API_CONTRACT.md`](../docs/API_CONTRACT.md) + [`docs/api/openapi-v1.json`](../docs/api/openapi-v1.json) — **repo kökünde** (`frontend/` içinde kopya yok).  
-UI runtime: [ADR-0031](../docs/decisions/ADR-0031-vite-spa-portal.md) **Kabul**. API sözleşmesi: [ADR-0017](../docs/decisions/ADR-0017-nextjs-api-sozlesmesi.md) NX-1…12.
+Vite + React + TypeScript portal. OpenAPI kaynağı: [`docs/api/openapi-v1.json`](../docs/api/openapi-v1.json) (repo kökü `docs/`; yoksa Django ayaktayken `/api/schema/`).  
+Kurulum: [`docs/RUNBOOK.md`](../docs/RUNBOOK.md) · agent kuralları: [`../AGENTS.md`](../AGENTS.md).  
+UI runtime: Vite SPA (ADR-0031).
 
 ## Mimari
 
@@ -16,7 +17,9 @@ UI runtime: [ADR-0031](../docs/decisions/ADR-0031-vite-spa-portal.md) **Kabul**.
 ## API tipleri
 
 ```bash
-npm run generate:api   # ../docs/api/openapi-v1.json → src/lib/api/schema.d.ts
+# Önce dosya: docs/api/openapi-v1.json (commit’li snapshot)
+npm run generate:api   # → src/lib/api/schema.d.ts
+# Alternatif (Django runserver): curl http://127.0.0.1:8000/api/schema/ -o ../docs/api/openapi-v1.json
 ```
 
 `src/lib/api/types.ts` şemadan re-export eder. Feature `types/` alan adları OpenAPI ile birebir kalır.
@@ -31,17 +34,21 @@ npm test               # vitest
 npm run test:e2e       # playwright — Vite:3000 + Django (API mock yasak)
 ```
 
-E2E önkoşul: Django `runserver`, `CSRF_TRUSTED_ORIGINS=http://127.0.0.1:3000`,
-`DJANGO_ORIGIN` proxy, `USE_MOCK` kapalı, `seed_demo_portals`.
-Kimlik: `E2E_USERNAME` / `E2E_PASSWORD` (varsayılan `demo_alici` / `DemoPortal1!`).
+E2E / duman önkoşul:
+- Django `runserver` (+ `createcachetable`, tercihen `ingest_binance_piyasa --loop`)
+- `CSRF_TRUSTED_ORIGINS=http://127.0.0.1:3000`, `DJANGO_ORIGIN` proxy, `USE_MOCK` kapalı
+- `seed_demo_portals` (+ commerce/stok seed — sepet→sipariş için)
+- Kimlik: `E2E_USERNAME` / `E2E_PASSWORD` (varsayılan `demo_alici`)
+- Duman senaryosu: `npx playwright test e2e/smoke-commerce.spec.ts` (mock yok)
 `page.route` ile `/api` mock **yasak**. Workers=1 (tek demo kullanıcı / sepet çakışması).
+Tek komut başlatma: `scripts/dev.ps1` / `scripts/dev.sh` (bkz. `docs/RUNBOOK.md`).
 
 ## Yerel çalıştırma
 
 Paket: **npm** (`package-lock.json`). `bun.lock` / `yarn.lock` / `pnpm-lock.yaml` commit edilmez.  
-Node: **≥22.12** (`engines`).
+Node: **24.12.0** (`.nvmrc` / `engines`).
 
-1. Backend: `backend/config` → `runserver` (PG).
+1. Backend: `backend/config` → `python manage.py runserver` (PG; önce `createcachetable`).
 2. Django `.env`: `CSRF_TRUSTED_ORIGINS=http://127.0.0.1:3000`
 3. Frontend:
    ```bash

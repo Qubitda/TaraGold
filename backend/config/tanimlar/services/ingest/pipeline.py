@@ -524,7 +524,11 @@ def run_rest_poll_once(
 
 
 def feed_age_banner(*, now=None) -> dict[str, Any]:
-    """Pano/API için bayatlık özeti."""
+    """Pano/API için bayatlık özeti.
+
+    Yaş: paylaşımlı cache tick + DB MetalKuru/DovizKuru (effective min).
+    LocMem süreçler arası görünmez; DB yedek + DatabaseCache zorunlu.
+    """
     now = now or timezone.now()
     stale_s = int(getattr(settings, "PIYASA_FEED_STALE_SECONDS", 30))
     hide_s = int(getattr(settings, "PIYASA_FEED_HIDE_SECONDS", 300))
@@ -532,9 +536,9 @@ def feed_age_banner(*, now=None) -> dict[str, Any]:
     ages = {}
     for role in ("ons_au", "usdtry"):
         sym = roles.get(role)
-        if not sym:
-            continue
-        age = tick_store.tick_age_seconds(sym, now=now)
+        age = tick_store.effective_feed_age_seconds(
+            role, symbol=sym, now=now
+        )
         ages[role] = age
     max_age = max((a for a in ages.values() if a is not None), default=None)
     if max_age is None:

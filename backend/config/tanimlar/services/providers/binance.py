@@ -34,7 +34,7 @@ def _redact(text: str, secrets: list[str]) -> str:
 
 def _http_json(url: str, headers: dict[str, str] | None = None) -> dict:
     req = Request(url, headers=headers or {}, method="GET")
-    with urlopen(req, timeout=15) as resp:  # noqa: S310 — ayardan URL
+    with urlopen(req, timeout=4) as resp:  # noqa: S310 — ayardan URL; web yolu yok
         raw = resp.read().decode("utf-8")
     data = json.loads(raw)
     if not isinstance(data, dict):

@@ -74,9 +74,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(e))
 
     def _rest_loop(self, *, interval: float):
+        from django.db import close_old_connections
+
         self.stdout.write(f"REST poll loop interval={interval}s (Ctrl+C durdur)")
         self.stdout.flush()
         while True:
+            close_old_connections()
             try:
                 result = run_rest_poll_once(kaynak="api")
                 self.stdout.write(
@@ -95,6 +98,7 @@ class Command(BaseCommand):
 
         import websockets
         from django.conf import settings
+        from django.db import close_old_connections
 
         from tanimlar.services.ingest.pipeline import apply_tick, persist_derived
         from tanimlar.services.providers.base import BookTicker
@@ -115,6 +119,7 @@ class Command(BaseCommand):
 
         backoff = 1.0
         while True:
+            close_old_connections()
             try:
                 urls = []
                 if fut_streams:
@@ -132,6 +137,7 @@ class Command(BaseCommand):
                         backoff = 1.0
                         last_persist = 0.0
                         async for raw in ws:
+                            close_old_connections()
                             msg = json.loads(raw)
                             data = msg.get("data") or msg
                             sym = (data.get("s") or "").upper()

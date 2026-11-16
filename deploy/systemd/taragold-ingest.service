@@ -1,0 +1,17 @@
+[Unit]
+Description=TaraGold Binance piyasa ingest loop
+After=network.target postgresql.service taragold-web.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=taragold
+Group=taragold
+WorkingDirectory=/opt/taragold/backend/config
+EnvironmentFile=/opt/taragold/backend/config/.env
+ExecStart=/opt/taragold/backend/.venv/bin/python manage.py ingest_binance_piyasa --loop --interval 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

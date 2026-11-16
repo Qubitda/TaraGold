@@ -112,14 +112,8 @@ def present_buyer_pano(
     if firma is not None and not getattr(firma, "platform_mu", False):
         tercih = tercih_srv.get_or_default(firma)
 
-    # Ingest süreci yoksa / bayatsa: okuma anında throttled REST poll (müşteri — görmesin)
-    try:
-        from tanimlar.services.ingest.pipeline import ensure_fresh_feed_for_read
-
-        ensure_fresh_feed_for_read()
-        now = timezone.now()
-    except Exception:  # noqa: BLE001 — pano yine de LKG/döviz ile dönsün
-        pass
+    # Senkron Binance yok: feed `ingest_binance_piyasa --loop` sürecine bırakılır.
+    # Yaş/tick: paylaşımlı DatabaseCache + DB MetalKuru/DovizKuru (feed_age_banner).
 
     rows = piyasa_fiyat_servisi.pano_ozeti(only_aktif=True, now=now)
     satirlar: list[dict[str, Any]] = []
